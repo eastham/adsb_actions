@@ -11,16 +11,27 @@ class RuleExecutionLog:
     """Keep track of last execution times for each rule/aircraft.
     
     Basically a dict of rulenameXXXaircraft -> timestamp"""
+    SEP = " XxX "
+    def __init__(self):
+        self.log_entries: dict = {}
 
-    log_entries: dict = {}
-    SEP = "XXX"
+    def get_entry_name(self, rulename: str, flight_id: str) -> str:
+        return rulename + self.SEP + flight_id
 
-    def log(self, rulename: str, aircraft_id: str):
-        entry_name = rulename+SEP+aircraft_id
-        self.log_entries[entry_name].append(time.time())
+    def log(self, rulename: str, flight_id: str, now: int) -> None:
+        entry_name = self.get_entry_name(rulename, flight_id)
+        self.log_entries[entry_name] = now
+
+    def within_cooldown(self, rulename: str, flight_id: str, cooldown: int, now: int) -> bool:
+        entry_name = self.get_entry_name(rulename, flight_id)
+        if entry_name in self.log_entries:
+            if now - self.log_entries[entry_name] < cooldown:
+                return True
+        return False
 
 class Rules:
     yaml_data: dict = {}
+    rule_exection_log = RuleExecutionLog()
 
     def __init__(self, data: dict):
         self.yaml_data = data
@@ -29,11 +40,12 @@ class Rules:
         rule_items = self.yaml_data['rules'].items()
         for rule_name, rule_value in rule_items:
             logger.info("Checking rule %s", rule_name)
-            if self.conditions_match(flight, rule_value['conditions']):
+            if self.conditions_match(flight, rule_value['conditions'], rule_name):
                 logger.info("MATCH rule %s", rule_name)
-                self.do_actions(flight, rule_value['actions'])
+                self.do_actions(flight, rule_value['actions'], rule_name)
 
-    def conditions_match(self, flight: Flight, conditions: dict) -> bool:
+    def conditions_match(self, flight: Flight, conditions: dict,
+                         rule_name: str) -> bool:
         overall_result = True
         Stats.condition_match_calls += 1
         logger.info("condition_match checking rule: %s", str(conditions))
@@ -51,6 +63,12 @@ class Rules:
                 return flight.is_in_bboxes(condition_value)
             elif 'proximity' == condition_name:
                 pass
+            elif 'cooldown' == condition_name:
+                result = not self.rule_exection_log.within_cooldown(rule_name,
+                                                                    flight.flight_id,
+                                                                    condition_value*60,
+                                                                    flight.lastloc.now)
+                pass
             else:
                 logger.warning("unmatched condition: %s", condition_name)
 
@@ -60,8 +78,9 @@ class Rules:
             overall_result = overall_result and result
         return overall_result
 
-    def do_actions(self, flight: Flight, action_items: dict) -> None:
+    def do_actions(self, flight: Flight, action_items: dict, rule_name: str) -> None:
         for action_name, action_value in action_items.items():
+            self.rule_exection_log.log(rule_name, flight.flight_id, flight.lastloc.now)
             if 'slack' == action_name:
                 logger.debug("doing slack for %s", flight.flight_id)
 
@@ -84,7 +103,7 @@ class Rules:
         for rule_name, rule_value in self.yaml_data['rules'].items():
             if (rule_name == "expire_callback_rule" and
                 self.conditions_match(flight, rule_name, rule_value)):
-                logger.debug("doing expire callback for %s", flight.aircraft_id)
+                logger.debug("doing expire callback for %s", flight.flight_id)
                 func = globals().get(rule_value)
                 func(flight)
 

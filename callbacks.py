@@ -7,6 +7,7 @@ class Callbacks:
     def add_op(cls, flight: Flight):
         logging.debug("In add_op %s", flight.flight_id)
 
-    def empty_callback(cls, flight:Flight):
+    @classmethod
+    def empty_callback(cls, flight: Flight):
         """null callback for testing purposes."""
         pass

@@ -1,8 +1,6 @@
 import logging
 from io import StringIO
 import yaml
-from rules import Rules
-from bboxes import Bboxes
 from stats import Stats
 import main
 
@@ -30,7 +28,7 @@ YAML_STRING = """
         note: "saw_takeoff"
 """
 
-JSON_STRING1 = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
+JSON_STRING1 = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}'
 JSON_STRING2 = '{"now": 1661692178, "alt_baro": 4500, "gscp": 128, "lat": 40.748708, "lon": -119.2489313, "track": 203.4, "hex": "a061d9", "flight": "N12345"}'
 
 def test_main():
@@ -42,6 +40,9 @@ def test_main():
     adsb_test_buf = StringIO(JSON_STRING1)
     listen = main.TCPConnection()
     listen.f = adsb_test_buf
+
+    Stats.reset()
+    assert Stats.json_readlines == 0
 
     main.start(yaml_data, listen)
     assert Stats.json_readlines == 1

@@ -25,14 +25,16 @@ JSON_STRING = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.7635
 JSON_STRING_100S_LATER = '{"now": 1661692278, "alt_baro": 4500, "gscp": 128, "lat": 40.748708, "lon": -119.2489313, "track": 203.4, "hex": "a061d9", "flight": "N12345"}'
 JSON_STRING_20000S_LATER = '{"now": 1661712278, "alt_baro": 4500, "gscp": 128, "lat": 40.748708, "lon": -119.2489313, "track": 203.4, "hex": "a061d9", "flight": "N12345"}'
 
-def run_workload(yaml_data, str):
-    adsb_test_buf = StringIO(str)
+def run_workload(yaml_data, input_str):
+    adsb_test_buf = StringIO(input_str)
     listen = main.TCPConnection()
     listen.f = adsb_test_buf
 
     main.start(yaml_data, listen)
 
-def test_main():
+def test_cooldown():
+    Stats.reset()
+
     logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
     logging.info('System started.')
 
@@ -46,6 +48,7 @@ def test_main():
 
     run_workload(yaml_data, JSON_STRING_20000S_LATER)
     assert Stats.callbacks_fired == 2 
+
 
 
 
