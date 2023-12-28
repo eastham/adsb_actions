@@ -39,7 +39,7 @@ class Rules:
     def process_flight(self, flight: Flight) -> None:
         rule_items = self.yaml_data['rules'].items()
         for rule_name, rule_value in rule_items:
-            logger.info("Checking rule %s", rule_name)
+            logger.info("Checking rules %s", rule_name)
             if self.conditions_match(flight, rule_value['conditions'], rule_name):
                 logger.info("MATCH rule %s", rule_name)
                 self.do_actions(flight, rule_value['actions'], rule_name)
@@ -48,7 +48,7 @@ class Rules:
                          rule_name: str) -> bool:
         overall_result = True
         Stats.condition_match_calls += 1
-        logger.info("condition_match checking rule: %s", str(conditions))
+        logger.info("condition_match checking rules: %s", str(conditions))
         for condition_name, condition_value in conditions.items():
             result = False
             if 'aircraft_list' == condition_name:
@@ -60,7 +60,7 @@ class Rules:
                 result = (flight.was_in_bboxes([condition_value[0]]) and
                           flight.is_in_bboxes([condition_value[1]]))
             elif 'regions' == condition_name:
-                return flight.is_in_bboxes(condition_value)
+                result = flight.is_in_bboxes(condition_value)
             elif 'proximity' == condition_name:
                 pass
             elif 'cooldown' == condition_name:
@@ -74,8 +74,9 @@ class Rules:
 
             if result:
                 Stats.condition_matches_true += 1
-                logger.info("condition match %s for %s", condition_name, flight.flight_id)
+                logger.info("one condition matched: %s for %s", condition_name, flight.flight_id)
             overall_result = overall_result and result
+        logger.info("overall result %s", str(overall_result))
         return overall_result
 
     def do_actions(self, flight: Flight, action_items: dict, rule_name: str) -> None:
