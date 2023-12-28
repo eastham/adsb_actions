@@ -18,7 +18,7 @@ YAML_STRING = """
         aircraft_list: banned
         cooldown: 180 # minutes
       actions:
-        callback: empty_callback
+        callback: test_callback
 """
 
 JSON_STRING = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'

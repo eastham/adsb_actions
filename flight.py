@@ -4,6 +4,8 @@ import logging
 from dataclasses import dataclass, field, InitVar
 from threading import Lock
 from location import Location
+logger = logging.getLogger(__name__)
+logger.level = logging.DEBUG
 
 @dataclass
 class Flight:
@@ -90,7 +92,7 @@ class Flight:
         self.prev_inside_bboxes = self.inside_bboxes.copy()
         changes = False
         old_str = self.to_str()
-        logging.debug("update_inside_bboxes: pre-bbox update: %s", old_str)
+        logger.debug("update_inside_bboxes: pre-bbox update: %s", old_str)
         for i, bbox in enumerate(bbox_list):
             self.inside_bboxes[i] = None
             match_index = bbox_list[i].contains(loc.lat, loc.lon, loc.track, loc.alt_baro)
@@ -101,10 +103,10 @@ class Flight:
         if changes:
             flighttime = datetime.datetime.fromtimestamp(self.lastloc.now)
             tail = self.tail if self.tail else "(unk)"
-            logging.debug(tail + " Flight bbox change at " + flighttime.strftime("%H:%M") +
+            logger.debug(tail + " Flight bbox change at " + flighttime.strftime("%H:%M") +
                 ": " + self.to_str())
         else:
-            logging.debug("no change to bboxes")
+            logger.debug("no change to bboxes")
 
     def get_bbox_at_level(self, level, bboxes_list):
         return self.inside_bboxes[level]

@@ -1,5 +1,4 @@
 import logging
-import time
 from callbacks import Callbacks
 from flight import Flight
 from stats import Stats
@@ -62,7 +61,7 @@ class Rules:
             elif 'regions' == condition_name:
                 result = flight.is_in_bboxes(condition_value)
             elif 'proximity' == condition_name:
-                pass
+                logger.critical("proximity condition not implemented")
             elif 'cooldown' == condition_name:
                 result = not self.rule_exection_log.within_cooldown(rule_name,
                                                                     flight.flight_id,
@@ -84,10 +83,8 @@ class Rules:
             self.rule_exection_log.log(rule_name, flight.flight_id, flight.lastloc.now)
             if 'slack' == action_name:
                 logger.debug("doing slack for %s", flight.flight_id)
-
             elif 'page' == action_name:
                 logger.debug("doing page for %s", flight.flight_id)
-
             elif 'callback' == action_name:
                 Stats.callbacks_fired += 1
                 logger.debug("doing callback for %s", flight.flight_id)
@@ -96,10 +93,12 @@ class Rules:
                     func(flight)
                 else:
                     logger.warning("callback not found: %s", action_value)
-
+            elif 'note' == action_name:
+                logger.debug("SETTING NOTE for %s", flight.flight_id)
+                flight.flags['note'] = action_value
             else:
                 logger.warning("unmatched action: %s", action_name)
-                
+
     def do_expire(self, flight: Flight) -> None:
         for rule_name, rule_value in self.yaml_data['rules'].items():
             if (rule_name == "expire_callback_rule" and
