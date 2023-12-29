@@ -1,10 +1,13 @@
 import logging
-from io import StringIO
 import time
 import cProfile
+
 import yaml
+
 from stats import Stats
 import main
+import rules
+import testinfra
 
 YAML_STRING = """
   config:
@@ -26,22 +29,16 @@ YAML_STRING = """
 JSON_STRING_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
 JSON_STRING_GROUND = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
 
-def run_workload(yaml_data, input_str):
-    adsb_test_buf = StringIO(input_str)
-    listen = main.TCPConnection()
-    listen.f = adsb_test_buf
-
-    main.start(yaml_data, listen)
-
 def test_load():
     ITERATIONS = 100
 
     Stats.reset()
 
-    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
-    logging.info('System started.')
+    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.WARNING)
 
     yaml_data = yaml.safe_load(YAML_STRING)
+    f = main.setup_flights(yaml_data)
+    r = rules.Rules(yaml_data)
 
     start_time = time.time()
     work_string = JSON_STRING_DISTANT+JSON_STRING_GROUND
@@ -52,11 +49,12 @@ def test_load():
     with cProfile.Profile() as pr:
         pr.enable()
 
-        run_workload(yaml_data, work_string)
+        testinfra.process_adsb(work_string, f, r)
         pr.disable()
         pr.print_stats('tottime')
 
     assert Stats.callbacks_fired == ITERATIONS
     done_time = time.time()
+    assert done_time - start_time < 5
 
     print(f"TIME ELAPSED: {done_time-start_time}")

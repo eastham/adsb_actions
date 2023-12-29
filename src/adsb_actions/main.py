@@ -17,6 +17,8 @@ from stats import Stats
 from bboxes import Bboxes
 from location import Location
 
+logger = None
+
 class TCPConnection:
     def __init__(self=None, host=None, port=None, retry=False, exit_cb=None):
         self.host = host
@@ -53,11 +55,19 @@ def setup_network(ipaddr, port, retry_conn=True, exit_cb=None):
     logging.info("Setup done")
     return conn
 
-def flight_update_read(flights, listen: TCPConnection, rules: Rules):
+def flight_update_read(listen, flights: Flights, rules: Rules):
     try:
         line = listen.readline()
+        logger.debug("Read line: %s ", line)
+
         jsondict = json.loads(line)
+    except json.JSONDecodeError:
+        if not listen.sock:
+            return -1  # test enviro
+        else:
+            logger.error("JSON Parse fail: %s", line)
     except Exception:
+        return -1
         print(f"Socket input/parse error, reconnect plan = {listen.retry}")
         if listen.retry:
             time.sleep(2)
@@ -68,53 +78,56 @@ def flight_update_read(flights, listen: TCPConnection, rules: Rules):
             return -1
             # sys.exit(0) # XXX adsb_pusher used this
         return 0
-    
+
     Stats.json_readlines += 1
     loc_update = Location.from_dict(jsondict)
     last_ts = flights.add_location(loc_update, rules)
     return last_ts
 
-def flight_read_loop(listen: TCPConnection, bboxes_list, rules: Rules):
+def flight_read_loop(listen: TCPConnection, flights: Flights, rules: Rules):
     CHECKPOINT_INTERVAL = 10 # seconds
-    last_checkpoint = 0
-    flights = Flights(bboxes_list)
 
     while True:
-        last_read_time = flight_update_read(flights, listen, rules)
+        last_read_time = flight_update_read(listen, flights, rules)
         if last_read_time == 0: continue
         if last_read_time < 0: break
-        if not last_checkpoint: last_checkpoint = last_read_time
+        if not flights.last_checkpoint:
+            flights.last_checkpoint = last_read_time
 
         # XXX this skips during gaps when no aircraft are seen
-        if last_read_time and last_read_time - last_checkpoint >= CHECKPOINT_INTERVAL:
-            datestr = datetime.datetime.utcfromtimestamp(last_read_time).strftime('%Y-%m-%d %H:%M:%S')
-            logging.debug("Checkpoint: %d %s", last_read_time, datestr)
+        if last_read_time and last_read_time - flights.last_checkpoint >= CHECKPOINT_INTERVAL:
+            datestr = datetime.datetime.utcfromtimestamp(
+                last_read_time).strftime('%Y-%m-%d %H:%M:%S')
+            logging.debug("%ds Checkpoint: %d %s", CHECKPOINT_INTERVAL, last_read_time, datestr)
 
             flights.expire_old(rules, last_read_time)
             flights.check_distance(rules, last_read_time)
-            last_checkpoint = last_read_time
+            flights.last_checkpoint = last_read_time
 
-def start(yaml_data, listen):
-    rules = Rules(yaml_data)
+def setup_logger():
+    global logger
+
+    logging.basicConfig(level=logging.INFO)
+    logging.info('System started.')
+    logger = logging.getLogger(__name__)
+    logger.level = logging.DEBUG
+
+def setup_flights(yaml_data) -> Flights:
+    setup_logger()
 
     bboxes_list = []
     try:
         for f in yaml_data['config']['kmls']:
             bboxes_list.append(Bboxes(f))
-        print(bboxes_list)
     except FileNotFoundError:
         logging.critical("File not found: %s", f)
     except KeyError:
         pass
 
-    flight_read_loop(listen, bboxes_list, rules)
-
+    return Flights(bboxes_list)
 
 if __name__ == "__main__":
     import argparse
-
-    logging.basicConfig(level=logging.DEBUG)
-    logging.info('System started.')
 
     parser = argparse.ArgumentParser(description="match flights against kml bounding boxes")
     parser.add_argument("-d", "--debug", action="store_true")
@@ -129,5 +142,8 @@ if __name__ == "__main__":
     with open(args.yaml, 'r', encoding='utf-8') as file:
         yaml_data = yaml.safe_load(file)
 
-    start(yaml_data, listen)
+    flights = setup_flights(yaml_data)
+    rules = Rules(yaml_data)
+
+    flight_read_loop(listen, flights, rules)
  

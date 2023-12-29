@@ -29,11 +29,9 @@ class RuleExecutionLog:
         return False
 
 class Rules:
-    yaml_data: dict = {}
-    rule_exection_log = RuleExecutionLog()
-
     def __init__(self, data: dict):
         self.yaml_data = data
+        self.rule_exection_log = RuleExecutionLog()
 
     def process_flight(self, flight: Flight) -> None:
         rule_items = self.yaml_data['rules'].items()

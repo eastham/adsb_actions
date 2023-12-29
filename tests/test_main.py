@@ -1,8 +1,11 @@
 import logging
-from io import StringIO
+
 import yaml
+
 from stats import Stats
 import main
+import rules
+import testinfra
 
 YAML_STRING = """
   config:
@@ -35,25 +38,21 @@ def test_main():
     logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
     logging.info('System started.')
 
-    yaml_data = yaml.safe_load(YAML_STRING)
-
-    adsb_test_buf = StringIO(JSON_STRING1)
-    listen = main.TCPConnection()
-    listen.f = adsb_test_buf
-
     Stats.reset()
     assert Stats.json_readlines == 0
 
-    main.start(yaml_data, listen)
+    yaml_data = yaml.safe_load(YAML_STRING)
+    flights = main.setup_flights(yaml_data)
+    rules_instance = rules.Rules(yaml_data)
+
+    testinfra.process_adsb(JSON_STRING1, flights, rules_instance)
+
     assert Stats.json_readlines == 1
     assert Stats.condition_match_calls == 2
     assert Stats.condition_matches_true == 1
     assert Stats.callbacks_fired == 0
 
-    adsb_test_buf = StringIO(JSON_STRING2)
-    listen = main.TCPConnection()
-    listen.f = adsb_test_buf
-    main.start(yaml_data, listen)
+    testinfra.process_adsb(JSON_STRING2, flights, rules_instance)
 
     assert Stats.json_readlines == 2
     assert Stats.condition_match_calls == 4  # 2 per position

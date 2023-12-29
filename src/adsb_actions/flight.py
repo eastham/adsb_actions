@@ -1,7 +1,7 @@
 import statistics
 import datetime
 import logging
-from dataclasses import dataclass, field, InitVar
+from dataclasses import dataclass, field
 from threading import Lock
 from location import Location
 logger = logging.getLogger(__name__)
@@ -97,10 +97,9 @@ class Flight:
             self.inside_bboxes[i] = None
             match_index = bbox_list[i].contains(loc.lat, loc.lon, loc.track, loc.alt_baro)
             if match_index >= 0 and self.inside_bboxes[i] != bbox_list[i].boxes[match_index].name:
-                changes = True
                 self.inside_bboxes[i] = bbox_list[i].boxes[match_index].name
 
-        if changes:
+        if logger.level <= logging.DEBUG and self.inside_bboxes != self.prev_inside_bboxes:
             flighttime = datetime.datetime.fromtimestamp(self.lastloc.now)
             tail = self.tail if self.tail else "(unk)"
             logger.debug(tail + " Flight bbox change at " + flighttime.strftime("%H:%M") +

@@ -1,10 +1,13 @@
 "Large test covering the 'regions' rule condition and 'note' action."
 
 import logging
-from io import StringIO
+
 import yaml
+
 from stats import Stats
 import main
+import rules
+import testinfra
 
 YAML_STRING = """
   config:
@@ -34,33 +37,45 @@ YAML_STRING = """
         regions: [ "Generic Gate XXX" ]
       actions:
         callback: "test_callback"
+
+    distant_callback:
+      conditions:
+        regions: [ ~ ]
+      actions:
+        callback: "test_callback"
         """
 
 JSON_STRING_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
 JSON_STRING_GROUND = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
 JSON_STRING_AIR = '{"now": 1661692178, "alt_baro": 4500, "gscp": 128, "lat": 40.748708, "lon": -119.2489313, "track": 203.4, "hex": "a061d9", "flight": "N12345"}'
+# different AC, some time in the future, should cause all current flights to expire:
+JSON_STRING_GROUND_DELAY = '{"now": 1661692978, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345xxx"}\n'
 
-def run_workload(yaml_data, input_str):
-    adsb_test_buf = StringIO(input_str)
-    listen = main.TCPConnection()
-    listen.f = adsb_test_buf
-
-    main.start(yaml_data, listen)
-
-def test_transitions():
+def test_note():
     Stats.reset()
     logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
     logging.info('System started.')
 
     yaml_data = yaml.safe_load(YAML_STRING)
+    f = main.setup_flights(yaml_data)
+    r = rules.Rules(yaml_data)
 
-    run_workload(yaml_data, JSON_STRING_DISTANT)
-    run_workload(yaml_data, JSON_STRING_AIR)
-    assert Stats.callbacks_fired == 1
-    assert Stats.last_callback_flight
-    assert Stats.last_callback_flight.flags['note'] == "saw_takeoff"
-
-    run_workload(yaml_data, JSON_STRING_GROUND)
+    testinfra.process_adsb(JSON_STRING_DISTANT, f, r)
+    testinfra.process_adsb(JSON_STRING_AIR, f, r)
     assert Stats.callbacks_fired == 2
     assert Stats.last_callback_flight
     assert Stats.last_callback_flight.flags['note'] == "saw_takeoff"
+
+    testinfra.process_adsb(JSON_STRING_GROUND, f, r)
+    assert Stats.callbacks_fired == 3
+    assert Stats.last_callback_flight
+    assert Stats.last_callback_flight.flags['note'] == "saw_takeoff"
+
+    # cause expiration
+    testinfra.process_adsb(JSON_STRING_GROUND_DELAY, f, r)
+
+    # trigger another callback with these two
+    testinfra.process_adsb(JSON_STRING_DISTANT, f, r)
+    assert not 'note' in Stats.last_callback_flight.flags
+
+    # XXX check note clearing behavior

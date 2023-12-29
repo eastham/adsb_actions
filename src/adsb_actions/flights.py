@@ -5,14 +5,18 @@ from flight import Flight
 from location import Location
 from rules import Rules
 
+logger = logging.getLogger(__name__)
+logger.level = logging.DEBUG
+
 class Flights:
     """all Flight objects in the system, indexed by flight_id"""
-    flight_dict: Dict[str, Flight] = {}
-    lock: threading.Lock = threading.Lock()
     EXPIRE_SECS: int = 180  # 3 minutes emperically needed to debounce poor-signal airplanes
 
     def __init__(self, bboxes):
+        self.flight_dict: Dict[str, Flight] = {}
+        self.lock: threading.Lock = threading.Lock()
         self.bboxes = bboxes
+        self.last_checkpoint = 0
 
     def add_location(self, loc: Location, rules: Rules):
         """
@@ -45,6 +49,7 @@ class Flights:
         return flight.lastloc.now
 
     def expire_old(self, rules, last_read_time):
+        logger.debug("Expire_old")
         self.lock.acquire()
         for f in list(self.flight_dict):
             flight = self.flight_dict[f]
