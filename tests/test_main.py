@@ -3,9 +3,7 @@ import logging
 import yaml
 
 from stats import Stats
-import main
-import rules
-import testinfra
+from adsbactions import AdsbActions
 
 YAML_STRING = """
   config:
@@ -39,20 +37,19 @@ def test_main():
     logging.info('System started.')
 
     Stats.reset()
+    
     assert Stats.json_readlines == 0
 
     yaml_data = yaml.safe_load(YAML_STRING)
-    flights = main.setup_flights(yaml_data)
-    rules_instance = rules.Rules(yaml_data)
-
-    testinfra.process_adsb(JSON_STRING1, flights, rules_instance)
+    adsb_actions = AdsbActions(yaml_data)
+    adsb_actions.loop(JSON_STRING1)
 
     assert Stats.json_readlines == 1
     assert Stats.condition_match_calls == 2
     assert Stats.condition_matches_true == 1
     assert Stats.callbacks_fired == 0
 
-    testinfra.process_adsb(JSON_STRING2, flights, rules_instance)
+    adsb_actions.loop(JSON_STRING2)
 
     assert Stats.json_readlines == 2
     assert Stats.condition_match_calls == 4  # 2 per position

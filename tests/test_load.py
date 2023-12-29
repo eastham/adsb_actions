@@ -5,9 +5,7 @@ import cProfile
 import yaml
 
 from stats import Stats
-import main
-import rules
-import testinfra
+from adsbactions import AdsbActions
 
 YAML_STRING = """
   config:
@@ -37,8 +35,7 @@ def test_load():
     logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.WARNING)
 
     yaml_data = yaml.safe_load(YAML_STRING)
-    f = main.setup_flights(yaml_data)
-    r = rules.Rules(yaml_data)
+    adsb_actions = AdsbActions(yaml_data)
 
     start_time = time.time()
     work_string = JSON_STRING_DISTANT+JSON_STRING_GROUND
@@ -49,7 +46,7 @@ def test_load():
     with cProfile.Profile() as pr:
         pr.enable()
 
-        testinfra.process_adsb(work_string, f, r)
+        adsb_actions.loop(work_string)
         pr.disable()
         pr.print_stats('tottime')
 

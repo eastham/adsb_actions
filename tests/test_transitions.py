@@ -4,9 +4,7 @@ import logging
 import yaml
 
 from stats import Stats
-import main
-import rules
-import testinfra
+from adsbactions import AdsbActions
 
 YAML_STRING = """
   config:
@@ -40,17 +38,15 @@ def test_transitions():
     logging.info('System started.')
 
     yaml_data = yaml.safe_load(YAML_STRING)
-    f = main.setup_flights(yaml_data)
-    r = rules.Rules(yaml_data)
+    adsb_actions = AdsbActions(yaml_data)
 
-    testinfra.process_adsb((JSON_STRING_DISTANT+'\n')*3, f, r)
+    adsb_actions.loop((JSON_STRING_DISTANT+'\n')*3)
     assert Stats.callbacks_fired == 0
 
-    testinfra.process_adsb((JSON_STRING_AIR+'\n')*3, f, r)
+    adsb_actions.loop((JSON_STRING_AIR+'\n')*3)
     assert Stats.callbacks_fired == 1
     assert Stats.last_callback_flight.is_in_bboxes(['Generic Gate Air'])
 
-    testinfra.process_adsb((JSON_STRING_GROUND+'\n')*3, f, r)
+    adsb_actions.loop((JSON_STRING_GROUND+'\n')*3)
     assert Stats.callbacks_fired == 2
     assert Stats.last_callback_flight.is_in_bboxes(['Generic Gate Ground'])
-

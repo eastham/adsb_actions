@@ -5,9 +5,8 @@ import logging
 import yaml
 
 from stats import Stats
-import main
-import rules
-import testinfra
+from adsbactions import AdsbActions
+
 
 YAML_STRING = """
   config:
@@ -57,25 +56,24 @@ def test_note():
     logging.info('System started.')
 
     yaml_data = yaml.safe_load(YAML_STRING)
-    f = main.setup_flights(yaml_data)
-    r = rules.Rules(yaml_data)
+    adsb_actions = AdsbActions(yaml_data)
 
-    testinfra.process_adsb(JSON_STRING_DISTANT, f, r)
-    testinfra.process_adsb(JSON_STRING_AIR, f, r)
+    adsb_actions.loop(JSON_STRING_DISTANT)
+    adsb_actions.loop(JSON_STRING_AIR)
     assert Stats.callbacks_fired == 2
     assert Stats.last_callback_flight
     assert Stats.last_callback_flight.flags['note'] == "saw_takeoff"
 
-    testinfra.process_adsb(JSON_STRING_GROUND, f, r)
+    adsb_actions.loop(JSON_STRING_GROUND)
     assert Stats.callbacks_fired == 3
     assert Stats.last_callback_flight
     assert Stats.last_callback_flight.flags['note'] == "saw_takeoff"
 
-    # cause expiration
-    testinfra.process_adsb(JSON_STRING_GROUND_DELAY, f, r)
+    # cause expiration, to test note clearing
+    adsb_actions.loop(JSON_STRING_GROUND_DELAY)
 
-    # trigger another callback with these two
-    testinfra.process_adsb(JSON_STRING_DISTANT, f, r)
-    assert not 'note' in Stats.last_callback_flight.flags
+    # trigger another callback so we can access the original aircraft again
+    adsb_actions.loop(JSON_STRING_DISTANT)
+    assert 'note' not in Stats.last_callback_flight.flags
 
     # XXX check note clearing behavior

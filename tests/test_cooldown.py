@@ -3,9 +3,7 @@ import logging
 import yaml
 
 from stats import Stats
-import main
-import rules
-import testinfra
+from adsbactions import AdsbActions
 
 YAML_STRING = """
   config:
@@ -35,14 +33,13 @@ def test_cooldown():
     logging.info('System started.')
 
     yaml_data = yaml.safe_load(YAML_STRING)
-    f = main.setup_flights(yaml_data)
-    r = rules.Rules(yaml_data)
+    adsb_actions = AdsbActions(yaml_data)
 
-    testinfra.process_adsb(JSON_STRING, f, r)
+    adsb_actions.loop(JSON_STRING)
     assert Stats.callbacks_fired == 1
 
-    testinfra.process_adsb(JSON_STRING_100S_LATER, f, r)
+    adsb_actions.loop(JSON_STRING_100S_LATER)
     assert Stats.callbacks_fired == 1 # no new callbacks due to cooldown
 
-    testinfra.process_adsb(JSON_STRING_20000S_LATER, f, r)
+    adsb_actions.loop(JSON_STRING_20000S_LATER)
     assert Stats.callbacks_fired == 2
