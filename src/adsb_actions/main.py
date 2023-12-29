@@ -6,6 +6,10 @@ import signal
 import datetime
 import sys
 import time
+from pathlib import Path
+path_root = Path(__file__).parents[0]
+sys.path.append(str(path_root))
+
 import yaml
 from rules import Rules
 from flights import Flights

@@ -1,3 +1,5 @@
+"""class test for the cooldown math."""
+
 from time import time
 from rules import RuleExecutionLog
 from stats import Stats

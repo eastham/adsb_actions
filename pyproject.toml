@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/adsb_actions"]
+#packages = ["src"]
+
+[project]
+name = "adsb_actions"
+version = "0.0.7"
+authors = [
+  { name="Paul Eastham", email="eastham@gmail.com" },
+]
+description = "A package for taking actions based on ADS-B data"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "PyYAML >= 6.0.1",
+    "icao-nnumber-converter-us >= 0.1.0",
+    "geopy >=  2.4.1",
+    "Shapely ==  1.8.4",
+    "lxml >= 4.9.4",
+    "fastkml >= 0.12",
+    "requests >= 2.31.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/eastham/adsb_actions"
+Issues = "https://github.com/eastham/adsb_actions/issues"

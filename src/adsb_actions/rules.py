@@ -45,7 +45,6 @@ class Rules:
 
     def conditions_match(self, flight: Flight, conditions: dict,
                          rule_name: str) -> bool:
-        overall_result = True
         Stats.condition_match_calls += 1
         logger.info("condition_match checking rules: %s", str(conditions))
         for condition_name, condition_value in conditions.items():
@@ -74,9 +73,10 @@ class Rules:
             if result:
                 Stats.condition_matches_true += 1
                 logger.info("one condition matched: %s for %s", condition_name, flight.flight_id)
-            overall_result = overall_result and result
-        logger.info("overall result %s", str(overall_result))
-        return overall_result
+            else:
+                return False
+        logger.info("All conditions matched")
+        return True
 
     def do_actions(self, flight: Flight, action_items: dict, rule_name: str) -> None:
         for action_name, action_value in action_items.items():

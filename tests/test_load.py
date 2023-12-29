@@ -1,6 +1,7 @@
 import logging
 from io import StringIO
 import time
+import cProfile
 import yaml
 from stats import Stats
 import main
@@ -8,7 +9,7 @@ import main
 YAML_STRING = """
   config:
     kmls:
-      - /Users/eastham/brc-charts/88nvnewgates4.kml 
+      - tests/test1.kml 
 
   aircraft_lists:
     banned: [ "N12345" ] 
@@ -33,7 +34,7 @@ def run_workload(yaml_data, input_str):
     main.start(yaml_data, listen)
 
 def test_load():
-    ITERATIONS = 10000
+    ITERATIONS = 100
 
     Stats.reset()
 
@@ -45,7 +46,16 @@ def test_load():
     start_time = time.time()
     work_string = JSON_STRING_DISTANT+JSON_STRING_GROUND
     work_string = work_string * ITERATIONS
-    run_workload(yaml_data, work_string)
+
+    # XXX centrally disable logger?
+    # NOTE: use pytest -s to see profile output
+    with cProfile.Profile() as pr:
+        pr.enable()
+
+        run_workload(yaml_data, work_string)
+        pr.disable()
+        pr.print_stats('tottime')
+
     assert Stats.callbacks_fired == ITERATIONS
     done_time = time.time()
 

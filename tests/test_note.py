@@ -9,7 +9,7 @@ import main
 YAML_STRING = """
   config:
     kmls:
-      - /Users/eastham/brc-charts/88nvnewgates4.kml 
+      - tests/test1.kml 
 
   aircraft_lists:  # this is probably not the right way to do this
     banned: [ "N42PE", "N12345" ] 

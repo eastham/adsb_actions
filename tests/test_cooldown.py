@@ -7,7 +7,7 @@ import main
 YAML_STRING = """
   config:
     kmls:
-      - /Users/eastham/brc-charts/88nvnewgates4.kml 
+      - tests/test1.kml 
 
   aircraft_lists:
     banned: [ "N12345" ] 
