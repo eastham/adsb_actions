@@ -80,11 +80,16 @@ class Rules:
         for action_name, action_value in action_items.items():
             self.rule_exection_log.log(rule_name, flight.flight_id, flight.lastloc.now)
             if 'slack' == action_name:
+                Stats.slacks_fired += 1
                 logger.debug("doing slack for %s", flight.flight_id)
             elif 'page' == action_name:
+                Stats.pages_fired += 1
                 logger.debug("doing page for %s", flight.flight_id)
             elif 'callback' == action_name:
                 Stats.callbacks_fired += 1
+                if 'note' in flight.flags:
+                    Stats.callbacks_with_notes += 1
+
                 logger.debug("doing callback for %s", flight.flight_id)
                 func = getattr(Callbacks, action_value)
                 if func:
