@@ -79,9 +79,9 @@ class AdsbActions:
             return 0
 
     def loop(self, data=None):
-        CHECKPOINT_INTERVAL = 10 # seconds
+        CHECKPOINT_INTERVAL = 5 # seconds
 
-        if data:  # for testing
+        if data:  # inject string data for testing
             self.listen = TCPConnection()
             self.listen.f = StringIO(data)
 
@@ -92,8 +92,12 @@ class AdsbActions:
             if not self.flights.last_checkpoint:
                 self.flights.last_checkpoint = last_read_time
 
-            # XXX this skips during gaps when no aircraft are seen
-            if last_read_time and last_read_time - self.flights.last_checkpoint >= CHECKPOINT_INTERVAL:
+            # Here we do periodic maintenance tasks, and expensive operations.
+            # Note: this skips during gaps when no aircraft are seen.
+            # If timely expiration/maintenance is needed, dummy events can be
+            # injected.
+            if (last_read_time and
+                last_read_time - self.flights.last_checkpoint >= CHECKPOINT_INTERVAL):
                 datestr = datetime.datetime.utcfromtimestamp(
                     last_read_time).strftime('%Y-%m-%d %H:%M:%S')
                 logging.debug("%ds Checkpoint: %d %s", CHECKPOINT_INTERVAL, last_read_time, datestr)
@@ -101,6 +105,9 @@ class AdsbActions:
                 self.flights.expire_old(self.rules, last_read_time)
                 self.flights.check_distance(self.rules, last_read_time)
                 self.flights.last_checkpoint = last_read_time
+
+    def register_callback(self, name: str, fn):
+        self.rules.callbacks[name] = fn
 
 class TCPConnection:
     def __init__(self=None, host=None, port=None, retry=False):

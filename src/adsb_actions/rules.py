@@ -32,6 +32,7 @@ class Rules:
     def __init__(self, data: dict):
         self.yaml_data = data
         self.rule_exection_log = RuleExecutionLog()
+        self.callbacks = {}
 
     def process_flight(self, flight: Flight) -> None:
         rule_items = self.yaml_data['rules'].items()
@@ -52,11 +53,17 @@ class Rules:
                 ac_list = self.yaml_data['aircraft_lists'][condition_value]
                 #print(f"ac list is {ac_list}")
                 result = flight.flight_id in ac_list
+            elif 'min_alt' == condition_name:
+                result = flight.lastloc.alt_baro >= int(condition_value)
+            elif 'max_alt' == condition_name:
+                result = flight.lastloc.alt_baro <= int(condition_value)
             elif 'transition_regions' == condition_name:
                 result = (flight.was_in_bboxes([condition_value[0]]) and
                           flight.is_in_bboxes([condition_value[1]]))
             elif 'regions' == condition_name:
                 result = flight.is_in_bboxes(condition_value)
+            elif 'latlongring' == condition_name:
+                logger.critical("proximity condition not implemented")
             elif 'proximity' == condition_name:
                 logger.critical("proximity condition not implemented")
             elif 'cooldown' == condition_name:
@@ -87,15 +94,9 @@ class Rules:
                 logger.debug("doing page for %s", flight.flight_id)
             elif 'callback' == action_name:
                 Stats.callbacks_fired += 1
-                if 'note' in flight.flags:
-                    Stats.callbacks_with_notes += 1
-
+                Stats.last_callback_flight = flight
                 logger.debug("doing callback for %s", flight.flight_id)
-                func = getattr(Callbacks, action_value)
-                if func:
-                    func(flight)
-                else:
-                    logger.warning("callback not found: %s", action_value)
+                self.callbacks[action_value](flight)
             elif 'note' == action_name:
                 logger.debug("SETTING NOTE for %s", flight.flight_id)
                 flight.flags['note'] = action_value

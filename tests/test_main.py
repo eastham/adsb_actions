@@ -4,6 +4,7 @@ import yaml
 
 from stats import Stats
 from adsbactions import AdsbActions
+import testinfra
 
 YAML_STRING = """
   config:
@@ -25,7 +26,7 @@ YAML_STRING = """
       conditions:
         transition_regions: [ "Generic Gate Ground", "Generic Gate Air" ]
       actions:
-        callback: "add_op"
+        callback: "test_callback"
         note: "saw_takeoff"
 """
 
@@ -42,6 +43,7 @@ def test_main():
 
     yaml_data = yaml.safe_load(YAML_STRING)
     adsb_actions = AdsbActions(yaml_data)
+    testinfra.setup_test_callback(adsb_actions)
     adsb_actions.loop(JSON_STRING1)
 
     assert Stats.json_readlines == 1

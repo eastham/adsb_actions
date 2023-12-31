@@ -10,5 +10,4 @@ class Callbacks:
     @classmethod
     def test_callback(cls, flight: Flight):
         """null callback for testing purposes."""
-        Stats.last_callback_flight = flight
         pass

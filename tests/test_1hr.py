@@ -9,6 +9,7 @@ import yaml
 
 from stats import Stats
 from adsbactions import AdsbActions
+import testinfra
 
 YAML_STRING= """
   config:
@@ -20,23 +21,34 @@ YAML_STRING= """
       conditions:
         transition_regions: [ "Generic Gate Ground", "Generic Gate Air" ]
       actions:
-        slack: true
+        callback: "takeoff"
         note: "saw_takeoff"
 
     landing:
       conditions:
         transition_regions: [ "Generic Gate Air", "Generic Gate Ground" ]
       actions:
-        page: true
-        callback: "test_callback"
+        callback: "landing"
 """
 
-JSON_STRING1 = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}'
-JSON_STRING2 = '{"now": 1661692178, "alt_baro": 4500, "gscp": 128, "lat": 40.748708, "lon": -119.2489313, "track": 203.4, "hex": "a061d9", "flight": "N12345"}'
+landing_ctr = local_landing_ctr = 0
+takeoff_ctr = 0
 
-def test_main():
-    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
-    logging.info('System started.')
+def landing_cb(flight):
+    global landing_ctr, local_landing_ctr
+    landing_ctr += 1
+    if 'note' in flight.flags:
+        local_landing_ctr += 1
+
+def takeoff_cb(flight):
+    global takeoff_ctr
+    takeoff_ctr += 1
+
+def test_1hr():
+    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.WARNING)
+
+    # turn down loggers systemwide for noise/perf reasons
+    testinfra.set_all_loggers(logging.WARNING)
 
     Stats.reset()
     yaml_data = yaml.safe_load(YAML_STRING)
@@ -45,9 +57,10 @@ def test_main():
         json_data = myfile.read()
 
     adsb_actions = AdsbActions(yaml_data)
+    adsb_actions.register_callback("landing", landing_cb)
+    adsb_actions.register_callback("takeoff", takeoff_cb)
     adsb_actions.loop(json_data)
 
-    assert Stats.slacks_fired == 14 # takeoffs
-    assert Stats.pages_fired == 18  # landings
-    assert Stats.callbacks_with_notes == 9  # landings from local flights
-
+    assert takeoff_ctr == 14
+    assert landing_ctr == 18
+    assert local_landing_ctr == 9

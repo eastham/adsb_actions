@@ -19,6 +19,7 @@ class Flight:
     external_id: str = None # optional, database id for this flight
     alt_list: list = field(default_factory=list)  # last n altitudes we've seen
     inside_bboxes: list = field(default_factory=list)  # list of bbox names, ordered by kml file
+    inside_bboxes_indices: list = field(default_factory=list)  # list of bbox indices, ordered by kml file
     threadlock: Lock = field(default_factory=Lock)
     flags: dict = field(default_factory=lambda: ({}))
     prev_inside_bboxes = None
@@ -26,6 +27,7 @@ class Flight:
 
     def __post_init__(self):
         self.inside_bboxes = [None] * len(self.all_bboxes_list)
+        self.inside_bboxes_indices = [None] * len(self.all_bboxes_list)
 
     def to_str(self):
         """
@@ -49,6 +51,10 @@ class Flight:
         return False
 
     def is_in_bboxes(self, bb_list: list):
+        if (self.inside_bboxes == [None] and
+            (bb_list is None or bb_list == [])):
+            return True
+        
         for in_bb in self.inside_bboxes:
             if in_bb in bb_list:
                 return True
@@ -98,6 +104,7 @@ class Flight:
             match_index = bbox_list[i].contains(loc.lat, loc.lon, loc.track, loc.alt_baro)
             if match_index >= 0 and self.inside_bboxes[i] != bbox_list[i].boxes[match_index].name:
                 self.inside_bboxes[i] = bbox_list[i].boxes[match_index].name
+                self.inside_bboxes_indices[i] = match_index
 
         if logger.level <= logging.DEBUG and self.inside_bboxes != self.prev_inside_bboxes:
             flighttime = datetime.datetime.fromtimestamp(self.lastloc.now)

@@ -3,6 +3,7 @@ import yaml
 
 from stats import Stats
 from adsbactions import AdsbActions
+import testinfra
 
 YAML_STRING = """
   config:
@@ -18,13 +19,28 @@ YAML_STRING = """
         aircraft_list: banned
         regions: ["Generic Gate Ground", "non-existent"]  # This is an OR expression
       actions:
-        callback: test_callback
+        callback: ground_cb
+
+    distant:
+      conditions:
+        regions: []
+      actions:
+        callback: distant_cb
 """
+
+distant_cb_ctr = ground_cb_ctr = 0
+def distant_cb(flight):
+    global distant_cb_ctr
+    distant_cb_ctr += 1
+
+def ground_cb(flight):
+    global ground_cb_ctr
+    ground_cb_ctr += 1
 
 JSON_STRING_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
 JSON_STRING_GROUND = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
 
-def test_cooldown():
+def test_regions():
     Stats.reset()
 
     logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
@@ -32,9 +48,14 @@ def test_cooldown():
 
     yaml_data = yaml.safe_load(YAML_STRING)
     adsb_actions = AdsbActions(yaml_data)
+    testinfra.setup_test_callback(adsb_actions)
+    adsb_actions.register_callback("distant_cb", distant_cb)
+    adsb_actions.register_callback("ground_cb", ground_cb)
 
     adsb_actions.loop(JSON_STRING_DISTANT)
-    assert Stats.callbacks_fired == 0
+    assert distant_cb_ctr == 1
+    assert ground_cb_ctr == 0
 
     adsb_actions.loop(JSON_STRING_GROUND)
-    assert Stats.callbacks_fired == 1 
+    assert distant_cb_ctr == 1
+    assert ground_cb_ctr == 1

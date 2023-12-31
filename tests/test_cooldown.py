@@ -4,6 +4,7 @@ import yaml
 
 from stats import Stats
 from adsbactions import AdsbActions
+import testinfra
 
 YAML_STRING = """
   config:
@@ -34,6 +35,7 @@ def test_cooldown():
 
     yaml_data = yaml.safe_load(YAML_STRING)
     adsb_actions = AdsbActions(yaml_data)
+    testinfra.setup_test_callback(adsb_actions)
 
     adsb_actions.loop(JSON_STRING)
     assert Stats.callbacks_fired == 1

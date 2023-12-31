@@ -6,6 +6,7 @@ import yaml
 
 from stats import Stats
 from adsbactions import AdsbActions
+import testinfra
 
 YAML_STRING = """
   config:
@@ -33,9 +34,11 @@ def test_load():
     Stats.reset()
 
     logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.WARNING)
+    testinfra.set_all_loggers(logging.WARNING)
 
     yaml_data = yaml.safe_load(YAML_STRING)
     adsb_actions = AdsbActions(yaml_data)
+    testinfra.setup_test_callback(adsb_actions)
 
     start_time = time.time()
     work_string = JSON_STRING_DISTANT+JSON_STRING_GROUND
