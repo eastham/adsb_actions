@@ -10,6 +10,7 @@ Each YAML rule contains **conditions** and **actions**.
 **actions** include Slack, paging / JSON webhook, and python callback.  See CONFIG_INSTRUCTIONS.yaml for more.
 
 <h3>Example YAML config:</h3>
+```
   config:
     kmls:  # optional KML files that specify geographic regions.
       - tests/test3.kml 
@@ -27,8 +28,11 @@ Each YAML rule contains **conditions** and **actions**.
         regions: [ "23 upwind" ]
       actions:
         callback: nearby_cb
+```
 
-<h3>Usage:</h3>
+<h3>API Usage:</h3>
+```
     adsb_actions = AdsbActions(yaml_data, ip=args.ipaddr, port=args.port)
     adsb_actions.register_callback("nearby_cb", nearby_cb)
     adsb_actions.loop()
+```
