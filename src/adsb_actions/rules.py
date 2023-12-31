@@ -33,6 +33,7 @@ class Rules:
         self.yaml_data = data
         self.rule_exection_log = RuleExecutionLog()
         self.callbacks = {}
+        self.webhook = None
 
     def process_flight(self, flight: Flight) -> None:
         rule_items = self.yaml_data['rules'].items()
@@ -63,7 +64,8 @@ class Rules:
             elif 'regions' == condition_name:
                 result = flight.is_in_bboxes(condition_value)
             elif 'latlongring' == condition_name:
-                logger.critical("proximity condition not implemented")
+                dist = flight.lastloc.distfrom(condition_value[1], condition_value[2])
+                result = condition_value[0] >= dist
             elif 'proximity' == condition_name:
                 logger.critical("proximity condition not implemented")
             elif 'cooldown' == condition_name:
@@ -86,9 +88,9 @@ class Rules:
     def do_actions(self, flight: Flight, action_items: dict, rule_name: str) -> None:
         for action_name, action_value in action_items.items():
             self.rule_exection_log.log(rule_name, flight.flight_id, flight.lastloc.now)
-            if 'slack' == action_name:
-                Stats.slacks_fired += 1
-                logger.debug("doing slack for %s", flight.flight_id)
+            if 'webhook' == action_name:
+                Stats.webhooks_fired += 1
+                logger.debug("doing webhook for %s", flight.flight_id)
             elif 'page' == action_name:
                 Stats.pages_fired += 1
                 logger.debug("doing page for %s", flight.flight_id)

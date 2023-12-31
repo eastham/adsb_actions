@@ -43,11 +43,15 @@ class Location:
         return s
 
     def __sub__(self, other):
-        """Return distance between two Locations in nm"""
-        return distance.distance((self.lat, self.lon), (other.lat, other.lon)).nm
+        """Return distance to the other Location in nm"""
+        return self.distfrom(other.lat, other.lon)
 
     def __lt__(self, other):
         return self.alt_baro < other.alt_baro
 
     def __gt__(self, other):
         return self.alt_baro > other.alt_baro
+
+    def distfrom(self, lat, lon):
+        """Return distance from other lat/long in nm"""
+        return distance.distance((self.lat, self.lon), (lat, lon)).nm

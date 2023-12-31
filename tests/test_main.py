@@ -11,16 +11,15 @@ YAML_STRING = """
     kmls:
       - tests/test1.kml 
 
-  aircraft_lists:  # this is probably not the right way to do this
-    banned: [ "N42PE", "N12345" ] 
+  aircraft_lists:
+    alert_aircraft: [ "N12345" ] 
 
   rules:
-    banned_slack:
+    alert_webhook:
       conditions:
-        aircraft_list: banned
+        aircraft_list: alert_aircraft
       actions:
-        slack: True
-        page: True
+        webhook: True
 
     takeoff:
       conditions:

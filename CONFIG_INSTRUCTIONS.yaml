@@ -1,26 +1,27 @@
   config:
-    kmls:  # KML files that specify regions.  aircraft may be in 0-1 regions per file at any time
+    kmls:  # optional KML files that specify geographic regions.  aircraft may be in 0-1 regions per file at any time
       - tests/test1.kml 
 
-  aircraft_lists: #
-    # defines named lists of tail numbers of interest.
-    banned: [ "N12345" ] 
+  aircraft_lists:
+    # optional lists of tail numbers of interest.
+    alert_aircraft: [ "N12345" ] 
 
   rules:
-    banned_aircraft:
+    arbitrary_rulename:
       conditions: 
         # when should we trigger this rule?  AND expression -- all conditions must be met.
-        min_alt: 4000 # feet MSL, must be >= to match
-        max_alt: 10000 # feel MSL, must be <= to match
-        aircraft_list: banned  # use aircraft_list above
-        regions: ["Generic Gate Ground", "non-existent"]  # will match if inside any of these KML polygons
-        regions: []  # not in any KML-defined region
+        min_alt: 4000        # feet MSL, must be >= to match
+        max_alt: 10000       # feel MSL, must be <= to match
+        aircraft_list: alert_aircraft  # use aircraft_list above
+        regions: [ "23 upwind", "Pattern" ]  # will match if inside any of these KML polygons
+        regions: []          # not in any KML-defined region
         transition_regions: [ "from", "to" ] # moved from first region to second
-        latlongring: (20, 40.763537, -119.2122323) # nm, lat, long
-        proximity: (400, .3) # alt separation in feet, lateral separation in nm
+        latlongring: [20, 40.763537, -119.2122323] # nm, lat, long
+        proximity: [400, .3] # alt separation in feet, lateral separation in nm
+        cooldown: 180        # seconds to wait before matching again
       actions:
         # what should we do when triggered?
         callback: ground_cb  # call a function as specified by AdsbActions.register_callback()
-        slack: recipient
-        page: recipient
-        note: "text flag"  # apply this note to aircraft, visible in callbacks
+        webhook: True        # slack etc
+        page: (
+        note: "text flag"    # apply this note to aircraft, visible in callbacks

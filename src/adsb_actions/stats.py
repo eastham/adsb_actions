@@ -8,7 +8,7 @@ class Stats:
     callbacks_fired: int = 0
     last_callback_flight: Flight = None
 
-    slacks_fired: int = 0
+    webhooks_fired: int = 0
     pages_fired: int = 0
     
     @classmethod
@@ -16,4 +16,4 @@ class Stats:
         cl.json_readlines = cl.condition_match_calls = 0
         cl.condition_matches_true = cl.callbacks_fired = 0
         cl.last_callback_flight = None
-        cl.slacks_fired = cl.pages_fired = 0
+        cl.webhooks_fired = cl.pages_fired = 0

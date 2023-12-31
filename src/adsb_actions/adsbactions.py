@@ -19,13 +19,47 @@ logger.level = logging.DEBUG
 
 class AdsbActions:
     def __init__(self, yaml,ip=None, port=None, exit_cb=None):
-        self.flights = Flights(self.load_bboxes(yaml))
+        self.flights = Flights(self._load_bboxes(yaml))
         self.rules = Rules(yaml)
         self.exit_cb = exit_cb
         if ip and port:
-            self.listen = self.setup_network(ip, port)
+            self.listen = self._setup_network(ip, port)
 
-    def load_bboxes(self, yaml):
+    def loop(self, data=None):
+        CHECKPOINT_INTERVAL = 5 # seconds
+
+        if data:  # inject string data for testing
+            self.listen = TCPConnection()
+            self.listen.f = StringIO(data)
+
+        while True:
+            last_read_time = self._flight_update_read()
+            if last_read_time == 0: continue
+            if last_read_time < 0: break
+            if not self.flights.last_checkpoint:
+                self.flights.last_checkpoint = last_read_time
+
+            # Here we do periodic maintenance tasks, and expensive operations.
+            # Note: this skips during gaps when no aircraft are seen.
+            # If timely expiration/maintenance is needed, dummy events can be
+            # injected.
+            if (last_read_time and
+                last_read_time - self.flights.last_checkpoint >= CHECKPOINT_INTERVAL):
+                datestr = datetime.datetime.utcfromtimestamp(
+                    last_read_time).strftime('%Y-%m-%d %H:%M:%S')
+                logging.debug("%ds Checkpoint: %d %s", CHECKPOINT_INTERVAL, last_read_time, datestr)
+
+                self.flights.expire_old(self.rules, last_read_time)
+                self.flights.check_distance(self.rules, last_read_time)
+                self.flights.last_checkpoint = last_read_time
+
+    def register_callback(self, name: str, fn):
+        self.rules.callbacks[name] = fn
+
+    def register_webhook(self, url):
+        self.rules.webhook = url
+
+    def _load_bboxes(self, yaml):
         bboxes_list = []
         try:
             for f in yaml['config']['kmls']:
@@ -36,7 +70,7 @@ class AdsbActions:
             pass
         return bboxes_list
 
-    def setup_network(self, ipaddr, port, retry_conn=True):
+    def _setup_network(self, ipaddr, port, retry_conn=True):
         print("Connecting to %s:%d" % (ipaddr, int(port)))
 
         signal.signal(signal.SIGINT, sigint_handler)
@@ -46,7 +80,7 @@ class AdsbActions:
         logging.info("Setup done")
         return conn
 
-    def flight_update_read(self):
+    def _flight_update_read(self):
         jsondict = None
         try:
             line = self.listen.readline()
@@ -78,36 +112,7 @@ class AdsbActions:
         else:
             return 0
 
-    def loop(self, data=None):
-        CHECKPOINT_INTERVAL = 5 # seconds
-
-        if data:  # inject string data for testing
-            self.listen = TCPConnection()
-            self.listen.f = StringIO(data)
-
-        while True:
-            last_read_time = self.flight_update_read()
-            if last_read_time == 0: continue
-            if last_read_time < 0: break
-            if not self.flights.last_checkpoint:
-                self.flights.last_checkpoint = last_read_time
-
-            # Here we do periodic maintenance tasks, and expensive operations.
-            # Note: this skips during gaps when no aircraft are seen.
-            # If timely expiration/maintenance is needed, dummy events can be
-            # injected.
-            if (last_read_time and
-                last_read_time - self.flights.last_checkpoint >= CHECKPOINT_INTERVAL):
-                datestr = datetime.datetime.utcfromtimestamp(
-                    last_read_time).strftime('%Y-%m-%d %H:%M:%S')
-                logging.debug("%ds Checkpoint: %d %s", CHECKPOINT_INTERVAL, last_read_time, datestr)
-
-                self.flights.expire_old(self.rules, last_read_time)
-                self.flights.check_distance(self.rules, last_read_time)
-                self.flights.last_checkpoint = last_read_time
-
-    def register_callback(self, name: str, fn):
-        self.rules.callbacks[name] = fn
+   
 
 class TCPConnection:
     def __init__(self=None, host=None, port=None, retry=False):
