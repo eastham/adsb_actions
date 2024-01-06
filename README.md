@@ -26,9 +26,9 @@ Each YAML rule contains **conditions** and **actions**.
         max_alt: 10000       # feel MSL, must be <= to match
         aircraft_list: alert_aircraft  # use aircraft_list above
         latlongring: [20, 40.763537, -119.2122323]
-        regions: [ "23 upwind" ]
+        regions: [ "23 upwind" ]  # region defined in KML
       actions:
-        callback: nearby_cb
+        callback: nearby_cb  # call a function registered under this name
 ```
 
 <h3>API Usage:</h3>

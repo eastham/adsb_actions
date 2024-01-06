@@ -62,4 +62,4 @@ class Flights:
     def check_distance(self, rules, last_read_time):
         flight_list = list(self.flight_dict.values())
 
-        rules.handle_proximity_condition(flight_list)
+        rules.handle_proximity_conditions(flight_list)

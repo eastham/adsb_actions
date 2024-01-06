@@ -9,11 +9,10 @@ class Stats:
     last_callback_flight: Flight = None
 
     webhooks_fired: int = 0
-    pages_fired: int = 0
     
     @classmethod
     def reset(cl):
         cl.json_readlines = cl.condition_match_calls = 0
         cl.condition_matches_true = cl.callbacks_fired = 0
         cl.last_callback_flight = None
-        cl.webhooks_fired = cl.pages_fired = 0
+        cl.webhooks_fired = 0

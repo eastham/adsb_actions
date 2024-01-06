@@ -73,7 +73,6 @@ class Rules:
                                                                     flight.flight_id,
                                                                     condition_value*60,
                                                                     flight.lastloc.now)
-                pass
             else:
                 logger.warning("unmatched condition: %s", condition_name)
 
@@ -90,20 +89,20 @@ class Rules:
             self.rule_exection_log.log(rule_name, flight.flight_id, flight.lastloc.now)
             if 'webhook' == action_name:
                 Stats.webhooks_fired += 1
-                logger.debug("doing webhook for %s", flight.flight_id)
-            elif 'page' == action_name:
-                Stats.pages_fired += 1
-                logger.debug("doing page for %s", flight.flight_id)
+                # TODO not implemented
+                logger.debug("Doing webhook for %s", flight.flight_id)
+            elif 'print' == action_name:
+                print(f"Rule {rule_name} matched for {flight.flight_id}")
             elif 'callback' == action_name:
                 Stats.callbacks_fired += 1
                 Stats.last_callback_flight = flight
-                logger.debug("doing callback for %s", flight.flight_id)
+                logger.debug("Doing callback for %s", flight.flight_id)
                 self.callbacks[action_value](flight)
             elif 'note' == action_name:
-                logger.debug("SETTING NOTE for %s", flight.flight_id)
+                logger.debug("Setting note for %s to %s", flight.flight_id, action_value)
                 flight.flags['note'] = action_value
             else:
-                logger.warning("unmatched action: %s", action_name)
+                logger.warning("Unmatched action: %s", action_name)
 
     def do_expire(self, flight: Flight) -> None:
         for rule_name, rule_value in self.yaml_data['rules'].items():
@@ -113,20 +112,25 @@ class Rules:
                 func = globals().get(rule_value)
                 func(flight)
 
-    def handle_proximity_condition(self, flight_list: list) -> None:
+    def handle_proximity_conditions(self, flight_list: list) -> None:
         """
-        Check distance between all aircraft, if any prox conditions are used.
-        O(n^2), can be expensive, but altitude and bbox limits help..
+        This is run periodically to check distance between all aircraft --
+        to check for any matching proximity conditions.  
+        It's O(n^2), can be expensive, but altitude and bbox limits help...
 
-        # XXX delete these:
+        TODO rewrite.  remove hardcoded rules using something like this: 
+        - for f in flight_list
+         - for each rule with a proximity condition
+           - see if the constratints otherwise match f (using self.conditions_match())
+             - then iterate through all other flights looking for flights within the alt/distance constraint
+                - run the actions for any matches (using self.do_actions())
+        - optimization?: other flight also has to meet the other rule constraints?
+
         MIN_ALT_SEPARATION = 400 # 8000 # 400
         MIN_ALT = 4000 # 100 # 4000
         MIN_DISTANCE = .3 # 1   # .3 # nautical miles 
         MIN_FRESH = 10 # seconds, otherwise not evaluated
 
-        # XXX for each rule with proximity...
-            # XXXcheck other non-prox conditions...
-            # XXX load parameters from rule_value...
         for i, flight1 in enumerate(flight_list):
             if not flight1.in_any_bbox(): continue
             if last_read_time - flight1.lastloc.now > MIN_FRESH: continue
@@ -147,4 +151,4 @@ class Rules:
                         #if annotate_cb:
                         #    annotate_cb(flight1, flight2, dist, abs(loc1.alt_baro - loc2.alt_baro))
                         #    annotate_cb(flight2, flight1, dist, abs(loc1.alt_baro - loc2.alt_baro))
-""" 
+"""

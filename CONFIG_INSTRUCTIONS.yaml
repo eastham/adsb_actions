@@ -23,5 +23,5 @@
         # what should we do when triggered?
         callback: ground_cb  # call a function as specified by AdsbActions.register_callback()
         webhook: True        # slack etc
-        page: (
+        print: True          # print info about this aircraft to console
         note: "text flag"    # apply this note to aircraft, visible in callbacks
