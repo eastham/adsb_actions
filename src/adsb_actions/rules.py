@@ -9,7 +9,8 @@ logger.level = logging.DEBUG
 class RuleExecutionLog:
     """Keep track of last execution times for each rule/aircraft.
     
-    Basically a dict of rulenameXXXaircraft -> timestamp"""
+    Basically a dict of rulename + aircraft -> last-execution-timestamp"""
+
     SEP = " XxX "
     def __init__(self):
         self.log_entries: dict = {}
@@ -34,6 +35,7 @@ class Rules:
         self.rule_exection_log = RuleExecutionLog()
         self.callbacks = {}
         self.webhook = None
+        # TODO add some sanity checks to rules...no duplicate rule names, at least...
 
     def process_flight(self, flight: Flight) -> None:
         rule_items = self.yaml_data['rules'].items()
@@ -48,6 +50,9 @@ class Rules:
         Stats.condition_match_calls += 1
         logger.info("condition_match checking rules: %s", str(conditions))
         for condition_name, condition_value in conditions.items():
+            # TODO pull this body out into another fn
+            # TODO? preprocess rules to reduce string comparisons?  Doesn't seem to cost much time per cProfile...
+
             result = False
             if 'aircraft_list' == condition_name:
                 #print(f"checking aircraft list {condition_value}")
