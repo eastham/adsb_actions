@@ -89,8 +89,8 @@ class Rules:
             self.rule_exection_log.log(rule_name, flight.flight_id, flight.lastloc.now)
             if 'webhook' == action_name:
                 Stats.webhooks_fired += 1
-                # TODO not implemented
-                logger.debug("Doing webhook for %s", flight.flight_id)
+                # TODO not implemented - see page.py for more info
+                logger.debug("NOT IMPLEMENTED: webhook for %s", flight.flight_id)
             elif 'print' == action_name:
                 print(f"Rule {rule_name} matched for {flight.flight_id}")
             elif 'callback' == action_name:

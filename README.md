@@ -34,7 +34,7 @@ Each YAML rule contains **conditions** and **actions**.
 <h3>API Usage:</h3>
 
 ```
-    adsb_actions = AdsbActions(yaml_data, ip=args.ipaddr, port=args.port)
+    adsb_actions = AdsbActions(yaml_config, ip=args.ipaddr, port=args.port)
     adsb_actions.register_callback("nearby_cb", nearby_cb)
     adsb_actions.loop()
 ```
