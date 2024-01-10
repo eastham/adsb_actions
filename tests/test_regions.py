@@ -1,3 +1,5 @@
+"""Test for the "regions" condition."""
+
 import logging
 import yaml
 

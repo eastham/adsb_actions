@@ -1,3 +1,4 @@
+"""Test of the "cooldown" condition."""
 import logging
 
 import yaml

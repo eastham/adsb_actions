@@ -1,3 +1,8 @@
+"""Load test w/ profiling support.
+
+Use pytest -s to see profile output.
+"""
+
 import logging
 import time
 import cProfile
@@ -44,8 +49,7 @@ def test_load():
     work_string = JSON_STRING_DISTANT+JSON_STRING_GROUND
     work_string = work_string * ITERATIONS
 
-    # XXX centrally disable logger?
-    # NOTE: use pytest -s to see profile output
+    # TODO centrally disable logger to prevent profile impact?
     with cProfile.Profile() as pr:
         pr.enable()
 

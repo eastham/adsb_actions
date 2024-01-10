@@ -1,4 +1,4 @@
-"Large test covering the 'regions' rule condition and 'note' action."
+"""Large test covering the 'regions' rule condition and 'note' action."""
 
 import logging
 
