@@ -8,8 +8,9 @@ CONFIG = Config()
 # cover the functionality of either of these methods.
 # maybe change the format of the webhook action to be something like:
 #   webhook: [ payload_filename ]
-# ...and then a way to regexp-replace the body text?
-# ideally the file would be read in one time and cached for efficiency.
+# ...and then a way to regexp-replace the body text into the payload?
+#
+# (ideally the file would be read in one time and cached for efficiency.)
 
 def send_slack(text):
     print(f"Slack msg: {text}")
@@ -33,8 +34,7 @@ def send_page(msg):
         "message":
             "Test message"
     }}
-    print ("dest "+ CONFIG.private_vars['page_url'])
-    print(body)
+
     logging.basicConfig()
     logging.getLogger().setLevel(logging.DEBUG)
 

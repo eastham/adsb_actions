@@ -16,8 +16,8 @@ Each YAML rule contains **conditions** and **actions**.
     kmls:  # optional KML files that specify geographic regions.
       - tests/test3.kml 
 
-  aircraft_lists:
-    alert_aircraft: [ "N12345" ] # optional lists of tail numbers of interest.
+  aircraft_lists:  # optional lists of tail numbers of interest.
+    alert_aircraft: [ "N12345" ]
 
   rules:
     nearby:
@@ -29,6 +29,7 @@ Each YAML rule contains **conditions** and **actions**.
         regions: [ "23 upwind" ]  # region defined in KML
       actions:
         callback: nearby_cb  # call a function registered under this name
+        print: True          # print info about this match to console
 ```
 
 <h3>API Usage:</h3>
