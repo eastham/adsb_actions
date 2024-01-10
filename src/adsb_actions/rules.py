@@ -1,5 +1,4 @@
 import logging
-from callbacks import Callbacks
 from flight import Flight
 from stats import Stats
 
@@ -9,23 +8,22 @@ logger.level = logging.DEBUG
 class RuleExecutionLog:
     """Keep track of last execution times for each rule/aircraft.
     
-    Basically a dict of rulename + aircraft -> last-execution-timestamp"""
+    Basically a dict of (rulename, flight_id) -> last-execution-timestamp"""
 
-    SEP = " XxX "
     def __init__(self):
         self.log_entries: dict = {}
 
-    def get_entry_name(self, rulename: str, flight_id: str) -> str:
-        return rulename + self.SEP + flight_id
+    def generate_entry_key(self, rulename: str, flight_id: str) -> tuple:
+        return rulename, flight_id
 
     def log(self, rulename: str, flight_id: str, now: int) -> None:
-        entry_name = self.get_entry_name(rulename, flight_id)
-        self.log_entries[entry_name] = now
+        entry_key = self.generate_entry_key(rulename, flight_id)
+        self.log_entries[entry_key] = now
 
     def within_cooldown(self, rulename: str, flight_id: str, cooldown: int, now: int) -> bool:
-        entry_name = self.get_entry_name(rulename, flight_id)
-        if entry_name in self.log_entries:
-            if now - self.log_entries[entry_name] < cooldown:
+        entry_key = self.generate_entry_key(rulename, flight_id)
+        if entry_key in self.log_entries:
+            if now - self.log_entries[entry_key] < cooldown:
                 return True
         return False
 
