@@ -1,3 +1,4 @@
+"""Test for min_alt/max_alt conditions."""
 import logging
 import yaml
 

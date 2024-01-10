@@ -1,6 +1,7 @@
 """Load test w/ profiling support.
 
-Use pytest -s to see profile output.
+Use "pytest -s" to see profile output.  You may need to increase ITERATIONS
+for clean profile output...
 """
 
 import logging
@@ -34,7 +35,7 @@ JSON_STRING_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat":
 JSON_STRING_GROUND = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
 
 def test_load():
-    ITERATIONS = 100
+    ITERATIONS = 1000
 
     Stats.reset()
 
