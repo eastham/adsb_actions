@@ -39,3 +39,10 @@ Each YAML rule contains **conditions** and **actions**.
     adsb_actions.register_callback("nearby_cb", nearby_cb)
     adsb_actions.loop()
 ```
+
+<h3>Installation from github:</h3>
+1. (download code)
+2. source bin/activate
+3. pip3 install .
+4. (install geos native library)
+5. pytest -s tests/test_1hr.py
