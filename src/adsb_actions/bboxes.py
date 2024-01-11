@@ -1,5 +1,4 @@
-#!/usr/bin/python3
-
+"""Representation for bounding boxes found in kml files."""
 import logging
 import re
 from dataclasses import dataclass

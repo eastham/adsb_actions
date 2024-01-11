@@ -1,3 +1,4 @@
+"""Systemwide statistics tracking, mostly for test and debug purposes."""
 from flight import Flight
 
 class Stats:

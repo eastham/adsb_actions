@@ -22,6 +22,7 @@
       actions:
         # what should we do when triggered?
         callback: ground_cb  # call a function as specified by AdsbActions.register_callback()
+        expire_callback: expire_cb  # callback for when the flight is being evicted
         webhook: True        # slack etc
         print: True          # print info about this aircraft to console
-        note: "text flag"    # apply this note to aircraft, visible in callbacks
+        note: "text flag"    # apply this note to aircraft, for use in later callbacks

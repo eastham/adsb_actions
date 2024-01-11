@@ -1,10 +1,17 @@
+"""This is the main API For the library.
+
+The following will instantiate the library, attempt to connect to a network
+socket, and process the ADS-B data coming in:
+    adsb_actions = AdsbActions(yaml_config, ip=args.ipaddr, port=args.port)
+    adsb_actions.register_callback("nearby_cb", nearby_cb)
+    adsb_actions.loop()
+"""
 import logging
 import json
 import datetime
 import time
 import signal
 import socket
-import select
 import sys
 from io import StringIO
 
@@ -18,6 +25,7 @@ logger = logging.getLogger(__name__)
 logger.level = logging.DEBUG
 
 class AdsbActions:
+    """Main API for the library."""
     def __init__(self, yaml,ip=None, port=None, exit_cb=None):
         self.flights = Flights(self._load_bboxes(yaml))
         self.rules = Rules(yaml)
@@ -26,7 +34,15 @@ class AdsbActions:
             self.listen = self._setup_network(ip, port)
 
     def loop(self, data=None):
-        CHECKPOINT_INTERVAL = 5 # seconds
+        """Run forever, processing ADS-B json data on the previously-opened socket.
+        Will terminate when socket is closed.
+
+        Args:
+            data: instead of using the socket, process this data instead. 
+                Useful for testing.
+        """
+        # TODO this probably should be a configurable instance variable:
+        CHECKPOINT_INTERVAL = 5 # seconds.  How often to do mainentance tasks.
 
         if data:  # inject string data for testing
             self.listen = TCPConnection()
@@ -39,6 +55,7 @@ class AdsbActions:
             if not self.flights.last_checkpoint:
                 self.flights.last_checkpoint = last_read_time
 
+            # Run a "Checkpoint".  
             # Here we do periodic maintenance tasks, and expensive operations.
             # Note: this skips during gaps when no aircraft are seen.
             # If timely expiration/maintenance is needed, dummy events can be
@@ -54,12 +71,17 @@ class AdsbActions:
                 self.flights.last_checkpoint = last_read_time
 
     def register_callback(self, name: str, fn):
+        """Associate the given name string with a function to call."""
         self.rules.callbacks[name] = fn
 
     def register_webhook(self, url):
+        """Call the given url when a webhook action is needed.  
+        TODO not clear this is the right way to do this, should it be
+        in the yaml instead?"""
         self.rules.webhook = url
 
     def _load_bboxes(self, yaml):
+        """Load the kml files found in the yaml, and parse those kmls."""
         bboxes_list = []
         try:
             for f in yaml['config']['kmls']:
@@ -71,6 +93,7 @@ class AdsbActions:
         return bboxes_list
 
     def _setup_network(self, ipaddr, port, retry_conn=True):
+        """Open network connection."""
         print("Connecting to %s:%d" % (ipaddr, int(port)))
 
         signal.signal(signal.SIGINT, sigint_handler)
@@ -80,7 +103,12 @@ class AdsbActions:
         logging.info("Setup done")
         return conn
 
-    def _flight_update_read(self):
+    def _flight_update_read(self) -> float:
+        """Attempt to read a line from the socket, and process it.
+        Returns:
+            a timestamp of the parsed location update if successful, 
+            otherwise zero"""
+        
         jsondict = None
         try:
             line = self.listen.readline()
@@ -96,6 +124,7 @@ class AdsbActions:
         except Exception:
             print(f"Socket input error, reconnect plan = {self.listen.retry}")
             if self.listen.retry:
+                # TODO needs testing/improvement.  This didn't always work in the past...
                 time.sleep(2)
                 self.listen.connect()
             else:
@@ -106,13 +135,14 @@ class AdsbActions:
             return 0
 
         Stats.json_readlines += 1
+
         if jsondict:
+            # We got some data, process it.
             loc_update = Location.from_dict(jsondict)
             return self.flights.add_location(loc_update, self.rules)
         else:
             return 0
 
-   
 
 class TCPConnection:
     def __init__(self=None, host=None, port=None, retry=False):

@@ -1,3 +1,4 @@
+"""Read/store local configuration yamls."""
 import yaml
 
 CONFIGPATH = "config.yaml"

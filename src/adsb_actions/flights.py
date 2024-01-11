@@ -1,3 +1,5 @@
+"""Storage for all Flight objects in the system, and handling
+for flight updates."""
 import threading
 import logging
 from typing import Dict
@@ -18,12 +20,17 @@ class Flights:
         self.bboxes = bboxes
         self.last_checkpoint = 0
 
-    def add_location(self, loc: Location, rules: Rules):
+    def add_location(self, loc: Location, rules: Rules) -> float:
         """
         Track an aircraft location update, update what bounding boxes it's in,
         and fire callbacks to update the gui or do user-defined tasks.
 
-        loc: Location/flight info to update
+        Args:
+            loc: aircraft location point to store / act on
+            rules: apply these rules to the new location
+
+        Returns:
+            nonzero float of epoch timestamp just added.
         """
 
         flight_id = loc.flight

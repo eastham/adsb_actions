@@ -1,3 +1,6 @@
+"""Flight module represents the internal state for a flight.
+Location, last seen time, and internal state."""
+
 import statistics
 import datetime
 import logging

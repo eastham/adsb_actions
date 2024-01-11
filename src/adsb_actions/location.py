@@ -1,3 +1,5 @@
+"""Parsing and representation for a single position update coming from ADS-B."""
+
 from dataclasses import dataclass, fields
 from typing import Optional
 
