@@ -48,7 +48,7 @@ def test_1hr():
     logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.WARNING)
 
     # turn down loggers systemwide for noise/perf reasons
-    testinfra.set_all_loggers(logging.WARNING)
+    testinfra.set_all_loggers(logging.INFO)
 
     Stats.reset()
     yaml_data = yaml.safe_load(YAML_STRING)

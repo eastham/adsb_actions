@@ -103,6 +103,8 @@ class Flight:
         old_str = self.to_str()
         logger.debug("update_inside_bboxes: pre-bbox update: %s", old_str)
         for i, bbox in enumerate(bbox_list):
+            #logger.debug(f"checking {i}")
+
             self.inside_bboxes[i] = None
             match_index = bbox_list[i].contains(loc.lat, loc.lon, loc.track, loc.alt_baro)
             if match_index >= 0 and self.inside_bboxes[i] != bbox_list[i].boxes[match_index].name:

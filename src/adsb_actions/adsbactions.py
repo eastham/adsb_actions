@@ -88,6 +88,7 @@ class AdsbActions:
                 bboxes_list.append(Bboxes(f))
         except FileNotFoundError:
             logging.critical("File not found: %s", f)
+            sys.exit(-1)
         except KeyError:
             pass
         return bboxes_list

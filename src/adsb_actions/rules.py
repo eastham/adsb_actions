@@ -23,9 +23,9 @@ class Rules:
         rule_items = self.yaml_data['rules'].items()
 
         for rule_name, rule_value in rule_items:
-            logger.info("Checking rules %s", rule_name)
+            logger.debug("Checking rules %s", rule_name)
             if self.conditions_match(flight, rule_value['conditions'], rule_name):
-                logger.info("MATCH rule %s", rule_name)
+                logger.info("MATCH rule %s for flight %s", rule_name, flight)
                 self.do_actions(flight, rule_value['actions'], rule_name)
 
     def conditions_match(self, flight: Flight, conditions: dict,
@@ -33,13 +33,14 @@ class Rules:
         """Determine if the given rule conditions match for the given flight."""
 
         Stats.condition_match_calls += 1
-        logger.info("condition_match checking rules: %s", str(conditions))
+        logger.debug("condition_match checking rules: %s", str(conditions))
 
         for condition_name, condition_value in conditions.items():
             # TODO pull this body out into another fn
-            # TODO? preprocess rules to reduce string comparisons?  
-            #   The current approach Doesn't seem to be very expensive, 
+            # TODO? preprocess rules to reduce string comparisons?
+            #   The current approach Doesn't seem to be very expensive,
             #   per cProfile and test_load.py...
+            #   Would "'aircraft_list' in conditions" be faster, as a dict lookup?
 
             result = False
             if 'aircraft_list' == condition_name:
