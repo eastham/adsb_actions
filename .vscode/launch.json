@@ -11,7 +11,7 @@
             "request": "launch",
             "program": "controller.py",
             "cwd": "src/stripview",
-            "args": " -- --ipaddr 123 --port 123 --testdata ../../tests/1hr.json --rules ui.yaml ../../tests/test2.kml test3.kml",
+            "args": " -- --ipaddr 123 --port 123 --testdata ../../tests/1hr.json --rules ui.yaml ../../tests/test2.kml",
             "console": "integratedTerminal",
             "justMyCode": true
         }

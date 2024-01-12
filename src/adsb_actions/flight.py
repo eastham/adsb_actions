@@ -49,8 +49,8 @@ class Flight:
         self.threadlock.release()
 
     def in_any_bbox(self):
-        for index in self.inside_bboxes:
-            if index >= 0: return True
+        for bbox in self.inside_bboxes:
+            if bbox is not None: return True
         return False
 
     def is_in_bboxes(self, bb_list: list):
