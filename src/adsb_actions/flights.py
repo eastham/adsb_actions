@@ -23,7 +23,7 @@ class Flights:
     def add_location(self, loc: Location, rules: Rules) -> float:
         """
         Track an aircraft location update, update what bounding boxes it's in,
-        and fire callbacks to update the gui or do user-defined tasks.
+        and process rules to update the gui or do user-defined tasks.
 
         Args:
             loc: aircraft location point to store / act on
@@ -46,7 +46,8 @@ class Flights:
             flight.update_loc(loc)
         else:
             is_new_flight = True
-            flight = self.flight_dict[flight_id] = Flight(flight_id, loc.tail, loc, loc, self.bboxes)
+            flight = self.flight_dict[flight_id] = Flight(flight_id, loc.tail, loc,
+                                                          loc, self.bboxes)
 
         flight.update_inside_bboxes(self.bboxes, loc)
         #print(flight.to_str())

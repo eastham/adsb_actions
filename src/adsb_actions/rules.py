@@ -27,6 +27,9 @@ class Rules:
             if self.conditions_match(flight, rule_value['conditions'], rule_name):
                 logger.info("MATCH for rule '%s' for flight %s", rule_name, flight.flight_id)
                 self.do_actions(flight, rule_value['actions'], rule_name)
+            else:
+                logger.debug("NO MATCH for rule '%s' for flight %s", rule_name, flight.flight_id)
+
 
     def conditions_match(self, flight: Flight, conditions: dict,
                          rule_name: str) -> bool:

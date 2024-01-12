@@ -188,7 +188,6 @@ class FlightStrip:
 
         if location and bboxes_list:
             bbox_2nd_level = flight.get_bbox_at_level(1)
-            logging.debug(f"2nd level {bbox_2nd_level}")
 
             # XXX hack to keep string from wrapping...not sure how to get kivy
             # to do this
@@ -369,10 +368,6 @@ def run(focus_q, admin_q):
 
     args = parser.parse_args()
 
-    # XXX TODO
-    #if args.debug: set_dbg_level(2)
-    #elif args.verbose: set_dbg_level(1)
-
     with open(args.rules, 'r', encoding='utf-8') as file:
         yaml_data = yaml.safe_load(file)
 
@@ -380,23 +375,22 @@ def run(focus_q, admin_q):
     for f in args.file:
         bboxes_list.append(Bboxes(f))
     signal.signal(signal.SIGINT, sigint_handler)
-    #listen_socket = adsb_receiver.setup(args.ipaddr, args.port)
 
     global controllerapp
     controllerapp = ControllerApp(bboxes_list[0], focus_q, admin_q)
-    #read_thread = threading.Thread(target=adsb_receiver.flight_read_loop,
-    #    args=[listen_socket, bboxes_list, controllerapp.update_strip,
-    #   controllerapp.remove_strip, controllerapp.annotate_strip, None])
-    #Clock.schedule_once(lambda x: read_thread.start(), 2)
 
-    adsb_actions = AdsbActions(yaml_data, bboxes=bboxes_list)
+    json_data = None
+    if not args.testdata:
+        adsb_actions = AdsbActions(yaml_data, ip=args.ipaddr, port=args.port)
+    else:
+        adsb_actions = AdsbActions(yaml_data)
+
+        with open(args.testdata, 'rt', encoding="utf-8") as myfile:
+            json_data = myfile.read()
+
     adsb_actions.register_callback("aircraft_update_cb", aircraft_update_cb)
     adsb_actions.register_callback("aircraft_remove_cb", aircraft_remove_cb)
 
-    json_data = None
-    if args.testdata:
-        with open(args.testdata, 'rt', encoding="utf-8") as myfile:
-            json_data = myfile.read()
     read_thread = threading.Thread(target=adsb_actions.loop,
         args=[json_data])
     Clock.schedule_once(lambda x: read_thread.start(), 2)

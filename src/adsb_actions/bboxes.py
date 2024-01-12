@@ -75,7 +75,7 @@ class Bboxes:
             return False
 
     def contains(self, lat, long, hdg, alt):
-        "returns index of first matching bounding box, or -1 if not found"
+        """returns index of first matching bounding box, or -1 if not found"""
         for i, box in enumerate(self.boxes):
             if (box.polygon.contains(Point(long,lat)) and
                 self.hdg_contains(hdg, box.starthdg, box.endhdg)):

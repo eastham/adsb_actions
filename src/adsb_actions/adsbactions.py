@@ -50,6 +50,7 @@ class AdsbActions:
 
         while True:
             last_read_time = self._flight_update_read()
+
             if last_read_time == 0: continue
             if last_read_time < 0: break
             if not self.flights.last_checkpoint:
@@ -109,7 +110,7 @@ class AdsbActions:
         Returns:
             a timestamp of the parsed location update if successful, 
             otherwise zero"""
-        
+
         jsondict = None
         try:
             line = self.listen.readline()

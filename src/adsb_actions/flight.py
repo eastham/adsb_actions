@@ -54,10 +54,13 @@ class Flight:
         return False
 
     def is_in_bboxes(self, bb_list: list):
-        if (self.inside_bboxes == [None] and
-            (bb_list is None or bb_list == [])):
-            return True
-        
+        """Is the flight in all the same bboxes as specified in list?
+        Also returns true in the all-are-None condition."""
+
+        # flight may be in [None,None], we still want to match that case
+        if bb_list is None or bb_list == []:
+            bb_list = [None]
+
         for in_bb in self.inside_bboxes:
             if in_bb in bb_list:
                 return True
@@ -96,18 +99,18 @@ class Flight:
 
     def update_inside_bboxes(self, bbox_list, loc):
         """
-        Array indices in here are all per kml file.
+        Based on the most recent position data, update what bounding boxes we're in.
+        Note: all array indices [i] in this function are selecting between kml files.
         """
         self.prev_inside_bboxes = self.inside_bboxes.copy()
-        changes = False
         old_str = self.to_str()
-        logger.debug("update_inside_bboxes: pre-bbox update: %s", old_str)
+        logger.debug("update_inside_bboxes: pre-bbox update: %s %s", self.flight_id, str(self.inside_bboxes))
         for i, bbox in enumerate(bbox_list):
-            #logger.debug(f"checking {i}")
-
             self.inside_bboxes[i] = None
+            self.inside_bboxes_indices[i] = None
             match_index = bbox_list[i].contains(loc.lat, loc.lon, loc.track, loc.alt_baro)
             if match_index >= 0 and self.inside_bboxes[i] != bbox_list[i].boxes[match_index].name:
+                # Flight changed bounding boxes at level i
                 self.inside_bboxes[i] = bbox_list[i].boxes[match_index].name
                 self.inside_bboxes_indices[i] = match_index
 

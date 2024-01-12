@@ -1,19 +1,23 @@
   config:
-    kmls:  # KML files that specify regions.  aircraft may be in 0-1 regions per file at any time
+    kmls:
       - ../../tests/test2.kml 
+      - ../../tests/test3.kml
 
   rules:
     ui_update:
       conditions:
-        min_alt: 3000
-        max_alt: 20000
         regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
       actions:
         callback: aircraft_update_cb
 
     ui_remove:
       conditions:
-        min_alt: -1 # XXX
+        regions: []
+      actions:
+        callback: aircraft_remove_cb
+
+    ui_expire:
+      conditions: []
       actions:
         expire_callback: aircraft_remove_cb
 

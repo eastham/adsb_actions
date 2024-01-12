@@ -61,3 +61,7 @@ def test_regions():
     adsb_actions.loop(JSON_STRING_GROUND)
     assert distant_cb_ctr == 1
     assert ground_cb_ctr == 1
+
+    adsb_actions.loop(JSON_STRING_DISTANT)
+    assert distant_cb_ctr == 2
+    assert ground_cb_ctr == 1

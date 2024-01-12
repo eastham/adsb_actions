@@ -26,3 +26,8 @@
         webhook: True        # slack etc
         print: True          # print info about this aircraft to console
         note: "text flag"    # apply this note to aircraft, for use in later callbacks
+
+
+# Other notes:
+# - want an unconditional rule?  use "conditions: []"
+# - "None" is not valid in yaml, use ~ instead
