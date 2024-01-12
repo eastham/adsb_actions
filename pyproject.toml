@@ -28,6 +28,8 @@ dependencies = [
     "lxml >= 4.9.4",
     "fastkml >= 0.12",
     "requests >= 2.31.0"
+#    "Kivy == 2.3.0"
+#    "kivymd == 1.1.1"
 ]
 
 [project.urls]

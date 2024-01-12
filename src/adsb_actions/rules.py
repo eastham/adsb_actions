@@ -32,61 +32,67 @@ class Rules:
                          rule_name: str) -> bool:
         """Determine if the given rule conditions match for the given flight."""
 
-        Stats.condition_match_calls += 1
         logger.debug("condition_match checking rules: %s", str(conditions))
+        Stats.condition_match_calls += 1
+        match_count = 0
 
-        for condition_name, condition_value in conditions.items():
-            # TODO pull this body out into another fn
-            # TODO? preprocess rules to reduce string comparisons?
-            #   The current approach Doesn't seem to be very expensive,
-            #   per cProfile and test_load.py...
-            #   Would "'aircraft_list' in conditions" be faster, as a dict lookup?
+        result = True
+        if 'aircraft_list' in conditions:
+            match_count += 1
+            condition_value = conditions['aircraft_list']
+            #print(f"checking aircraft list {condition_value}")
+            ac_list = self.yaml_data['aircraft_lists'][condition_value]
+            #print(f"ac list is {ac_list}")
+            result = flight.flight_id in ac_list
 
-            result = False
-            if 'aircraft_list' == condition_name:
-                #print(f"checking aircraft list {condition_value}")
-                ac_list = self.yaml_data['aircraft_lists'][condition_value]
-                #print(f"ac list is {ac_list}")
-                result = flight.flight_id in ac_list
+        if 'min_alt' in conditions:
+            match_count += 1
+            condition_value = conditions['min_alt']
+            result &= flight.lastloc.alt_baro >= int(condition_value)
 
-            elif 'min_alt' == condition_name:
-                result = flight.lastloc.alt_baro >= int(condition_value)
+        if 'max_alt' in conditions:
+            match_count += 1
+            condition_value = conditions['max_alt']
+            result &= flight.lastloc.alt_baro <= int(condition_value)
 
-            elif 'max_alt' == condition_name:
-                result = flight.lastloc.alt_baro <= int(condition_value)
+        if 'transition_regions' in conditions:
+            match_count += 1
+            condition_value = conditions['transition_regions']
+            result &= (flight.was_in_bboxes([condition_value[0]]) and
+                        flight.is_in_bboxes([condition_value[1]]))
 
-            elif 'transition_regions' == condition_name:
-                result = (flight.was_in_bboxes([condition_value[0]]) and
-                          flight.is_in_bboxes([condition_value[1]]))
+        if 'regions' in conditions:
+            match_count += 1
+            condition_value = conditions['regions']
+            result &= flight.is_in_bboxes(condition_value)
 
-            elif 'regions' == condition_name:
-                result = flight.is_in_bboxes(condition_value)
+        if 'latlongring' in conditions:
+            match_count += 1
+            condition_value = conditions['latlongring']
+            dist = flight.lastloc.distfrom(condition_value[1], condition_value[2])
+            result &= condition_value[0] >= dist
 
-            elif 'latlongring' == condition_name:
-                dist = flight.lastloc.distfrom(condition_value[1], condition_value[2])
-                result = condition_value[0] >= dist
+        if 'proximity' in conditions:
+            match_count += 1
+            #  TODO see handle_proximity_conditions below
+            logger.critical("proximity condition not implemented")
 
-            elif 'proximity' == condition_name:
-                #  TODO see handle_proximity_conditions below
-                logger.critical("proximity condition not implemented")
+        if 'cooldown' in conditions:
+            match_count += 1
+            condition_value = conditions['cooldown']
+            result &= not self.rule_exection_log.within_cooldown(rule_name,
+                                                                flight.flight_id,
+                                                                condition_value*60,
+                                                                flight.lastloc.now)
 
-            elif 'cooldown' == condition_name:
-                result = not self.rule_exection_log.within_cooldown(rule_name,
-                                                                    flight.flight_id,
-                                                                    condition_value*60,
-                                                                    flight.lastloc.now)
+        if match_count < len(conditions):
+            logger.critical("unmatched condition: %s", conditions.keys())
 
-            else:
-                logger.warning("unmatched condition: %s", condition_name)
-
-            if result:
-                Stats.condition_matches_true += 1
-                logger.info("one condition matched: %s for %s", condition_name, flight.flight_id)
-            else:
-                return False
-
-        logger.info("All conditions matched")
-        return True
+        if result:
+            Stats.condition_matches_true += match_count
+            return True
+        else:
+            return False
 
     def do_actions(self, flight: Flight, action_items: dict, rule_name: str) -> None:
         """Execute the actions for the given flight."""

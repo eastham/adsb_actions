@@ -29,8 +29,8 @@ YAML_STRING = """
         note: "saw_takeoff"
 """
 
-JSON_STRING1 = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}'
-JSON_STRING2 = '{"now": 1661692178, "alt_baro": 4500, "gscp": 128, "lat": 40.748708, "lon": -119.2489313, "track": 203.4, "hex": "a061d9", "flight": "N12345"}'
+JSON_STRING_GROUND = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}'
+JSON_STRING_AIR = '{"now": 1661692178, "alt_baro": 4500, "gscp": 128, "lat": 40.748708, "lon": -119.2489313, "track": 203.4, "hex": "a061d9", "flight": "N12345"}'
 
 def test_main():
     logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
@@ -43,14 +43,14 @@ def test_main():
     yaml_data = yaml.safe_load(YAML_STRING)
     adsb_actions = AdsbActions(yaml_data)
     testinfra.setup_test_callback(adsb_actions)
-    adsb_actions.loop(JSON_STRING1)
+    adsb_actions.loop(JSON_STRING_GROUND)
 
     assert Stats.json_readlines == 1
     assert Stats.condition_match_calls == 2
     assert Stats.condition_matches_true == 1
     assert Stats.callbacks_fired == 0
 
-    adsb_actions.loop(JSON_STRING2)
+    adsb_actions.loop(JSON_STRING_AIR)
 
     assert Stats.json_readlines == 2
     assert Stats.condition_match_calls == 4  # 2 per position

@@ -119,5 +119,5 @@ class Flight:
         else:
             logger.debug("no change to bboxes")
 
-    def get_bbox_at_level(self, level, bboxes_list):
+    def get_bbox_at_level(self, level):
         return self.inside_bboxes[level]
