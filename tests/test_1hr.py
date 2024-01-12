@@ -38,6 +38,7 @@ def landing_cb(flight):
     global landing_ctr, local_landing_ctr
     landing_ctr += 1
     if 'note' in flight.flags:
+        logging.info("Local-flight landing detected!")
         local_landing_ctr += 1
 
 def takeoff_cb(flight):
