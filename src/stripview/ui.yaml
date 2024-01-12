@@ -1,0 +1,27 @@
+  config:
+    kmls:  # KML files that specify regions.  aircraft may be in 0-1 regions per file at any time
+      - ../../tests/test2.kml 
+
+  rules:
+    ui_update:
+      conditions:
+        min_alt: 3000
+        max_alt: 20000
+        regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
+      actions:
+        callback: aircraft_update_cb
+
+    ui_remove:
+      conditions:
+        min_alt: -1 # XXX
+      actions:
+        expire_callback: aircraft_remove_cb
+
+#    prox:
+#      conditions:
+#        min_alt: 3000
+#        max_alt: 20000
+#        regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
+#        proximity: (400, .3)  # alt sep in MSL, lateral sep in nm
+#      actions:
+#        callback: abe_update_cb

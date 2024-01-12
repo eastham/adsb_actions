@@ -26,8 +26,8 @@ logger.level = logging.DEBUG
 
 class AdsbActions:
     """Main API for the library."""
-    def __init__(self, yaml,ip=None, port=None, exit_cb=None):
-        self.flights = Flights(self._load_bboxes(yaml))
+    def __init__(self, yaml, ip=None, port=None, exit_cb=None, bboxes=None):
+        self.flights = Flights(bboxes or self._load_bboxes(yaml))
         self.rules = Rules(yaml)
         self.exit_cb = exit_cb
         if ip and port:

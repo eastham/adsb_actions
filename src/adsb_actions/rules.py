@@ -131,11 +131,11 @@ class Rules:
         TODO: tests needed."""
 
         for rule_name, rule_value in self.yaml_data['rules'].items():
-            if (rule_name == "expire_callback" and
-                self.conditions_match(flight, rule_name, rule_value)):
+            actions = rule_value['actions']
+            if ( "expire_callback" in actions and
+                self.conditions_match(flight, rule_value['conditions'], rule_name)):
                 logger.debug("doing expire callback for %s", flight.flight_id)
-                func = globals().get(rule_value)
-                func(flight)  # TODO probably should be self.callbacks[action_value](flight)
+                self.callbacks[actions['expire_callback']](flight)
 
     def handle_proximity_conditions(self, flight_list: list) -> None:
         """
