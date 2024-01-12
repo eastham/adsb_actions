@@ -41,8 +41,9 @@ Each YAML rule contains **conditions** and **actions**.
 ```
 
 <h3>Installation from github:</h3>
-    1. (download code)
-    2. source bin/activate
-    3. pip3 install .
-    4. (install geos native library: https://libgeos.org/usage/install/)
-    5. pytest -s tests/test_1hr.py
+
+1. (download or clone code from github)
+1. source bin/activate
+1. pip3 install .
+1. (install geos native library: https://libgeos.org/usage/install/)
+1. pytest -s tests/test_1hr.py
