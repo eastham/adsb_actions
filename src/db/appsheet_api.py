@@ -45,7 +45,7 @@ class Appsheet:
             self.config.private_vars["appsheet"]["accesskey"]}
 
     def aircraft_lookup(self, tail, wholeobj=False):
-        """return appsheet internal ID for this tail number """
+        """return database internal ID for this tail number """
         logger.debug("aircraft_lookup %s" % (tail))
 
         body = copy.deepcopy(BODY)
@@ -70,7 +70,7 @@ class Appsheet:
         return None
 
     def add_aircraft(self, regno, test=False, description=""):
-        """Create aircraft in appsheet"""
+        """Create aircraft in database"""
         logger.debug("add_aircraft %s" % (regno))
 
         body = copy.deepcopy(BODY)
@@ -148,7 +148,7 @@ class Appsheet:
                     self.add_aircraft(line)
 
     def add_op(self, aircraft, time, scenic, optype, flight_name):
-        logger.debug("add_op %s %s" % (aircraft, optype))
+        logger.debug("add_op %s %s %s" % (aircraft, optype, scenic))
         optime = datetime.datetime.fromtimestamp(time)
 
         body = copy.deepcopy(BODY)

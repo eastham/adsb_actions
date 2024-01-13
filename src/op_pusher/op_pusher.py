@@ -1,34 +1,36 @@
+"""Detect takeoffs/landings and push them to the database."""
 
-import signal
-import threading
 import argparse
-import yaml
-
 import sys
-sys.path.insert(0, '../adsb_actions')
-from bboxes import Bboxes
-from flight import Flight
-from adsbactions import AdsbActions
+import yaml
 import logging
 
-landing_ctr = 0
-local_landing_ctr =0
-takeoff_ctr = 0
+sys.path.insert(0, '../db')
+import appsheet_api
+from adsbactions import AdsbActions
+import db_ops
+from stats import Stats
+
+as_instance = appsheet_api.Appsheet()
 
 def landing_cb(flight):
-    global landing_ctr, local_landing_ctr
-    landing_ctr += 1
     logging.info("Landing detected! %s", flight.flight_id)
-
     if 'note' in flight.flags:
         logging.info("Local-flight landing detected! %s", flight.flight_id)
-        local_landing_ctr += 1
+        Stats.local_landings += 1
+    Stats.landings += 1
+
+    db_ops.add_op(flight, "Landing", 'note' in flight.flags)
 
 def takeoff_cb(flight):
-    global takeoff_ctr
-    takeoff_ctr += 1
     logging.info("Takeoff detected! %s", flight.flight_id)
+    Stats.takeoffs += 1
 
+    db_ops.add_op(flight, "Takeoff", False)
+
+def abe_cb(flight):
+    """ABE = Ads-B Event -- for example two airplanes getting in close proximity"""
+    logging.info("ABE detected! %s", flight.flight_id)
 
 def run(focus_q, admin_q):
     parser = argparse.ArgumentParser(description="match flights against kml bounding boxes")
@@ -41,7 +43,7 @@ def run(focus_q, admin_q):
     parser.add_argument('--rules', help="YAML file that describes UI behavior", required=True)
     parser.add_argument('--testdata', help="JSON flight tracks, for testing")
 
-    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
+    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
     logging.info('System started.')
 
     args = parser.parse_args()
@@ -61,6 +63,7 @@ def run(focus_q, admin_q):
 
     adsb_actions.register_callback("landing", landing_cb)
     adsb_actions.register_callback("takeoff", takeoff_cb)
+    adsb_actions.register_callback("abe_update_cb", abe_cb)
 
     adsb_actions.loop(data=json_data, delay=delay)
 

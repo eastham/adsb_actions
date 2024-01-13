@@ -8,9 +8,11 @@ USE_APPSHEET = True
 if USE_APPSHEET:
     sys.path.insert(0, '../db')
     import appsheet_api
-    appsheet = appsheet_api.Appsheet()
+    APPSHEET = appsheet_api.Appsheet()
+    LOOKUP_DB_CALL = APPSHEET.aircraft_lookup
 else:
-    appsheet = None
+    # add other dbs here
+    pass
 
 class DbInterface:
     def __init__(self, flight, ui_update_cb):
@@ -30,7 +32,7 @@ class DbInterface:
         try:
             # TODO could optimize: only if unregistered?
             # TODO move appsheet code to another module for cleanliness
-            db_obj = appsheet.aircraft_lookup(self.flight.tail, wholeobj=True)
+            db_obj = LOOKUP_DB_CALL(self.flight.tail, wholeobj=True)
 
             ui_warning = False
 
@@ -68,7 +70,7 @@ class DbInterface:
 
         except Exception as e:
             logging.debug("do_server_update parse failed: " + str(e))
-            raise
+            pass
 
         logging.debug("call_database complete for %s: note %s warn %d", 
                       self.flight.tail, note_string, ui_warning)

@@ -27,6 +27,8 @@ class Flight:
     threadlock: Lock = field(default_factory=Lock)
     flags: dict = field(default_factory=lambda: ({}))
     prev_inside_bboxes = None
+    prev_inside_bboxes_valid = False
+
     ALT_TRACK_ENTRIES = 5
 
     def __post_init__(self):
@@ -68,6 +70,9 @@ class Flight:
         return False
 
     def was_in_bboxes(self, bb_list: list):
+        if not self.prev_inside_bboxes_valid:
+            return False
+
         for prev_bb in self.prev_inside_bboxes:
             if prev_bb in bb_list:
                 return True
@@ -103,6 +108,8 @@ class Flight:
         Based on the most recent position data, update what bounding boxes we're in.
         Note: all array indices [i] in this function are selecting between kml files.
         """
+        if self.prev_inside_bboxes is not None:
+            self.prev_inside_bboxes_valid = True
         self.prev_inside_bboxes = self.inside_bboxes.copy()
         old_str = self.to_str()
         logger.debug("update_inside_bboxes: pre-bbox update: %s %s", self.flight_id, str(self.inside_bboxes))

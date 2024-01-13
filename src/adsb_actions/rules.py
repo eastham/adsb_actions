@@ -61,7 +61,7 @@ class Rules:
             match_count += 1
             condition_value = conditions['transition_regions']
             result &= (flight.was_in_bboxes([condition_value[0]]) and
-                        flight.is_in_bboxes([condition_value[1]]))
+                       flight.is_in_bboxes([condition_value[1]]))
 
         if 'regions' in conditions:
             match_count += 1

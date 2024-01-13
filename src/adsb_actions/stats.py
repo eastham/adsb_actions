@@ -11,6 +11,9 @@ class Stats:
     webhooks_fired: int = 0
 
     flight_annotates: int = 0
+    takeoffs: int = 0
+    landings: int = 0
+    local_landings: int = 0
     
     @classmethod
     def reset(cl):

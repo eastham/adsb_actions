@@ -5,12 +5,15 @@
     "version": "0.2.0",
     "configurations": [
 
+        {"name":"Python: Current File","type":"python","request":"launch","program":"${file}","console":"integratedTerminal","justMyCode":true},
+        
+
         {
             "name": "Stripview UI",
             "type": "python",
             "request": "launch",
             "program": "controller.py",
-            "cwd": "src/stripview",
+            "cwd": "${workspaceFolder}/src/stripview",
             "args": " -- --ipaddr 123 --port 123 --testdata ../../tests/1hr.json --rules ui.yaml ../../tests/test2.kml",
             "console": "integratedTerminal",
             "justMyCode": true
@@ -19,8 +22,8 @@
             "name": "op_pusher",
             "type": "python",
             "request": "launch",
+            "cwd": "${workspaceFolder}/src/op_pusher",
             "program": "op_pusher.py",
-            "cwd": "src/op_pusher",
             "args": "--ipaddr 123 --port 123 --testdata ../../tests/1hr.json --rules rules.yaml ../../tests/test1.kml",
             "console": "integratedTerminal",
             "justMyCode": true
