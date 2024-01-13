@@ -10,7 +10,6 @@ from location import Location
 from stats import Stats
 
 logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
 
 @dataclass
 class Flight:

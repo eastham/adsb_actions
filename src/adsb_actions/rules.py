@@ -5,7 +5,6 @@ from flight import Flight
 from stats import Stats
 
 logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
 
 class Rules:
     """This class represents the rules and associated state from one yaml rule file."""

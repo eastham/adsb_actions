@@ -22,7 +22,6 @@ from stats import Stats
 from location import Location
 
 logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
 
 class AdsbActions:
     """Main API for the library."""

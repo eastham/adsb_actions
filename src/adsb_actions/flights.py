@@ -8,7 +8,6 @@ from location import Location
 from rules import Rules
 
 logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
 
 class Flights:
     """all Flight objects in the system, indexed by flight_id"""
