@@ -14,6 +14,16 @@
             "args": " -- --ipaddr 123 --port 123 --testdata ../../tests/1hr.json --rules ui.yaml ../../tests/test2.kml",
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+        {
+            "name": "op_pusher",
+            "type": "python",
+            "request": "launch",
+            "program": "op_pusher.py",
+            "cwd": "src/op_pusher",
+            "args": "--ipaddr 123 --port 123 --testdata ../../tests/1hr.json --rules rules.yaml ../../tests/test1.kml",
+            "console": "integratedTerminal",
+            "justMyCode": true
         }
     ]
 }

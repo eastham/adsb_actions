@@ -1,0 +1,17 @@
+  config:
+    kmls:
+      - ../../tests/test1.kml 
+
+  rules:
+    takeoff:
+      conditions:
+        transition_regions: [ "Generic Gate Ground", "Generic Gate Air" ]
+      actions:
+        callback: "takeoff"
+        note: "saw_takeoff"
+
+    landing:
+      conditions:
+        transition_regions: [ "Generic Gate Air", "Generic Gate Ground" ]
+      actions:
+        callback: "landing"
