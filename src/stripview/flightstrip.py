@@ -1,6 +1,15 @@
 """Representation of a single flight strip in the UI, handling
 colors, text, and mouse actions."""
 
+import threading
+import time
+import webbrowser
+import sys
+import logging
+
+from dbinterface import DbInterface
+sys.path.insert(0, '../adsb_actions')
+
 import kivy
 kivy.require('1.0.5')
 from kivy.config import Config
@@ -11,30 +20,11 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.button import Button
 
-import threading
-import time
-import webbrowser
-
-import sys
-sys.path.insert(0, '../adsb_actions')
-
-import logging
-
 logger = logging.getLogger(__name__)
 logger.level = logging.DEBUG
 
+USE_DATABASE = True
 SERVER_REFRESH_RATE = 60 # seconds
-
-USE_APPSHEET = False
-if USE_APPSHEET:
-    import appsheet_api # TODO
-    appsheet = appsheet_api.Appsheet()
-else:
-    appsheet = None
-
-class Controller(FloatLayout):
-    def do_add_click(self, n):
-        logging.debug("add click %d" % n)
 
 class FlightStrip:
     def __init__(self, index, app, flight, id, tail, focus_q, admin_q):
@@ -42,13 +32,20 @@ class FlightStrip:
         self.app = app
         self.flight = flight
         self.id = id # redundant to flight?
-        self.tail = tail# redundant to flight?
+        self.tail = tail # redundant to flight?
         self.focus_q = focus_q
         self.admin_q = admin_q
         self.bg_color_warn = False
         self.update_thread = None
         self.stop_event = threading.Event()
 
+        self.tail = flight.tail if flight.tail else flight.flight_id.strip()
+        if USE_DATABASE:
+            self.db_interface = DbInterface(self.flight, self.handle_db_update)
+            self.update_thread = threading.Thread(target=self.server_refresh_thread)
+            self.update_thread.start()
+
+        # UI setup below here
         self.top_string = None
         self.note_string = ""
         self.alt_string = ""
@@ -75,8 +72,6 @@ class FlightStrip:
         self.right_layout.add_widget(self.focus_button)
         self.right_layout.add_widget(self.web_button)
         self.main_button.background_normal = ''  # colors don't render right without this
-        self.update_thread = threading.Thread(target=self.server_refresh_thread, args=[flight])
-        self.update_thread.start()
 
     def __del__(self):
         logging.debug(f"Deleting strip {self.id}")
@@ -103,7 +98,7 @@ class FlightStrip:
 
     def admin_click(self, arg):
         if 'Row ID' not in self.flight.flags:
-            self.do_server_update(self.flight) # hopefully sets row id
+            self.db_interface.call_database()  # hopefully sets row id
 
         if 'Row ID' in self.flight.flags:
             if self.admin_q: self.admin_q.put(self.flight.flags['Row ID'])
@@ -116,69 +111,25 @@ class FlightStrip:
         logging.debug("focus " + self.id)
         if self.focus_q: self.focus_q.put(self.id)
 
+    def server_refresh_thread(self):
+        """This thread periodically refreshes aircraft details with the server."""
+
+        while not self.stop_event.is_set():
+            self.db_interface.call_database()
+            time.sleep(SERVER_REFRESH_RATE)
+
+        logging.debug("Exited refresh thread")
+
     def stop_server_loop(self):
         logging.debug("stop_server_loop, thread " + str(self.update_thread))
         self.stop_event.set()
 
-    def do_server_update(self, flight):
-        """Attempt to download details about this flight from the external server."""
-        tail = flight.tail if flight.tail else flight.flight_id.strip()
-
-        logging.debug("do_server_update: " + tail)
-        try:
-            # TODO could optimize: only if unregistered?
-            # TODO move appsheet code to another module for cleanliness
-            obj = appsheet.aircraft_lookup(tail, wholeobj=True)
-            self.note_string = ""
-
-            if obj:
-                flight.flags['Row ID'] = obj['Row ID']
-                self.note_string += "Arrivals=%s " % obj['Arrivals']
-
-            self.bg_color_warn = False
-
-            if not obj:
-                self.note_string += "*Unreg "
-                self.bg_color_warn = True
-            else:
-                if test_dict(obj, 'Ban'):
-                    self.note_string += "*BANNED "
-                    self.bg_color_warn = True
-
-                if not test_dict(obj, 'IsBxA'):
-                    arr = obj['Arrivals']
-                    try:
-                        if int(arr) > 2:
-                            self.note_string += "* >2 arrivals "
-                    except Exception:
-                        pass
-
-                if not test_dict(obj, 'Registered online'):
-                    if not test_dict(obj, 'IsBxA'):
-                        self.note_string += "*Manual reg "
-                        self.bg_color_warn = True
-
-                if test_dict(obj, 'Related Notes'):
-                    self.note_string += "*Notes "
-
-            if test_dict(obj, 'IsBxA'):
-                self.note_string += "BxA"
-
-        except Exception:
-            logging.debug("do_server_update parse failed")
-            pass
-
+    def handle_db_update(self, note, color):
+        """callback from database module to update strip."""
+        self.note_string = note
+        self.bg_color_warn = color
         self.set_normal()
-        self.update(flight, None, None)
-        logging.debug("done running update_from_server " + tail)
-
-    def server_refresh_thread(self, flight):
-        """This thread periodically refreshes aircraft details with the server."""
-        if not appsheet: return
-        while not self.stop_event.is_set():
-            self.do_server_update(flight)
-            time.sleep(SERVER_REFRESH_RATE)
-        logging.debug("Exited refresh thread")
+        self.update(self.flight, None, None)
 
     def update(self, flight, location, bboxes_list):
         """ Re-build strip strings, changes show up on-screen automatically """
@@ -234,9 +185,6 @@ class FlightStrip:
         self.set_normal()
         self.update_strip_text()
 
-def test_dict(d, key):
-    """Returns true if key is in d and that they key's entry is not empty/N"""
-    if not d: return False
-    if not key in d: return False
-    if d[key] == '' or d[key] == 'N': return False
-    return True
+class Controller(FloatLayout):
+    def do_add_click(self, n):
+        logging.debug("add click %d" % n)

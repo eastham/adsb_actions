@@ -1,8 +1,8 @@
 """Read/store local configuration yamls."""
 import yaml
 
-CONFIGPATH = "config.yaml"
-PRIVPATH = "private.yaml"
+CONFIGPATH = "../../config.yaml"
+PRIVPATH = "../../private.yaml"
 
 class Config:
     def __init__(self):

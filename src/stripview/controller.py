@@ -6,7 +6,13 @@ import argparse
 import sys
 import logging
 import yaml
+
 sys.path.insert(0, '../adsb_actions')
+from bboxes import Bboxes
+from flight import Flight
+from adsbactions import AdsbActions
+from flightstrip import FlightStrip
+from flightstrip import Controller
 
 import kivy
 kivy.require('1.0.5')
@@ -16,12 +22,6 @@ Config.set('graphics', 'height', '800')
 from kivy.clock import Clock, mainthread
 from kivymd.app import MDApp
 from dialog import Dialog
-
-from bboxes import Bboxes
-from flight import Flight
-from adsbactions import AdsbActions
-from flightstrip import FlightStrip
-from flightstrip import Controller
 
 logger = logging.getLogger(__name__)
 logger.level = logging.DEBUG
@@ -181,7 +181,7 @@ def run(focus_q, admin_q):
 
         with open(args.testdata, 'rt', encoding="utf-8") as myfile:
             json_data = myfile.read()
-        delay = .0    # set to .02 or so to see things happen more clearly
+        delay = .1    # set to .02 or so to see things happen more clearly
 
     adsb_actions.register_callback("aircraft_update_cb", aircraft_update_cb)
     adsb_actions.register_callback("aircraft_remove_cb", aircraft_remove_cb)
