@@ -47,17 +47,16 @@ def abe_update_cb(flight):
     global abe_update_ctr
     abe_update_ctr += 1
 
-JSON_STRING_3000 = '{"now": 1661692178, "alt_baro": 3000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
-JSON_STRING_4000 = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
-JSON_STRING_5000 = '{"now": 1661692178, "alt_baro": 5000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
-JSON_STRING_11000 = '{"now": 1661692178, "alt_baro": 11000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
-JSON_STRING_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
-JSON_STRING_GROUND = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
-JSON_STRING_GROUND_PLANE2 = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N5555"}\n'
-JSON_STRING_ZEROALT = '{"now": 1661692178, "alt_baro": 0, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
-JSON_STRING_PLANE3_DELAY = '{"now": 1661692185, "alt_baro": 0, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N123456"}\n'
+JSON_STRING_PLANE1_ZEROALT = '{"now": 1661692178, "alt_baro": 0, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "NPLANE1"}\n'
+JSON_STRING_PLANE1_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "NPLANE1"}\n'
+JSON_STRING_PLANE1_NEAR = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "NPLANE1"}\n'
+JSON_STRING_PLANE2_NEAR = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "NPLANE2"}\n'
+JSON_STRING_PLANE3_DELAY = '{"now": 1661692185, "alt_baro": 0, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "NPLANE3"}\n'
+JSON_STRING_PLANE4_TOOFAR = '{"now": 1661692178, "alt_baro": 4300, "gscp": 128, "lat": 40.76864689708049, "lon": -119.20915027077689, "track": 203.4, "hex": "a061d9", "flight": "NPLANE4"}\n'
+JSON_STRING_PLANE5_WITHINPROX = '{"now": 1661692178, "alt_baro": 4300, "gscp": 128, "lat": 40.76759089177806, "lon":  -119.20984743421535, "track": 203.4, "hex": "a061d9", "flight": "NPLANE5"}\n'
+JSON_STRING_PLANE6_TOOFAR_ALT = '{"now": 1661692178, "alt_baro": 4800, "gscp": 128, "lat": 40.76759089177806, "lon":  -119.20984743421535, "track": 203.4, "hex": "a061d9", "flight": "NPLANE6"}\n'
 
-def test_ui():
+def test_prox():
     Stats.reset()
 
     logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
@@ -65,31 +64,39 @@ def test_ui():
 
     yaml_data = yaml.safe_load(YAML_STRING)
 
-    with open("tests/20minutes.json", 'rt', encoding="utf-8") as myfile:
-        json_data = myfile.read()
-
     adsb_actions = AdsbActions(yaml_data)
     adsb_actions.register_callback("aircraft_update_cb", aircraft_update_cb)
     adsb_actions.register_callback("aircraft_remove_cb", aircraft_remove_cb)
     adsb_actions.register_callback("abe_update_cb", abe_update_cb)
 
-    adsb_actions.loop(JSON_STRING_GROUND)
+    basic_prox_test(adsb_actions)
+
+    big_prox_test(adsb_actions)
+
+def basic_prox_test(adsb_actions):
+    adsb_actions.loop(JSON_STRING_PLANE1_NEAR)
     assert aircraft_update_ctr == 1
-    adsb_actions.loop(JSON_STRING_ZEROALT)
+    # causes plane to go out of view
+    adsb_actions.loop(JSON_STRING_PLANE1_ZEROALT)
     assert aircraft_remove_ctr == 1
 
-    # set up two aircraft in the same position for prox testing
-    adsb_actions.loop(JSON_STRING_GROUND)
-    adsb_actions.loop(JSON_STRING_GROUND_PLANE2)
+    # set up aircraft in the same vicinity for prox testing
+    adsb_actions.loop(JSON_STRING_PLANE1_NEAR)
+    adsb_actions.loop(JSON_STRING_PLANE4_TOOFAR)
+    adsb_actions.loop(JSON_STRING_PLANE6_TOOFAR_ALT)
+    adsb_actions.loop(JSON_STRING_PLANE5_WITHINPROX)
     adsb_actions.loop(JSON_STRING_PLANE3_DELAY) # allow time to pass for checkpoint
-    assert abe_update_ctr == 2  # one for each plane near the other
+    assert abe_update_ctr == 3  # PLANE1 is near PLANE5, PLANE5 is near PLANE4
 
-    if True:
-        adsb_actions.loop(json_data)
+def big_prox_test(adsb_actions):
+    with open("tests/20minutes.json", 'rt', encoding="utf-8") as myfile:
+        json_data = myfile.read()
 
-        # check the number of aircraft left visible after expiry etc
-        rendered_flight_ctr = 0
-        for f in adsb_actions.flights.flight_dict.values():
-            rendered_flight_ctr += 1 if f.in_any_bbox() else 0
-        assert rendered_flight_ctr == 4
-        assert abe_update_ctr == 27
+    adsb_actions.loop(json_data)
+
+    # check the number of aircraft left visible after expiry etc
+    rendered_flight_ctr = 0
+    for f in adsb_actions.flights.flight_dict.values():
+        rendered_flight_ctr += 1 if f.in_any_bbox() else 0
+    assert rendered_flight_ctr == 4
+    assert abe_update_ctr == 28

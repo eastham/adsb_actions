@@ -173,7 +173,9 @@ class Rules:
                 altsep, latsep = prox_rule_element
                 del rule_conditions['proximity']
                 if self.conditions_match(flight1, rule_conditions, rule_name):
-                    # satisfied prox rule found, now see if there are nearby aircraft
+                    # Satisfied prox rule found, now see if there are nearby aircraft.
+                    # NOTE that this only returns one flight, so we won't always have
+                    # two actions fired for every two aircraft.
                     flight2 = flights.find_nearby_flight(flight1, altsep, latsep,
                                                          last_read_time)
                     if flight2:
