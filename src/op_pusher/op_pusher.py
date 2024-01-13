@@ -18,13 +18,17 @@ takeoff_ctr = 0
 def landing_cb(flight):
     global landing_ctr, local_landing_ctr
     landing_ctr += 1
+    logging.info("Landing detected! %s", flight.flight_id)
+
     if 'note' in flight.flags:
-        logging.info("MATCH Local-flight landing detected!")
+        logging.info("Local-flight landing detected! %s", flight.flight_id)
         local_landing_ctr += 1
 
 def takeoff_cb(flight):
     global takeoff_ctr
     takeoff_ctr += 1
+    logging.info("Takeoff detected! %s", flight.flight_id)
+
 
 def run(focus_q, admin_q):
     parser = argparse.ArgumentParser(description="match flights against kml bounding boxes")
@@ -37,7 +41,7 @@ def run(focus_q, admin_q):
     parser.add_argument('--rules', help="YAML file that describes UI behavior", required=True)
     parser.add_argument('--testdata', help="JSON flight tracks, for testing")
 
-    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
+    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
     logging.info('System started.')
 
     args = parser.parse_args()
