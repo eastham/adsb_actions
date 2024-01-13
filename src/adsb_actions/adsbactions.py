@@ -33,7 +33,7 @@ class AdsbActions:
         if ip and port:
             self.listen = self._setup_network(ip, port)
 
-    def loop(self, data=None):
+    def loop(self, data=None, delay=0):
         """Run forever, processing ADS-B json data on the previously-opened socket.
         Will terminate when socket is closed.
 
@@ -68,8 +68,11 @@ class AdsbActions:
                 logging.debug("%ds Checkpoint: %d %s", CHECKPOINT_INTERVAL, last_read_time, datestr)
 
                 self.flights.expire_old(self.rules, last_read_time)
-                self.flights.check_distance(self.rules, last_read_time)
+                self.rules.handle_proximity_conditions(self.flights, last_read_time)
                 self.flights.last_checkpoint = last_read_time
+
+            if delay:
+                time.sleep(delay)
 
     def register_callback(self, name: str, fn):
         """Associate the given name string with a function to call."""

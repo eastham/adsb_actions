@@ -77,8 +77,7 @@ class Rules:
 
         if 'proximity' in conditions:
             match_count += 1
-            #  TODO see handle_proximity_conditions below
-            logger.critical("proximity condition not implemented")
+            result = False  # handled asynchronously in handle_proximity_conditions
 
         if 'cooldown' in conditions:
             match_count += 1
@@ -140,47 +139,47 @@ class Rules:
                 logger.debug("doing expire callback for %s", flight.flight_id)
                 self.callbacks[actions['expire_callback']](flight)
 
-    def handle_proximity_conditions(self, flight_list: list) -> None:
+    def get_rules_with_condition(self, condition_type) -> list:
+        """Returns a list of name/rule tuples that have a condition of the given type."""
+
+        rules_list = self.yaml_data['rules']
+        ret = []
+        for rule_name, rule_body in rules_list.items():
+            if condition_type in rule_body['conditions']:
+                ret.append((rule_name, rule_body))
+        return ret
+
+    def handle_proximity_conditions(self, flights, last_read_time) -> None:
         """
         This is run periodically to check distance between all aircraft --
         to check for any matching proximity conditions.  
         It's O(n^2), can be expensive, but altitude and bbox limits help...
+        """
 
-        TODO rewrite.  remove hardcoded rules using something like this: 
-        - for f in flight_list
-         - for each rule with a proximity condition
-           - see if the constratints otherwise match f (using self.conditions_match())
-             - then iterate through all other flights looking for flights within the alt/distance constraint
-                - run the actions for any matches (using self.do_actions())
-        - optimization?: other flight also has to meet the other rule constraints?
+        prox_rules_list = self.get_rules_with_condition("proximity")
+        if prox_rules_list == []:
+            return
 
-        MIN_ALT_SEPARATION = 400 # 8000 # 400
-        MIN_ALT = 4000 # 100 # 4000
-        MIN_DISTANCE = .3 # 1   # .3 # nautical miles 
-        MIN_FRESH = 10 # seconds, otherwise not evaluated
+        for flight1 in flights.flight_dict.values():
+            if not flight1.in_any_bbox():
+                continue
 
-        for i, flight1 in enumerate(flight_list):
-            if not flight1.in_any_bbox(): continue
-            if last_read_time - flight1.lastloc.now > MIN_FRESH: continue
-            for j, flight2 in enumerate(flight_list[i+1:]):
-                if not flight2.in_any_bbox(): continue
-                if last_read_time - flight2.lastloc.now > MIN_FRESH: continue
-
-                loc1 = flight1.lastloc
-                loc2 = flight2.lastloc
-                if (loc1.alt_baro < MIN_ALT or loc2.alt_baro < MIN_ALT): continue
-                if abs(loc1.alt_baro - loc2.alt_baro) < MIN_ALT_SEPARATION:
-                    dist = loc1 - loc2
-
-                    if dist < MIN_DISTANCE:
-                        print("%s-%s inside minimum distance %.1f nm" %
-                            (flight1.flight_id, flight2.flight_id, dist))
-                        print("LAT, %f, %f, %d" % (flight1.lastloc.lat, flight1.lastloc.lon, last_read_time))
-                        #if annotate_cb:
-                        #    annotate_cb(flight1, flight2, dist, abs(loc1.alt_baro - loc2.alt_baro))
-                        #    annotate_cb(flight2, flight1, dist, abs(loc1.alt_baro - loc2.alt_baro))
-"""
-
+            for rule_name, rule_body in prox_rules_list:
+                # For each proximity rule, we want to check the rule conditions
+                # here, removing the prox part of the rule which will never match 
+                # during the usual synchronous update.
+                rule_conditions = rule_body['conditions'].copy() # XXX inefficient?
+                prox_rule_element = rule_conditions['proximity']
+                altsep, latsep = prox_rule_element
+                del rule_conditions['proximity']
+                if self.conditions_match(flight1, rule_conditions, rule_name):
+                    # satisfied prox rule found, now see if there are nearby aircraft
+                    flight2 = flights.find_nearby_flight(flight1, altsep, latsep,
+                                                         last_read_time)
+                    if flight2:
+                        logger.debug("Proximity match: %s %s", flight1.flight_id, 
+                                     flight2.flight_id)
+                        self.do_actions(flight1, rule_body['actions'], rule_name)
 
 class RuleExecutionLog:
     """Keep track of last execution times for each rule/aircraft.

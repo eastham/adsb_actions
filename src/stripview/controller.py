@@ -80,15 +80,31 @@ class FlightStrip:
         self.right_layout.add_widget(self.admin_button)
         self.right_layout.add_widget(self.focus_button)
         self.right_layout.add_widget(self.web_button)
-
+        self.main_button.background_normal = ''  # colors don't render right without this
         self.update_thread = threading.Thread(target=self.server_refresh_thread, args=[flight])
         self.update_thread.start()
 
     def __del__(self):
         logging.debug(f"Deleting strip {self.id}")
 
+    def render(self):
+        """put the strip on the screen according to its current state"""
+        self.get_scrollview().add_widget(self.layout, index=100)
+
+    def unrender(self):
+        """Hide the strip"""
+        self.get_scrollview().remove_widget(self.layout)
+
+    def update_strip_text(self):
+        self.main_button.text = (self.top_string + " " + self.loc_string +
+            "\n" + self.alt_string + "\n" + self.note_string)
+
+    def get_scrollview(self):
+        """Return the name for the scrollview in which this strip should live"""
+        scrollbox_name = "scroll_%d" % self.scrollview_index
+        return self.app.controller.ids[scrollbox_name].children[0]
+
     def main_button_click(self, arg):
-        #controllerapp.dialog.show_custom_dialog(self.app, self.id)
         pass
 
     def admin_click(self, arg):
@@ -106,24 +122,18 @@ class FlightStrip:
         logging.debug("focus " + self.id)
         if self.focus_q: self.focus_q.put(self.id)
 
-    def update_strip_text(self):
-        self.main_button.text = (self.top_string + " " + self.loc_string +
-            "\n" + self.alt_string + "\n" + self.note_string)
-
-    def get_scrollview(self):
-        scrollbox_name = "scroll_%d" % self.scrollview_index
-        return self.app.controller.ids[scrollbox_name].children[0]
-
     def stop_server_loop(self):
         logging.debug("stop_server_loop, thread " + str(self.update_thread))
         self.stop_event.set()
 
     def do_server_update(self, flight):
+        """Attempt to download details about this flight from the external server."""
         tail = flight.tail if flight.tail else flight.flight_id.strip()
 
         logging.debug("do_server_update: " + tail)
         try:
             # TODO could optimize: only if unregistered?
+            # TODO move appsheet code to another module for cleanliness
             obj = appsheet.aircraft_lookup(tail, wholeobj=True)
             self.note_string = ""
 
@@ -201,40 +211,34 @@ class FlightStrip:
         self.update_strip_text()
 
     def set_highlight(self):
-        self.main_button.background_color = (1,.7,.7)
+        """Use a stronger color to draw attention to newly added strips"""
+        self.main_button.background_color = (.5,.5,.5)
         Clock.schedule_once(lambda dt: self.set_normal(), 5)
 
     def set_normal(self):
+        """Set strip to its steady-state color based on its state"""
         if self.bg_color_warn:
-            self.main_button.background_normal = ''
             self.main_button.background_color = (1,0,0)
         else:
-            self.main_button.background_normal = ''
             self.main_button.background_color = (0,.7,0)
 
-    def unrender(self):
-        self.get_scrollview().remove_widget(self.layout)
-
-    def render(self):
-        self.get_scrollview().add_widget(self.layout, index=100)
-
     def annotate(self, note):
+        """Highlight this strip and add a warning note to it."""
         logging.debug("**** annotate " + note)
 
         self.note_string = note
         if self.deanno_event:
             Clock.unschedule(self.deanno_event)
         self.deanno_event = Clock.schedule_once(lambda dt: self.deannotate(), 10)
-        self.main_button.background_color = (1,1,0)
+        self.main_button.background_color = (.7,.7,0)
 
         self.update_strip_text()
 
     def deannotate(self):
+        """Remove warning condition."""
         self.note_string = ""
         self.set_normal()
         self.update_strip_text()
-
-
 
 class ControllerApp(MDApp):
     def __init__(self, bboxes, focus_q, admin_q):
@@ -313,16 +317,15 @@ class ControllerApp(MDApp):
         del self.strips[flight.flight_id]
 
     @mainthread
-    def annotate_strip(self, flight1, flight2, lat_dist, alt_dist):
-        logging.debug("annotate strip "+flight1.flight_id)
-        id1 = flight1.flight_id
-        id2 = flight2.flight_id
+    def annotate_strip(self, flight):
+        logging.debug("annotate strip %s", flight.flight_id)
+        id = flight.flight_id
         try:
-            strip = self.strips[id1]
+            strip = self.strips[id]
         except KeyError:
             logging.debug("annotate not found")
             return
-        note = "TRAFFIC ALERT: "+id2
+        note = "TRAFFIC ALERT"
         strip.annotate(note)
         strip.update_strip_text()
 
@@ -350,7 +353,10 @@ def aircraft_update_cb(f: Flight):
 def aircraft_remove_cb(f: Flight):
     logger.debug("remove_cb: %s", f.flight_id)
     controllerapp.remove_strip(f)
-    pass
+
+def aircraft_annotate_cb(f: Flight):
+    logger.debug("annotate_cb: %s", f.flight_id)
+    controllerapp.annotate_strip(f)
 
 def run(focus_q, admin_q):
     parser = argparse.ArgumentParser(description="match flights against kml bounding boxes")
@@ -380,6 +386,7 @@ def run(focus_q, admin_q):
     controllerapp = ControllerApp(bboxes_list[0], focus_q, admin_q)
 
     json_data = None
+    delay = 0 # used for testing to slow down replay rate
     if not args.testdata:
         adsb_actions = AdsbActions(yaml_data, ip=args.ipaddr, port=args.port)
     else:
@@ -387,12 +394,14 @@ def run(focus_q, admin_q):
 
         with open(args.testdata, 'rt', encoding="utf-8") as myfile:
             json_data = myfile.read()
+        delay = .04
 
     adsb_actions.register_callback("aircraft_update_cb", aircraft_update_cb)
     adsb_actions.register_callback("aircraft_remove_cb", aircraft_remove_cb)
+    adsb_actions.register_callback("abe_update_cb", aircraft_annotate_cb)
 
     read_thread = threading.Thread(target=adsb_actions.loop,
-        args=[json_data])
+        kwargs={'data': json_data, 'delay': delay})
     Clock.schedule_once(lambda x: read_thread.start(), 2)
 
     controllerapp.run()

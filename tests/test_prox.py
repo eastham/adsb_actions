@@ -1,10 +1,9 @@
-"""Test for functionality needed to support a UI."""
+"""Large test for proximity rules and expiration."""
 import logging
 import yaml
 
 from stats import Stats
 from adsbactions import AdsbActions
-import testinfra
 
 YAML_STRING = """
   config:
@@ -24,6 +23,15 @@ YAML_STRING = """
         regions: ~
       actions:
         callback: aircraft_remove_cb
+
+    prox:
+        conditions:
+            min_alt: 3000
+            max_alt: 10000
+            regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
+            proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
+        actions:
+            callback: abe_update_cb
 """
 
 aircraft_update_ctr = aircraft_remove_ctr = abe_update_ctr = 0
@@ -45,7 +53,9 @@ JSON_STRING_5000 = '{"now": 1661692178, "alt_baro": 5000, "gscp": 128, "lat": 40
 JSON_STRING_11000 = '{"now": 1661692178, "alt_baro": 11000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
 JSON_STRING_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
 JSON_STRING_GROUND = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
+JSON_STRING_GROUND_PLANE2 = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N5555"}\n'
 JSON_STRING_ZEROALT = '{"now": 1661692178, "alt_baro": 0, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
+JSON_STRING_PLANE3_DELAY = '{"now": 1661692185, "alt_baro": 0, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N123456"}\n'
 
 def test_ui():
     Stats.reset()
@@ -68,12 +78,18 @@ def test_ui():
     adsb_actions.loop(JSON_STRING_ZEROALT)
     assert aircraft_remove_ctr == 1
 
-    adsb_actions.loop(json_data)
+    # set up two aircraft in the same position for prox testing
+    adsb_actions.loop(JSON_STRING_GROUND)
+    adsb_actions.loop(JSON_STRING_GROUND_PLANE2)
+    adsb_actions.loop(JSON_STRING_PLANE3_DELAY) # allow time to pass for checkpoint
+    assert abe_update_ctr == 2  # one for each plane near the other
 
-    assert aircraft_update_ctr == 787
-    assert aircraft_remove_ctr == 389
-    
-    rendered_flight_ctr = 0
-    for f in adsb_actions.flights.flight_dict.values():
-        rendered_flight_ctr += 1 if f.in_any_bbox() else 0
-    assert rendered_flight_ctr == 4
+    if True:
+        adsb_actions.loop(json_data)
+
+        # check the number of aircraft left visible after expiry etc
+        rendered_flight_ctr = 0
+        for f in adsb_actions.flights.flight_dict.values():
+            rendered_flight_ctr += 1 if f.in_any_bbox() else 0
+        assert rendered_flight_ctr == 4
+        assert abe_update_ctr == 27

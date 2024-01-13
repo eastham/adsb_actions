@@ -67,7 +67,28 @@ class Flights:
 
         self.lock.release()
 
-    def check_distance(self, rules, last_read_time):
-        flight_list = list(self.flight_dict.values())
+    def find_nearby_flight(self, flight2, altsep, latsep, last_read_time):
+        """returns a nearby flight within the given separation, None if not found"""
+        MIN_FRESH = 10 # seconds.  Older data not evaluated
 
-        rules.handle_proximity_conditions(flight_list)
+        for flight1 in self.flight_dict.values():
+            if flight1 is flight2:
+                continue
+            if not flight2.in_any_bbox():
+                continue # XXX optimization, maybe not desired behavior
+            if last_read_time - flight2.lastloc.now > MIN_FRESH:
+                continue
+
+            loc1 = flight1.lastloc
+            loc2 = flight2.lastloc
+            #if (loc1.alt_baro < MIN_ALT or loc2.alt_baro < MIN_ALT): continue
+            if abs(loc1.alt_baro - loc2.alt_baro) < altsep:
+                dist = loc1 - loc2
+
+                if dist < latsep:
+                    print("%s-%s inside minimum distance %.1f nm" %
+                        (flight1.flight_id, flight2.flight_id, dist))
+                    print("LAT, %f, %f, %d" % (flight1.lastloc.lat, 
+                                               flight1.lastloc.lon, last_read_time))
+                    return flight1
+        return None

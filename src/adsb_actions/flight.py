@@ -7,6 +7,8 @@ import logging
 from dataclasses import dataclass, field
 from threading import Lock
 from location import Location
+from stats import Stats
+
 logger = logging.getLogger(__name__)
 logger.level = logging.DEBUG
 

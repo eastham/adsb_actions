@@ -1,5 +1,4 @@
 """Systemwide statistics tracking, mostly for test and debug purposes."""
-from flight import Flight
 
 class Stats:
     json_readlines: int = 0
@@ -7,9 +6,11 @@ class Stats:
     condition_matches_true: int = 0
 
     callbacks_fired: int = 0
-    last_callback_flight: Flight = None
+    last_callback_flight = None
 
     webhooks_fired: int = 0
+
+    flight_annotates: int = 0
     
     @classmethod
     def reset(cl):

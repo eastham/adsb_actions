@@ -29,13 +29,22 @@ YAML_STRING = """
         regions: ["Generic Gate Ground", "non-existent"]  # This is an OR expression
       actions:
         callback: test_callback
+
+    prox:
+      conditions:
+        min_alt: 3000
+        max_alt: 10000
+        regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
+        proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
+      actions:
+        callback: abe_update_cb
 """
 
 JSON_STRING_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
 JSON_STRING_GROUND = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
 
 def test_load():
-    ITERATIONS = 1000
+    ITERATIONS = 10000
 
     Stats.reset()
 
