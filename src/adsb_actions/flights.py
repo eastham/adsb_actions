@@ -80,6 +80,7 @@ class Flights:
 
             loc1 = flight1.lastloc
             loc2 = flight2.lastloc
+            #logger.debug(f"dist {flight1.flight_id} and {flight2.flight_id}: {loc1-loc2}")
             #if (loc1.alt_baro < MIN_ALT or loc2.alt_baro < MIN_ALT): continue
             if abs(loc1.alt_baro - loc2.alt_baro) < altsep:
                 dist = loc1 - loc2

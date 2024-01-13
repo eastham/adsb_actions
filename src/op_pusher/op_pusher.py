@@ -2,16 +2,15 @@
 
 import argparse
 import sys
-import yaml
 import logging
+import yaml
+import abe
+import signal
 
 sys.path.insert(0, '../db')
-import appsheet_api
 from adsbactions import AdsbActions
 import db_ops
 from stats import Stats
-
-as_instance = appsheet_api.Appsheet()
 
 def landing_cb(flight):
     logging.info("Landing detected! %s", flight.flight_id)
@@ -28,9 +27,10 @@ def takeoff_cb(flight):
 
     db_ops.add_op(flight, "Takeoff", False)
 
-def abe_cb(flight):
+def abe_cb(flight1, flight2):
     """ABE = Ads-B Event -- for example two airplanes getting in close proximity"""
-    logging.info("ABE detected! %s", flight.flight_id)
+    logging.info("ABE detected! %s", flight1.flight_id)
+    abe.process_abe_launch(flight1, flight2)
 
 def run(focus_q, admin_q):
     parser = argparse.ArgumentParser(description="match flights against kml bounding boxes")
@@ -66,6 +66,8 @@ def run(focus_q, admin_q):
     adsb_actions.register_callback("abe_update_cb", abe_cb)
 
     adsb_actions.loop(data=json_data, delay=delay)
+    abe.ABE.quit = True # signal worker thread to exit
+    logging.info("Please wait for final ABE GC...")
 
 if __name__ == '__main__':
     run(None, None)

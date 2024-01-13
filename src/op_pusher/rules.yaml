@@ -28,8 +28,7 @@
       conditions:
         min_alt: 4000
         max_alt: 10000
-        regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
+        regions: [ "Generic Gate Air", "Vicinity" ]
         proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
       actions:
-        print: True
         callback: abe_update_cb

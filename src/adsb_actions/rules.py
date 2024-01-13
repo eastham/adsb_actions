@@ -27,7 +27,7 @@ class Rules:
                 logger.info("MATCH for rule '%s' for flight %s", rule_name, flight.flight_id)
                 self.do_actions(flight, rule_value['actions'], rule_name)
             else:
-                logger.debug("NO MATCH for rule '%s' for flight %s", rule_name, flight.flight_id)
+                logger.debug("NOMATCH for rule '%s' for flight %s", rule_name, flight.flight_id)
 
 
     def conditions_match(self, flight: Flight, conditions: dict,
@@ -95,7 +95,8 @@ class Rules:
         else:
             return False
 
-    def do_actions(self, flight: Flight, action_items: dict, rule_name: str) -> None:
+    def do_actions(self, flight: Flight, action_items: dict, rule_name: str,
+                   cb_arg=None) -> None:
         """Execute the actions for the given flight."""
 
         for action_name, action_value in action_items.items():
@@ -112,7 +113,11 @@ class Rules:
                 Stats.callbacks_fired += 1
                 Stats.last_callback_flight = flight
                 logger.debug("Doing callback for %s", flight.flight_id)
-                self.callbacks[action_value](flight)
+                if cb_arg:
+                    self.callbacks[action_value](flight, cb_arg)
+                else:
+                    self.callbacks[action_value](flight)
+
 
             elif 'note' == action_name:
                 logger.debug("Setting note for %s to %s", flight.flight_id, action_value)
@@ -180,7 +185,7 @@ class Rules:
                     if flight2:
                         logger.debug("Proximity match: %s %s", flight1.flight_id, 
                                      flight2.flight_id)
-                        self.do_actions(flight1, rule_body['actions'], rule_name)
+                        self.do_actions(flight1, rule_body['actions'], rule_name, flight2)
 
 class RuleExecutionLog:
     """Keep track of last execution times for each rule/aircraft.

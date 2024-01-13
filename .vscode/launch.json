@@ -24,7 +24,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}/src/op_pusher",
             "program": "op_pusher.py",
-            "args": "--ipaddr 123 --port 123 --testdata ../../tests/1hr.json --rules rules.yaml ../../tests/test1.kml",
+            "args": "--ipaddr 123 --port 123 --testdata ../../tests/20minutes.json --rules rules.yaml ../../tests/test1.kml",
             "console": "integratedTerminal",
             "justMyCode": true
         }

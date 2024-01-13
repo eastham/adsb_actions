@@ -29,5 +29,7 @@
 
 
 # Other notes:
+# - Callbacks take one arg (the flight) unless matching on a proximity condition -- in that
+#   case they take 2 (the two nearby flights)
 # - want an unconditional rule?  use "conditions: []"
 # - "None" is not valid in yaml, use ~ instead

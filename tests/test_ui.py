@@ -44,7 +44,7 @@ def aircraft_remove_cb(flight):
     global aircraft_remove_ctr
     aircraft_remove_ctr += 1
 
-def abe_update_cb(flight):
+def abe_update_cb(flight1, flight2):
     global abe_update_ctr
     abe_update_ctr += 1
 
