@@ -39,11 +39,6 @@ class FlightStrip:
         self.update_thread = None
         self.stop_event = threading.Event()
 
-        if USE_DATABASE:
-            self.db_interface = DbInterface(self.flight, self.handle_db_update)
-            self.update_thread = threading.Thread(target=self.server_refresh_thread)
-            self.update_thread.start()
-
         # UI setup below here
         self.top_string = None
         self.note_string = ""
@@ -71,6 +66,11 @@ class FlightStrip:
         self.right_layout.add_widget(self.focus_button)
         self.right_layout.add_widget(self.web_button)
         self.main_button.background_normal = ''  # colors don't render right without this
+
+        if USE_DATABASE:
+            self.db_interface = DbInterface(self.flight, self.handle_db_update)
+            self.update_thread = threading.Thread(target=self.server_refresh_thread)
+            self.update_thread.start()
 
     def __del__(self):
         logging.debug(f"Deleting strip {self.id}")
