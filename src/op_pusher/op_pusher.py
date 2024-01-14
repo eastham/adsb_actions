@@ -11,6 +11,8 @@ from adsbactions import AdsbActions
 import db_ops
 from stats import Stats
 
+logger = logging.getLogger(__name__)
+
 def landing_cb(flight):
     logging.info("Landing detected! %s", flight.flight_id)
     if 'note' in flight.flags:
@@ -32,7 +34,7 @@ def abe_cb(flight1, flight2):
     abe.process_abe_launch(flight1, flight2)
 
 def run(focus_q, admin_q):
-    logging.basicConfig(format='%(levelname)-8s %(module)s:%(lineno)d: %(message)s', level=logging.DEBUG)
+    logging.basicConfig(format='%(levelname)-8s %(module)s:%(lineno)d: %(message)s', level=logging.INFO)
     logging.info('System started.')
 
     parser = argparse.ArgumentParser(description="match flights against kml bounding boxes")
@@ -47,6 +49,12 @@ def run(focus_q, admin_q):
     parser.add_argument('--delay', help="Seconds of delay between reads, for testing", default=0)
 
     args = parser.parse_args()
+
+    if not bool(args.testdata) != bool(args.ipaddr and args.port):
+        logger.fatal("Either ipaddr/port OR testdata must be provided.")
+        sys.exit(1)
+    if args.ipaddr and args.delay:
+        logger.warning("--delay has no effect when ipaddr is given")
 
     with open(args.rules, 'r', encoding='utf-8') as file:
         yaml_data = yaml.safe_load(file)

@@ -17,7 +17,6 @@ sys.path.insert(0, '../adsb_actions')
 from config import Config
 
 logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
 
 BODY = {
 "Properties": {

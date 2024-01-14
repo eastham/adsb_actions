@@ -2,7 +2,6 @@
 Location last seen, tail number, etc."""
 
 import statistics
-import datetime
 import logging
 from dataclasses import dataclass, field
 from threading import Lock
@@ -17,19 +16,27 @@ class Flight:
     """Summary of a series of locations, plus other annotations"""
     # CAUTION when changing -- dataclass -- constructor positional args implied
 
-    flight_id: str  # n number if not flight id
-    tail: str       # can be none
-    firstloc: Location
-    lastloc: Location
+    # Always set, this is the "radio name" -- company name or tail number otherwise
+    # It's entered by the pilot or maintenance, so may have typos...
+    # Watch out for differences like flight_id = "1234", tail = "N1234"
+    flight_id: str
+
+    # This is the tail number, derived from the ICAO hex code.
+    # Includes country prefix "N", "C", etc.
+    tail: str
+    firstloc: Location  # first location we ever saw this aircraft
+    lastloc: Location   # most recent location.  note includes timestamp
     all_bboxes_list: list = field(default_factory=list) # all bboxes in the system
 
     # variables typically not used in contstructor args below this point:
     external_id: str = None # optional, database id for this flight
     alt_list: list = field(default_factory=list)  # last n altitudes we've seen
-    inside_bboxes: list = field(default_factory=list)  # list of bbox names we're in, ordered by kml file
-    inside_bboxes_indices: list = field(default_factory=list) # list of bbox indices, ordered by kml file
     threadlock: Lock = field(default_factory=Lock)
     flags: dict = field(default_factory=lambda: ({}))  # persistent notes taken about this flight
+
+    # bbox lists are indexed by kml file, in the order they were specified.
+    inside_bboxes: list = field(default_factory=list)  # list of bbox names we're in
+    inside_bboxes_indices: list = field(default_factory=list) # list of bbox indices
     prev_inside_bboxes = None           # what bboxes were we inside at last position update
     prev_inside_bboxes_valid = False    # true after 2nd update
 
@@ -118,9 +125,6 @@ class Flight:
         Based on the most recent position data, update what bounding boxes we're in.
         Note: all array indices [i] in this function are selecting between kml files.
         """
-        logger.debug("update_inside_bboxes: pre-bbox update: %s %s",
-                     self.flight_id, str(self.inside_bboxes))
-
         if self.prev_inside_bboxes is not None:
             self.prev_inside_bboxes_valid = True
 
@@ -138,13 +142,9 @@ class Flight:
                 self.inside_bboxes_indices[i] = match_index
 
         # logging only below this point
-        if logger.level <= logging.DEBUG and self.inside_bboxes != self.prev_inside_bboxes:
-            flighttime = datetime.datetime.fromtimestamp(self.lastloc.now)
-            tail = self.tail if self.tail else "(unk)"
-            logger.debug(tail + " Flight bbox change at " + flighttime.strftime("%H:%M") +
-                ": " + self.to_str())
-        else:
-            logger.debug("no change to bboxes")
+        if self.inside_bboxes != self.prev_inside_bboxes:
+            logger.info("BBOX CHANGE %s: was %s now %s", self.flight_id,
+                         self.prev_inside_bboxes, self.inside_bboxes) 
 
     def get_bbox_at_level(self, level) -> str:
         """return the bbox name that we're in for the given kml file."""

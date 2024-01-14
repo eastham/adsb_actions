@@ -15,7 +15,7 @@ class Location:
     now: Optional[float] = 0
     flight: Optional[str] = "N/A" # the flight id
     hex: Optional[str] = None   # ICAO code
-    tail: Optional[str] = None # N-number from ICAO code
+    tail: Optional[str] = None  # tail number from ICAO code
     gs: Optional[float] = 0
     track: float = 0.
 

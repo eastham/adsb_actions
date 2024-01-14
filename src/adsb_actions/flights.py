@@ -34,8 +34,6 @@ class Flights:
         """
 
         flight_id = loc.flight
-        # XXX do we always convert from icao?  have seen some aircraft with
-        # empty string for flight_id
         if not flight_id or flight_id == "N/A": return loc.now
 
         self.lock.acquire() # lock needed since testing can race
@@ -89,7 +87,7 @@ class Flights:
                 dist = loc1 - loc2
 
                 if dist < latsep:
-                    print("%s-%s inside minimum distance %.1f nm" %
-                        (flight1.flight_id, flight2.flight_id, dist))
+                    logger.debug("%s-%s inside minimum distance %.1f nm",
+                        flight1.flight_id, flight2.flight_id, dist)
                     return flight1
         return None

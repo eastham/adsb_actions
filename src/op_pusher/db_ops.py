@@ -3,7 +3,6 @@ import logging
 import sys
 import datetime
 logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
 
 TZ_CONVERT = 0 # -7  # UTC conversion
 
@@ -24,7 +23,8 @@ else:
 def add_op(flight, op, flags):
     flight_name = flight.flight_id.strip()
     flighttime = datetime.datetime.fromtimestamp(flight.lastloc.now + 7*60*60)
-    print(f"Got op {op} {flight_name} at {flighttime.strftime('%H:%M %d')}")
+    logger.debug("add_op %s %s at %s", op, flight_name, 
+                 flighttime.strftime('%H:%M %d'))
 
     aircraft_internal_id = lookup_or_create_aircraft(flight)
 

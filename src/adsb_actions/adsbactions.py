@@ -126,7 +126,7 @@ class AdsbActions:
             line = self.listen.readline()
             if not line:
                 return -1
-            logger.debug("Read line: %s ", line.strip())
+            logger.info("Read line: %s ", line.strip())
             jsondict = json.loads(line)
         except json.JSONDecodeError:
             if not self.listen.sock:

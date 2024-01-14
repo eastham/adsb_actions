@@ -12,7 +12,6 @@ import db_ops
 from stats import Stats
 
 logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
 
 class ABE:
     """ 
@@ -62,7 +61,7 @@ def process_abe(flight1, flight2):
         ABE.gc_thread = threading.Thread(target=gc_loop)
         ABE.gc_thread.start()
 
-    logger.debug("ABE_CB " + flight1.flight_id + " " + flight2.flight_id)
+    logger.debug("process_abe " + flight1.flight_id + " " + flight2.flight_id)
 
     lateral_distance = flight1.lastloc - flight2.lastloc
     alt_distance = abs(flight1.lastloc.alt_baro - flight2.lastloc.alt_baro)
@@ -101,7 +100,9 @@ def abe_gc():
 
         # NOTE: time.time() doesn't behave correctly here in replay mode.
         if time.time() - abe.last_time > ABE.ABE_GC_TIME:
-            logger.debug(f"ABE final update {abe.flight1.flight_id} {abe.flight2.flight_id}")
+            logger.info("ABE final update: %s %s - minimum separation: %f nm %d MSL",
+                        abe.flight1.flight_id, abe.flight2.flight_id,
+                        abe.min_latdist, abe.min_altdist)
             Stats.abe_finalize += 1
 
             db_ops.update_abe(abe.flight1, abe.flight2,
@@ -109,5 +110,5 @@ def abe_gc():
             try:
                 del ABE.current_abes[abe.key()]
             except Exception:
-                print("Error: didn't find key in current_abes")
+                logger.error("Didn't find key in current_abes")
                 pass
