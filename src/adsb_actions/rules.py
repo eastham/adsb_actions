@@ -83,9 +83,9 @@ class Rules:
             match_count += 1
             condition_value = conditions['cooldown']
             result &= not self.rule_exection_log.within_cooldown(rule_name,
-                                                                flight.flight_id,
-                                                                condition_value*60,
-                                                                flight.lastloc.now)
+                                                                 flight.flight_id,
+                                                                 condition_value * 60,
+                                                                 flight.lastloc.now)
 
         if match_count < len(conditions):
             logger.critical("unmatched condition: %s", conditions.keys())
@@ -99,6 +99,7 @@ class Rules:
 
         for action_name, action_value in action_items.items():
             self.rule_exection_log.log(rule_name, flight.flight_id, flight.lastloc.now)
+
             if 'webhook' == action_name:
                 Stats.webhooks_fired += 1
                 # TODO not implemented - see page.py for more info
@@ -208,17 +209,19 @@ class RuleExecutionLog:
         # (rulename, flight_id) -> last-execution-timestamp
         self.log_entries: dict[tuple[str, str], int] = {}
 
-    def generate_entry_key(self, rulename: str, flight_id: str) -> tuple:
-        return rulename, flight_id
-
     def log(self, rulename: str, flight_id: str, now: int) -> None:
-        entry_key = self.generate_entry_key(rulename, flight_id)
+        """Log a firing of the given rulename + flight"""
+        entry_key = self._generate_entry_key(rulename, flight_id)
         self.log_entries[entry_key] = now
 
-    def within_cooldown(self, rulename: str, flight_id: str, cooldown: int, 
+    def within_cooldown(self, rulename: str, flight_id: str, cooldown_secs: int, 
                         now: int) -> bool:
-        entry_key = self.generate_entry_key(rulename, flight_id)
+        """Has the given rulename fired for the given flight within cooldown_secs?"""
+        entry_key = self._generate_entry_key(rulename, flight_id)
         if entry_key in self.log_entries:
-            if now - self.log_entries[entry_key] < cooldown:
+            if now - self.log_entries[entry_key] < cooldown_secs:
                 return True
         return False
+
+    def _generate_entry_key(self, rulename: str, flight_id: str) -> tuple:
+        return rulename, flight_id

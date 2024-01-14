@@ -73,10 +73,12 @@ class ControllerApp(MDApp):
             # updating exsiting strip
             strip = self.strips[id]
             strip.update(flight, flight.lastloc, flight.inside_bboxes)
-            if new_scrollview_index is None and strip.scrollview_index >= 0:  # no longer in a tracked region
-                # don't move strip but continue to update indefinitely
+            if new_scrollview_index is None and strip.scrollview_index >= 0:
+                # No longer in a tracked region.
+                # Don't move strip but continue to update indefinitely
                 # XXX probably not right behavior for everyone
                 return
+            
             if strip.scrollview_index != new_scrollview_index:
                 # move strip to new scrollview
                 logger.debug(f"UI index CHANGE to {new_scrollview_index}")
@@ -159,7 +161,7 @@ def run(focus_q, admin_q):
     parser.add_argument('--delay', help="Seconds of delay between reads, for testing", default=0)
     args = parser.parse_args()
 
-    if not (bool(args.testdata) != bool(args.ipaddr and args.port)):
+    if not bool(args.testdata) != bool(args.ipaddr and args.port):
         logger.fatal("Either ipaddr/port OR testdata must be provided.")
         sys.exit(1)
     if args.ipaddr and args.delay:
@@ -168,10 +170,10 @@ def run(focus_q, admin_q):
     with open(args.rules, 'r', encoding='utf-8') as file:
         yaml_data = yaml.safe_load(file)
 
-    # Load state needed to define the 4 UI boxes.
+    # Load state needed to define and label the 4 strip racks.
     bboxes_list = [] 
     for f in args.file:
-        bboxes_list.append(Bboxes(f)) # describes the 4 UI boxes
+        bboxes_list.append(Bboxes(f)) # describes the 4 racks
 
     # UI setup
     signal.signal(signal.SIGINT, sigint_handler)

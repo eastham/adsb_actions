@@ -1,5 +1,5 @@
-"""Flight module represents the internal state for a flight.
-Location, last seen time, and internal state."""
+"""Flight module represents the internal state for one flight.
+Location last seen, tail number, etc."""
 
 import statistics
 import datetime
@@ -29,7 +29,7 @@ class Flight:
     inside_bboxes: list = field(default_factory=list)  # list of bbox names we're in, ordered by kml file
     inside_bboxes_indices: list = field(default_factory=list) # list of bbox indices, ordered by kml file
     threadlock: Lock = field(default_factory=Lock)
-    flags: dict = field(default_factory=lambda: ({}))
+    flags: dict = field(default_factory=lambda: ({}))  # persistent notes taken about this flight
     prev_inside_bboxes = None           # what bboxes were we inside at last position update
     prev_inside_bboxes_valid = False    # true after 2nd update
 
@@ -118,7 +118,7 @@ class Flight:
         Based on the most recent position data, update what bounding boxes we're in.
         Note: all array indices [i] in this function are selecting between kml files.
         """
-        logger.debug("update_inside_bboxes: pre-bbox update: %s %s", 
+        logger.debug("update_inside_bboxes: pre-bbox update: %s %s",
                      self.flight_id, str(self.inside_bboxes))
 
         if self.prev_inside_bboxes is not None:
