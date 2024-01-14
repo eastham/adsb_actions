@@ -14,11 +14,11 @@ class Stats:
     takeoffs: int = 0
     landings: int = 0
     local_landings: int = 0
-    
+
     abe_add: int = 0
     abe_update: int = 0
     abe_finalize: int = 0
-    
+
     @classmethod
     def reset(cl):
         cl.json_readlines = cl.condition_match_calls = 0

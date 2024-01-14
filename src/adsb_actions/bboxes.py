@@ -1,10 +1,14 @@
-"""Representation for bounding boxes found in kml files."""
+"""Representation for bounding boxes found in kml files.
+Note there is a Bbox object and a Bboxes object, the latter containing Bbox objects."""
+
 import logging
 import re
+import warnings
+
 from dataclasses import dataclass
 from shapely.geometry import Point, Polygon
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning) # for fastkml
+# for fastkml, which breaks in newer versions
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 from fastkml import kml
 
 logger = logging.getLogger(__name__)
@@ -29,7 +33,7 @@ class Bboxes:
         RHV apporach: 500-1500 280-320
     """
     def __init__(self, fn):
-        self.boxes = []    # list of Bbox objects
+        self.boxes: list[Bbox] = []
 
         with open(fn, 'rt', encoding="utf-8") as myfile:
             doc = myfile.read()
@@ -39,6 +43,14 @@ class Bboxes:
         self.parse_placemarks(features)
 
     def parse_placemarks(self, document):
+        """Parses a placemark of the form:
+        Name: minalt-maxalt minheading-maxheading
+
+        for example, this defines a region called "Rwy 25 Approach" from 4500-5500 feet,
+        with heading 230 to 270:
+
+        Rwy 25 Approach: 4500-5500 230-270
+        """
         for feature in document:
             if isinstance(feature, kml.Placemark):
                 re_result = re.search(r"^([^:]+):\s*(\d+)-(\d+)\s+(\d+)-(\d+)",
@@ -54,18 +66,31 @@ class Bboxes:
 
                 logger.debug("Adding bounding box %s: %d-%d %d-%d deg",
                     name, minalt, maxalt, starthdg, endhdg)
+
                 newbox = Bbox(polygon=Polygon(feature.geometry),
                     minalt=minalt, maxalt=maxalt, starthdg=starthdg,
                     endhdg=endhdg, name=name)
                 self.boxes.append(newbox)
 
         for feature in document:
+            # Note: recursive calls, some systems put features in invisible folders...
             if isinstance(feature, kml.Folder):
                 self.parse_placemarks(list(feature.features()))
             if isinstance(feature, kml.Document):
                 self.parse_placemarks(list(feature.features()))
 
-    def hdg_contains(self, hdg, start, end):
+    def contains(self, lat, long, hdg, alt):
+        """returns index of first matching bounding box, or -1 if not found"""
+        for i, box in enumerate(self.boxes):
+            if (box.polygon.contains(Point(long,lat)) and
+                Bboxes.hdg_contains(hdg, box.starthdg, box.endhdg)):
+                if (alt >= box.minalt and alt <= box.maxalt):
+                    return i
+        return -1
+
+    @classmethod
+    def hdg_contains(cls, hdg, start, end):
+        """Is the given heading within the start and end?"""
         try:
             if end < start:
                 return hdg >= start or hdg <= end
@@ -73,12 +98,3 @@ class Bboxes:
         except (TypeError, ArithmeticError):
             logger.critical("Math error in heading check")
             return False
-
-    def contains(self, lat, long, hdg, alt):
-        """returns index of first matching bounding box, or -1 if not found"""
-        for i, box in enumerate(self.boxes):
-            if (box.polygon.contains(Point(long,lat)) and
-                self.hdg_contains(hdg, box.starthdg, box.endhdg)):
-                if (alt >= box.minalt and alt <= box.maxalt):
-                    return i
-        return -1

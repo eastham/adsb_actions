@@ -29,6 +29,7 @@ class Location:
 
     @classmethod
     def from_dict(cl, d: dict):
+        """Return a location created from a dict bearing the same-named fields."""
         nd = {}
         for f in fields(Location):
             if f.name in d:
@@ -49,9 +50,11 @@ class Location:
         return self.distfrom(other.lat, other.lon)
 
     def __lt__(self, other):
+        """Altitude comparison only"""
         return self.alt_baro < other.alt_baro
 
     def __gt__(self, other):
+        """Altitude comparison only"""
         return self.alt_baro > other.alt_baro
 
     def distfrom(self, lat, lon):

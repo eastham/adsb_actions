@@ -8,37 +8,38 @@ from dataclasses import dataclass, field
 from threading import Lock
 from location import Location
 from stats import Stats
+import bboxes
 
 logger = logging.getLogger(__name__)
 
 @dataclass
 class Flight:
     """Summary of a series of locations, plus other annotations"""
-    # Caution when changing: ctor positional args implied
+    # CAUTION when changing -- dataclass -- constructor positional args implied
+
     flight_id: str  # n number if not flight id
     tail: str       # can be none
     firstloc: Location
     lastloc: Location
-    all_bboxes_list: list = field(default_factory=list) # all bboxes in the system, unclear if this is needed
+    all_bboxes_list: list = field(default_factory=list) # all bboxes in the system
+
+    # variables typically not used in contstructor args below this point:
     external_id: str = None # optional, database id for this flight
     alt_list: list = field(default_factory=list)  # last n altitudes we've seen
-    inside_bboxes: list = field(default_factory=list)  # list of bbox names, ordered by kml file
-    inside_bboxes_indices: list = field(default_factory=list)  # list of bbox indices, ordered by kml file
+    inside_bboxes: list = field(default_factory=list)  # list of bbox names we're in, ordered by kml file
+    inside_bboxes_indices: list = field(default_factory=list) # list of bbox indices, ordered by kml file
     threadlock: Lock = field(default_factory=Lock)
     flags: dict = field(default_factory=lambda: ({}))
-    prev_inside_bboxes = None
-    prev_inside_bboxes_valid = False
-
-    ALT_TRACK_ENTRIES = 5
+    prev_inside_bboxes = None           # what bboxes were we inside at last position update
+    prev_inside_bboxes_valid = False    # true after 2nd update
 
     def __post_init__(self):
         self.inside_bboxes = [None] * len(self.all_bboxes_list)
         self.inside_bboxes_indices = [None] * len(self.all_bboxes_list)
 
     def to_str(self):
-        """
-        String representation includes lat/long and bbox list
-        """
+        """String representation includes lat/long and bbox list."""
+
         string = self.lastloc.to_str()
         bbox_name_list = []
 
@@ -60,7 +61,7 @@ class Flight:
         """Is the flight in all the same bboxes as specified in list?
         Also returns true in the all-are-None condition."""
 
-        # flight may be in [None,None], we still want to match that case
+        # flight may be in [None, None], we still want to match that case
         if bb_list is None or bb_list == []:
             bb_list = [None]
 
@@ -70,6 +71,7 @@ class Flight:
         return False
 
     def was_in_bboxes(self, bb_list: list):
+        """Was the flight in all the same bboxes as specified, at last update?"""
         if not self.prev_inside_bboxes_valid:
             return False
 
@@ -78,11 +80,15 @@ class Flight:
                 return True
         return False
 
-    def track_alt(self, alt):
+    def track_alt(self, alt: int) -> int:
+        """Update a running tally and average of recent altitudes.
+        Returns 1 if increasing, -1 if decreasing, 0 if no change. """
+        ALT_TRACK_ENTRIES = 5
+
         avg = alt
         if len(self.alt_list):
             avg = statistics.fmean(self.alt_list)
-        if len(self.alt_list) == self.ALT_TRACK_ENTRIES:
+        if len(self.alt_list) == ALT_TRACK_ENTRIES:
             self.alt_list.pop(0)
         self.alt_list.append(alt)
 
@@ -91,37 +97,47 @@ class Flight:
         if alt < avg: return -1
         return 0
 
-    def get_alt_change_str(self, alt):
+    def get_alt_change_str(self, alt: int) -> str:
+        """Update our state with a new altitude, and return an up or down 
+        arrow to reflect altitude trend"""
         altchange = self.track_alt(alt)
+
         altchangestr = "  "
         if altchange > 0:
             altchangestr = "^"
         if altchange < 0:
             altchangestr = "v"
+
         return altchangestr
 
     def update_loc(self, loc):
         self.lastloc = loc
 
-    def update_inside_bboxes(self, bbox_list, loc):
+    def update_inside_bboxes(self, bbox_list : list[bboxes.Bboxes], loc : Location):
         """
         Based on the most recent position data, update what bounding boxes we're in.
         Note: all array indices [i] in this function are selecting between kml files.
         """
+        logger.debug("update_inside_bboxes: pre-bbox update: %s %s", 
+                     self.flight_id, str(self.inside_bboxes))
+
         if self.prev_inside_bboxes is not None:
             self.prev_inside_bboxes_valid = True
+
         self.prev_inside_bboxes = self.inside_bboxes.copy()
-        old_str = self.to_str()
-        logger.debug("update_inside_bboxes: pre-bbox update: %s %s", self.flight_id, str(self.inside_bboxes))
+
         for i, bbox in enumerate(bbox_list):
             self.inside_bboxes[i] = None
             self.inside_bboxes_indices[i] = None
+
             match_index = bbox_list[i].contains(loc.lat, loc.lon, loc.track, loc.alt_baro)
+
             if match_index >= 0 and self.inside_bboxes[i] != bbox_list[i].boxes[match_index].name:
                 # Flight changed bounding boxes at level i
                 self.inside_bboxes[i] = bbox_list[i].boxes[match_index].name
                 self.inside_bboxes_indices[i] = match_index
 
+        # logging only below this point
         if logger.level <= logging.DEBUG and self.inside_bboxes != self.prev_inside_bboxes:
             flighttime = datetime.datetime.fromtimestamp(self.lastloc.now)
             tail = self.tail if self.tail else "(unk)"
@@ -130,5 +146,6 @@ class Flight:
         else:
             logger.debug("no change to bboxes")
 
-    def get_bbox_at_level(self, level):
+    def get_bbox_at_level(self, level) -> str:
+        """return the bbox name that we're in for the given kml file."""
         return self.inside_bboxes[level]

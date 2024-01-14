@@ -61,7 +61,7 @@ JSON_STRING_PLANE3_DELAY = '{"now": 1661692185, "alt_baro": 0, "gscp": 128, "lat
 def test_ui():
     Stats.reset()
 
-    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
+    #logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
     logging.info('System started.')
 
     yaml_data = yaml.safe_load(YAML_STRING)

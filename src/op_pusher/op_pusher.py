@@ -32,7 +32,7 @@ def abe_cb(flight1, flight2):
     abe.process_abe_launch(flight1, flight2)
 
 def run(focus_q, admin_q):
-    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
+    logging.basicConfig(format='%(levelname)-8s %(module)s:%(lineno)d: %(message)s', level=logging.DEBUG)
     logging.info('System started.')
 
     parser = argparse.ArgumentParser(description="match flights against kml bounding boxes")

@@ -6,6 +6,7 @@ from typing import Dict
 from flight import Flight
 from location import Location
 from rules import Rules
+import bboxes
 
 logger = logging.getLogger(__name__)
 
@@ -14,10 +15,10 @@ class Flights:
     EXPIRE_SECS: int = 180  # 3 minutes emperically needed to debounce poor-signal airplanes
 
     def __init__(self, bboxes):
-        self.flight_dict: Dict[str, Flight] = {}
-        self.lock: threading.Lock = threading.Lock()
-        self.bboxes = bboxes
-        self.last_checkpoint = 0
+        self.flight_dict: Dict[str, Flight] = {}        # all flights in the system.
+        self.lock: threading.Lock = threading.Lock()    # XXX may not be needed anymore...
+        self.bboxes : list[bboxes.BBoxes] = bboxes      # all bboxes in the system.
+        self.last_checkpoint = 0                        # timestamp of last maintenance
 
     def add_location(self, loc: Location, rules: Rules) -> float:
         """
@@ -40,11 +41,9 @@ class Flights:
         self.lock.acquire() # lock needed since testing can race
 
         if flight_id in self.flight_dict:
-            is_new_flight = False
             flight = self.flight_dict[flight_id]
             flight.update_loc(loc)
         else:
-            is_new_flight = True
             flight = self.flight_dict[flight_id] = Flight(flight_id, loc.tail, loc,
                                                           loc, self.bboxes)
 
@@ -56,39 +55,41 @@ class Flights:
         return flight.lastloc.now
 
     def expire_old(self, rules, last_read_time):
+        """Delete any flights that haven't been seen in a while.
+        This is important to make proximity checks efficient."""
+
         logger.debug("Expire_old")
-        self.lock.acquire()
-        for f in list(self.flight_dict):
-            flight = self.flight_dict[f]
-            if last_read_time - flight.lastloc.now > self.EXPIRE_SECS:
-                rules.do_expire(flight)
-                del self.flight_dict[f]
 
-        self.lock.release()
+        with self.lock:
+            for f in list(self.flight_dict):
+                flight = self.flight_dict[f]
+                if last_read_time - flight.lastloc.now > self.EXPIRE_SECS:
+                    rules.do_expire(flight)
+                    del self.flight_dict[f]
 
-    def find_nearby_flight(self, flight2, altsep, latsep, last_read_time):
-        """returns a nearby flight within the given separation, None if not found"""
-        MIN_FRESH = 10 # seconds.  Older data not evaluated
+    def find_nearby_flight(self, flight2, altsep, latsep, last_read_time) -> Flight:
+        """Returns maximum of one nearby flight within the given separation, 
+        None if not found"""
+
+        MIN_FRESH = 10 # seconds.  Older locations not evaluated
 
         for flight1 in self.flight_dict.values():
             if flight1 is flight2:
                 continue
             if not flight2.in_any_bbox():
-                continue # XXX optimization, maybe not desired behavior
+                continue # NOTE optimization, maybe not desired behavior
             if last_read_time - flight2.lastloc.now > MIN_FRESH:
                 continue
 
             loc1 = flight1.lastloc
             loc2 = flight2.lastloc
             #logger.debug(f"dist {flight1.flight_id} and {flight2.flight_id}: {loc1-loc2}")
-            #if (loc1.alt_baro < MIN_ALT or loc2.alt_baro < MIN_ALT): continue
+
             if abs(loc1.alt_baro - loc2.alt_baro) < altsep:
                 dist = loc1 - loc2
 
                 if dist < latsep:
                     print("%s-%s inside minimum distance %.1f nm" %
                         (flight1.flight_id, flight2.flight_id, dist))
-                    print("LAT, %f, %f, %d" % (flight1.lastloc.lat, 
-                                               flight1.lastloc.lon, last_read_time))
                     return flight1
         return None
