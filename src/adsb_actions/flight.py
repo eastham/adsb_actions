@@ -16,14 +16,18 @@ class Flight:
     """Summary of a series of locations, plus other annotations"""
     # CAUTION when changing -- dataclass -- constructor positional args implied
 
-    # Always set, this is the "radio name" -- company name or tail number otherwise
-    # It's entered by the pilot or maintenance, so may have typos...
-    # Watch out for differences like flight_id = "1234", tail = "N1234"
+    # This is the tail number as best as we can determine.
+    # It is derived from the ICAO hex code if we can grok it, otherise
+    # rely on the user-provided "flight" which might be a tail number,
+    # a flight number, etc.
+    # Includes country prefix "N", "C-", etc.
+    # Will always be a non-zero-length string.
     flight_id: str
 
-    # This is the tail number, derived from the ICAO hex code.
-    # Includes country prefix "N", "C", etc.
-    tail: str
+    # User-provided "flight" field from ADS-B.
+    # Might be tail number or flight name.
+    # Watch out for differences like flight_id = "N1234", other_id = "1234"
+    other_id: str
     firstloc: Location  # first location we ever saw this aircraft
     lastloc: Location   # most recent location.  note includes timestamp
     all_bboxes_list: list = field(default_factory=list) # all bboxes in the system
@@ -41,6 +45,7 @@ class Flight:
     prev_inside_bboxes_valid = False    # true after 2nd update
 
     def __post_init__(self):
+        assert self.flight_id and len(self.flight_id) > 0
         self.inside_bboxes = [None] * len(self.all_bboxes_list)
         self.inside_bboxes_indices = [None] * len(self.all_bboxes_list)
 
@@ -48,7 +53,6 @@ class Flight:
         """String representation includes lat/long and bbox list."""
 
         string = self.lastloc.to_str()
-        bbox_name_list = []
 
         string += " " + str(self.inside_bboxes)
         return string

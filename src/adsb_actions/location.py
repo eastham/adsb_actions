@@ -2,9 +2,12 @@
 
 from dataclasses import dataclass, fields
 from typing import Optional
+import logging
+import icao_convert
 
-from icao_nnumber_converter_us import icao_to_n
 from geopy import distance
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Location:
@@ -34,10 +37,12 @@ class Location:
         for f in fields(Location):
             if f.name in d:
                 nd[f.name] = d[f.name]
+
         # XXX should this be in flight?
         if "hex" in d:
-            tail = icao_to_n(d["hex"])
-            if tail: nd["tail"] = tail
+            tail = icao_convert.icao_to_n_or_c(d["hex"])
+            if tail:
+                nd["tail"] = tail
         return Location(**nd)
 
     def to_str(self):

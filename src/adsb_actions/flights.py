@@ -33,17 +33,20 @@ class Flights:
             nonzero float of epoch timestamp just added.
         """
 
-        flight_id = loc.flight
-        if not flight_id or flight_id == "N/A": return loc.now
+        if not loc.tail:
+            # couldn't convert ICAO code.  Try the flight name...
+            loc.tail = loc.flight
+        if not loc.tail:
+            return loc.now
 
         self.lock.acquire() # lock needed since testing can race
 
-        if flight_id in self.flight_dict:
-            flight = self.flight_dict[flight_id]
+        if loc.tail in self.flight_dict:
+            flight = self.flight_dict[loc.tail]
             flight.update_loc(loc)
         else:
-            flight = self.flight_dict[flight_id] = Flight(flight_id, loc.tail, loc,
-                                                          loc, self.bboxes)
+            flight = self.flight_dict[loc.tail] = Flight(loc.tail, loc.flight, loc,
+                                                         loc, self.bboxes)
 
         flight.update_inside_bboxes(self.bboxes, loc)
         #print(flight.to_str())

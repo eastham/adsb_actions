@@ -90,7 +90,7 @@ class ControllerApp(MDApp):
                 return # not in a tracked region now, don't add it
 
             # location is inside one of our tracked regions, add new strip
-            strip = FlightStrip(new_scrollview_index, self, flight, id, flight.tail,
+            strip = FlightStrip(new_scrollview_index, self, flight, id, flight.other_id,
                 self.focus_q, self.admin_q)
             strip.update(flight, flight.lastloc, flight.all_bboxes_list)
             strip.render()

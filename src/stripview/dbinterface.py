@@ -24,7 +24,7 @@ class DbInterface:
         on-screen information for the given flight.
         May block, should be run in own thread. """
 
-        logging.debug("call_database: %s", self.flight.tail)
+        logging.debug("call_database: %s", self.flight.flight_id)
 
         note_string = ""
         ui_warning = False
@@ -32,7 +32,7 @@ class DbInterface:
         try:
             # TODO could optimize: only if unregistered?
             # TODO move appsheet code to another module for cleanliness
-            db_obj = LOOKUP_DB_CALL(self.flight.tail, wholeobj=True)
+            db_obj = LOOKUP_DB_CALL(self.flight.flight_id, wholeobj=True)
 
             ui_warning = False
 
@@ -73,7 +73,7 @@ class DbInterface:
             pass
 
         logging.debug("call_database complete for %s: note %s warn %d", 
-                      self.flight.tail, note_string, ui_warning)
+                      self.flight.flight_id, note_string, ui_warning)
         self.ui_update_cb(note_string, ui_warning)
 
 def test_dict(d, key):

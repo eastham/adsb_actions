@@ -23,7 +23,7 @@ else:
 def add_op(flight, op, flags):
     flight_name = flight.flight_id.strip()
     flighttime = datetime.datetime.fromtimestamp(flight.lastloc.now + 7*60*60)
-    logger.debug("add_op %s %s at %s", op, flight_name, 
+    logger.debug("add_op %s %s at %s", op, flight_name,
                  flighttime.strftime('%H:%M %d'))
 
     aircraft_internal_id = lookup_or_create_aircraft(flight)
@@ -37,11 +37,7 @@ def lookup_or_create_aircraft(flight):
     creating if needed.
     """
 
-    flight_id = flight.tail
-    if not flight_id:
-        flight_id = flight.flight_id
-
-    # local cache
+    # check local cache
     if flight.external_id:
         return flight.external_id
 
@@ -49,14 +45,14 @@ def lookup_or_create_aircraft(flight):
     with flight.threadlock:
         if flight.external_id:  # recheck in case we were preempted
             return flight.external_id
-        aircraft_external_id = LOOKUP_DB_CALL(flight_id)
+        aircraft_external_id = LOOKUP_DB_CALL(flight.flight_id)
 
         if not aircraft_external_id:
-            aircraft_external_id = ADD_AIRCRAFT_DB_CALL(flight_id)
-            logger.debug("LOOKUP added aircraft and now has aircraft_external_id %s" % 
+            aircraft_external_id = ADD_AIRCRAFT_DB_CALL(flight.flight_id)
+            logger.debug("LOOKUP added aircraft and now has aircraft_external_id %s", 
                          aircraft_external_id)
         else:
-            logger.debug("LOOKUP got cached aircraft_external_id %s" % aircraft_external_id)
+            logger.debug("LOOKUP got cached aircraft_external_id %s", aircraft_external_id)
 
         flight.external_id = aircraft_external_id
 

@@ -47,14 +47,14 @@ def abe_update_cb(flight1, flight2):
     global abe_update_ctr
     abe_update_ctr += 1
 
-JSON_STRING_PLANE1_ZEROALT = '{"now": 1661692178, "alt_baro": 0, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "NPLANE1"}\n'
-JSON_STRING_PLANE1_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "NPLANE1"}\n'
-JSON_STRING_PLANE1_NEAR = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "NPLANE1"}\n'
-JSON_STRING_PLANE2_NEAR = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "NPLANE2"}\n'
-JSON_STRING_PLANE3_DELAY = '{"now": 1661692185, "alt_baro": 0, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "NPLANE3"}\n'
-JSON_STRING_PLANE4_TOOFAR = '{"now": 1661692178, "alt_baro": 4300, "gscp": 128, "lat": 40.76864689708049, "lon": -119.20915027077689, "track": 203.4, "hex": "a061d9", "flight": "NPLANE4"}\n'
-JSON_STRING_PLANE5_WITHINPROX = '{"now": 1661692178, "alt_baro": 4300, "gscp": 128, "lat": 40.76759089177806, "lon":  -119.20984743421535, "track": 203.4, "hex": "a061d9", "flight": "NPLANE5"}\n'
-JSON_STRING_PLANE6_TOOFAR_ALT = '{"now": 1661692178, "alt_baro": 4800, "gscp": 128, "lat": 40.76759089177806, "lon":  -119.20984743421535, "track": 203.4, "hex": "a061d9", "flight": "NPLANE6"}\n'
+JSON_STRING_PLANE1_ZEROALT = '{"now": 1661692178, "alt_baro": 0, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}\n'
+JSON_STRING_PLANE1_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}\n'
+JSON_STRING_PLANE1_NEAR = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}\n'
+JSON_STRING_PLANE2_NEAR = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d2"}\n'
+JSON_STRING_PLANE3_DELAY = '{"now": 1661692185, "alt_baro": 0, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d3"}\n'
+JSON_STRING_PLANE4_TOOFAR = '{"now": 1661692178, "alt_baro": 4300, "gscp": 128, "lat": 40.76864689708049, "lon": -119.20915027077689, "track": 203.4, "hex": "a061d4"}\n'
+JSON_STRING_PLANE5_WITHINPROX = '{"now": 1661692178, "alt_baro": 4300, "gscp": 128, "lat": 40.76759089177806, "lon":  -119.20984743421535, "track": 203.4, "hex": "a061d5"}\n'
+JSON_STRING_PLANE6_TOOFAR_ALT = '{"now": 1661692178, "alt_baro": 4800, "gscp": 128, "lat": 40.76759089177806, "lon":  -119.20984743421535, "track": 203.4, "hex": "a061d6"}\n'
 
 def test_prox():
     Stats.reset()

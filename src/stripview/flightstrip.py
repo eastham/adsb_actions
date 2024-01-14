@@ -31,15 +31,14 @@ class FlightStrip:
         self.scrollview_index = index
         self.app = app
         self.flight = flight
-        self.id = id # redundant to flight?
-        self.tail = tail # redundant to flight?
+        self.id = id # XXX redundant to flight?
+        self.tail = tail # really other_id.  XXX redundant to flight?
         self.focus_q = focus_q
         self.admin_q = admin_q
         self.bg_color_warn = False
         self.update_thread = None
         self.stop_event = threading.Event()
 
-        self.tail = flight.tail if flight.tail else flight.flight_id.strip()
         if USE_DATABASE:
             self.db_interface = DbInterface(self.flight, self.handle_db_update)
             self.update_thread = threading.Thread(target=self.server_refresh_thread)
@@ -133,9 +132,9 @@ class FlightStrip:
 
     def update(self, flight, location, bboxes_list):
         """ Re-build strip strings, changes show up on-screen automatically """
-        logging.debug(f"strip.update for {flight.tail}, {bboxes_list}")
-        if (flight.flight_id.strip() != flight.tail and flight.tail):
-            extratail = flight.tail
+        logging.debug(f"strip.update for {flight.flight_id}, {bboxes_list}")
+        if (flight.flight_id.strip() != flight.other_id and flight.other_id):
+            extratail = flight.other_id
         else:
             extratail = ""
         self.top_string = "[b][size=34]%s %s[/size][/b]" % (flight.flight_id.strip(),
