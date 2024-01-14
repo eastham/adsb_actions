@@ -6,7 +6,6 @@
     "configurations": [
 
         {"name":"Python: Current File","type":"python","request":"launch","program":"${file}","console":"integratedTerminal","justMyCode":true},
-        
 
         {
             "name": "Stripview UI",
@@ -14,7 +13,7 @@
             "request": "launch",
             "program": "controller.py",
             "cwd": "${workspaceFolder}/src/stripview",
-            "args": " -- --ipaddr 123 --port 123 --testdata ../../tests/1hr.json --rules ui.yaml ../../tests/test2.kml",
+            "args": " -- --testdata ../../tests/20minutes.json --delay .01 --rules ui.yaml ../../tests/test2.kml",
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -24,7 +23,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}/src/op_pusher",
             "program": "op_pusher.py",
-            "args": "--ipaddr 123 --port 123 --testdata ../../tests/20minutes.json --rules rules.yaml ../../tests/test1.kml",
+            "args": "--testdata ../../tests/20minutes.json --delay .01 --rules rules.yaml ../../tests/test1.kml",
             "console": "integratedTerminal",
             "justMyCode": true
         }

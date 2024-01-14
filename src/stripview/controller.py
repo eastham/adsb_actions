@@ -139,25 +139,32 @@ def aircraft_remove_cb(f: Flight):
     logger.debug("remove_cb: %s", f.flight_id)
     controllerapp.remove_strip(f)
 
-def aircraft_annotate_cb(f: Flight):
-    logger.debug("annotate_cb: %s", f.flight_id)
-    controllerapp.annotate_strip(f)
+def aircraft_annotate_cb(f1: Flight, f2: Flight):
+    logger.debug("annotate_cb: %s", f1.flight_id)
+    controllerapp.annotate_strip(f1)
 
 def run(focus_q, admin_q):
+    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
+    logging.info('System started.')
+
     parser = argparse.ArgumentParser(description="match flights against kml bounding boxes")
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument('--test', help="add some test flights", action="store_true")
     parser.add_argument('file', nargs='+', help="kml files to use")
-    parser.add_argument('--ipaddr', help="IP address to connect to", required=True)
-    parser.add_argument('--port', help="port to connect to", required=True)
+    parser.add_argument('--ipaddr', help="IP address to connect to")
+    parser.add_argument('--port', help="port to connect to")
     parser.add_argument('--rules', help="YAML file that describes UI behavior", required=True)
     parser.add_argument('--testdata', help="JSON flight tracks, for testing")
-
-    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
-    logging.info('System started.')
-
+    parser.add_argument('--delay', help="Seconds of delay between reads, for testing", default=0)
     args = parser.parse_args()
+
+    if not (bool(args.testdata) != bool(args.ipaddr and args.port)):
+        logger.fatal("Either ipaddr/port OR testdata must be provided.")
+        sys.exit(1)
+    if args.ipaddr and args.delay:
+        logger.warning("--delay has no effect when ipaddr is given")
+
     with open(args.rules, 'r', encoding='utf-8') as file:
         yaml_data = yaml.safe_load(file)
 
@@ -173,7 +180,6 @@ def run(focus_q, admin_q):
 
     # Setup flight data handling.
     json_data = None
-    delay = 0 # used for testing to slow down replay rate
     if not args.testdata:
         adsb_actions = AdsbActions(yaml_data, ip=args.ipaddr, port=args.port)
     else:
@@ -181,7 +187,6 @@ def run(focus_q, admin_q):
 
         with open(args.testdata, 'rt', encoding="utf-8") as myfile:
             json_data = myfile.read()
-        delay = .01    # set to .02 or so to see things happen more clearly
 
     adsb_actions.register_callback("aircraft_update_cb", aircraft_update_cb)
     adsb_actions.register_callback("aircraft_remove_cb", aircraft_remove_cb)
@@ -189,7 +194,7 @@ def run(focus_q, admin_q):
 
     # Start event loop
     read_thread = threading.Thread(target=adsb_actions.loop,
-        kwargs={'data': json_data, 'delay': delay})
+        kwargs={'data': json_data, 'delay': float(args.delay)})
     Clock.schedule_once(lambda x: read_thread.start(), 2)
     controllerapp.run()
 
