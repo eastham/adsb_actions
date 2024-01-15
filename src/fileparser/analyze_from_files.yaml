@@ -1,0 +1,36 @@
+  config:
+    kmls:
+      - ../../tests/test1.kml 
+
+  rules:
+    takeoff:
+      conditions:
+        transition_regions: [ "Generic Gate Ground", "Generic Gate Air" ]
+      actions:
+        print: True
+        callback: "takeoff"
+        note: "saw_takeoff"
+
+    takeoff_popup: # XXX test needed
+      conditions:
+        transition_regions: [ ~, "Generic Gate Air" ]
+      actions:
+        print: True
+        callback: "takeoff"
+        note: "saw_takeoff"
+
+    landing:
+      conditions:
+        transition_regions: [ "Generic Gate Air", "Generic Gate Ground" ]
+      actions:
+        print: True
+        callback: "landing"
+
+    prox:
+      conditions:
+        min_alt: 4000
+        max_alt: 10000
+        regions: [ "Generic Gate Air", "Vicinity" ]
+        proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
+      actions:
+        callback: abe_update_cb
