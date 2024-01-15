@@ -7,6 +7,7 @@
       conditions:
         transition_regions: [ "Generic Gate Ground", "Generic Gate Air" ]
       actions:
+        print: True
         callback: "takeoff"
         note: "saw_takeoff"
 
@@ -22,6 +23,7 @@
       conditions:
         transition_regions: [ "Generic Gate Air", "Generic Gate Ground" ]
       actions:
+        print: True
         callback: "landing"
 
     prox:

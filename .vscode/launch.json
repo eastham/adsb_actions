@@ -8,7 +8,7 @@
         {"name":"Python: Current File","type":"python","request":"launch","program":"${file}","console":"integratedTerminal","justMyCode":true},
 
         {
-            "name": "Stripview UI",
+            "name": "Stripview UI demo",
             "type": "python",
             "request": "launch",
             "program": "controller.py",
@@ -18,7 +18,7 @@
             "justMyCode": true
         },
         {
-            "name": "op_pusher",
+            "name": "Push ops to appsheet",
             "type": "python",
             "request": "launch",
             "cwd": "${workspaceFolder}/src/op_pusher",
@@ -26,6 +26,37 @@
             "args": "--testdata ../../tests/20minutes.json --delay .01 --rules rules.yaml ../../tests/test1.kml",
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+        {
+            "name": "Replay data to port",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/src/fileparser",
+            "program": "replay.py",
+            "args": "--port 6666  --speed_x 1000 ~/adsb_data/2023/08/30",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Parse data from port",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/src/adsb_actions",
+            "program": "main.py",
+            "args": "--ipaddr 127.0.0.1 --port 6666 ../op_pusher/rules.yaml",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Parse all data from files",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/src/fileparser",
+            "program": "analyze_from_files.py",
+            "args": "~/adsb_data/2023/08/30",
+            "console": "integratedTerminal",
+            "justMyCode": true
         }
+
     ]
 }

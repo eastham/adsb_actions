@@ -35,7 +35,6 @@ if __name__ == "__main__":
 
     with open(args.yaml, 'r', encoding='utf-8') as file:
         yaml_data = yaml.safe_load(file)
-    print(yaml_data)
     setup_logger()
 
     adsb_actions = AdsbActions(yaml_data, ip=args.ipaddr, port=args.port)

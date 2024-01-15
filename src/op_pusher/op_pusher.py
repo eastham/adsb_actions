@@ -63,16 +63,15 @@ def run(focus_q, admin_q):
     if not args.testdata:
         adsb_actions = AdsbActions(yaml_data, ip=args.ipaddr, port=args.port)
     else:
-        adsb_actions = AdsbActions(yaml_data)
-
         with open(args.testdata, 'rt', encoding="utf-8") as myfile:
             json_data = myfile.read()
+        adsb_actions = AdsbActions(yaml_data, string_data=json_data)
 
     adsb_actions.register_callback("landing", landing_cb)
     adsb_actions.register_callback("takeoff", takeoff_cb)
     adsb_actions.register_callback("abe_update_cb", abe_cb)
 
-    adsb_actions.loop(data=json_data, delay=float(args.delay))
+    adsb_actions.loop(delay=float(args.delay))
     abe.ABE.quit = True # signal worker thread to exit
     logging.info("Please wait for final ABE GC...")
 
