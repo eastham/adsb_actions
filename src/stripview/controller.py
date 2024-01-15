@@ -196,7 +196,7 @@ def run(focus_q, admin_q):
 
     # Start event loop
     read_thread = threading.Thread(target=adsb_actions.loop,
-        kwargs={'data': json_data, 'delay': float(args.delay)})
+        kwargs={'string_data': json_data, 'delay': float(args.delay)})
     Clock.schedule_once(lambda x: read_thread.start(), 2)
     controllerapp.run()
 
