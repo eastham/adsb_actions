@@ -1,5 +1,6 @@
 """This module parses rules and actions, and applies them to flight data."""
 
+import datetime
 import logging
 from flight import Flight
 from stats import Stats
@@ -106,11 +107,20 @@ class Rules:
                 logger.critical("NOT IMPLEMENTED: webhook for %s", flight.flight_id)
 
             elif 'print' == action_name:
-                print(f"Rule {rule_name} matched for {flight.flight_id}")
+                timestamp = datetime.datetime.fromtimestamp(
+                    flight.lastloc.now).strftime("%m/%d/%y %H:%M")
+                print(
+                    f"{timestamp}: Rule {rule_name} matched for {flight.flight_id}",
+                    f"{flight.flags.get('note', '')}")
 
             elif 'callback' == action_name:
                 Stats.callbacks_fired += 1
                 Stats.last_callback_flight = flight
+                if not action_value in self.callbacks:
+                    logger.debug("No callback defined: %s, %s", 
+                                 rule_name, flight.flight_id)
+                    continue
+
                 logger.debug("Doing callback for %s", flight.flight_id)
                 if cb_arg:
                     # this is used for proximity events when you want to 
