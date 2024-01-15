@@ -9,7 +9,7 @@ def icao_to_n_or_c(hexstr: str) -> str:
     if hexstr.upper().startswith('C'):
         result = icao_to_c(hexstr, 'C-F', 0xC00001, 0x44A9, 26*26, 26)
         if not result:
-            result = icao_to_c(hexstr, 'C-G', 0xC044A9, 0xFFFFF, 26*26, 26)
+            result = icao_to_c(hexstr, 'C-G', 0xC044A9, 0xFBB56, 26*26, 26)
         return result
     elif hexstr.upper().startswith('A'):
         return icao_to_n(hexstr)
@@ -35,5 +35,7 @@ def icao_to_c(hexstr : str, prefix : str, start : int,
     i2 = offset // stride2
     offset = offset % stride2
     i3 = offset
-
-    return prefix + ALPHABET[i1] + ALPHABET[i2] + ALPHABET[i3]
+    try:
+        return prefix + ALPHABET[i1] + ALPHABET[i2] + ALPHABET[i3]
+    except:
+        return None
