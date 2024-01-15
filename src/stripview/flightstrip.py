@@ -27,12 +27,10 @@ USE_DATABASE = True
 SERVER_REFRESH_RATE = 60 # seconds
 
 class FlightStrip:
-    def __init__(self, index, app, flight, id, tail, focus_q, admin_q):
+    def __init__(self, index, app, flight, focus_q, admin_q):
         self.scrollview_index = index
         self.app = app
         self.flight = flight
-        self.id = id # XXX redundant to flight?
-        self.tail = tail # really other_id.  XXX redundant to flight?
         self.focus_q = focus_q
         self.admin_q = admin_q
         self.bg_color_warn = False
@@ -73,7 +71,7 @@ class FlightStrip:
             self.update_thread.start()
 
     def __del__(self):
-        logging.debug(f"Deleting strip {self.id}")
+        logging.debug(f"Deleting strip {self.flight.flight_id}")
 
     def render(self):
         """put the strip on the screen according to its current state"""
@@ -104,11 +102,11 @@ class FlightStrip:
         return
 
     def web_click(self, arg):
-        webbrowser.open("https://flightaware.com/live/flight/" + self.id)
+        webbrowser.open("https://flightaware.com/live/flight/" + self.flight.flight_id)
 
     def focus_click(self, arg):
-        logging.debug("focus " + self.id)
-        if self.focus_q: self.focus_q.put(self.id)
+        logging.debug("focus " + self.flight.flight_id)
+        if self.focus_q: self.focus_q.put(self.flight.flight_id)
 
     def server_refresh_thread(self):
         """This thread periodically refreshes aircraft details with the server."""
