@@ -34,10 +34,13 @@ class AdsbActions:
         overriding anything specified in the yaml."""
         self.flights = Flights(bboxes or self._load_bboxes(yaml))
         self.rules = Rules(yaml)
+        self.listen = None
+        self.data_iterator = None
+
         if ip and port:
             self.listen = self._setup_network(ip, port)
 
-    def loop(self, data: str = None, delay: float = 0.) -> None:
+    def loop(self, string_data = None, iterator_data = None, delay: float = 0.) -> None:
         """Run forever, processing ADS-B json data on the previously-opened socket.
         Will terminate when socket is closed.
 
@@ -50,9 +53,12 @@ class AdsbActions:
         # TODO this probably should be a configurable instance variable:
         CHECKPOINT_INTERVAL = 5 # seconds.  How often to do mainentance tasks.
 
-        if data:  # inject string data for testing
+        # Two ways to inject data for non-network cases:
+        if string_data:
             self.listen = TCPConnection()
-            self.listen.f = StringIO(data)
+            self.listen.f = StringIO(string_data)
+        else:
+            self.data_iterator = iterator_data
 
         while True:
             last_read_time = self._flight_update_read()
@@ -79,6 +85,7 @@ class AdsbActions:
 
             if delay:
                 time.sleep(delay)
+        logger.info("Parsed %s points.", Stats.json_readlines)
 
     def register_callback(self, name: str, fn: Callable) -> None:
         """Associate the given name string with a function to call."""
@@ -117,26 +124,34 @@ class AdsbActions:
 
     def _flight_update_read(self) -> float:
         """Attempt to read a line from the socket, and process it.
+
         Returns:
             a timestamp of the parsed location update if successful, 
-            otherwise zero"""
+            zero if not successful, -1 on EOF (in non-network cases)"""
 
         jsondict = None
         try:
-            line = self.listen.readline()
-            if not line:
-                return -1
-            logger.info("Read line: %s ", line.strip())
-            jsondict = json.loads(line)
+            if self.listen:
+                line = self.listen.readline()
+                if not line:
+                    return -1
+                logger.debug("Read line: %s ", line.strip())
+                jsondict = json.loads(line)
+            else:
+                jsondict = next(self.data_iterator)
+
         except json.JSONDecodeError:
             if not self.listen.sock:
                 return -1  # test environment
-            else:
-                logger.error("JSON Parse fail: %s", line)
+            logger.error("JSON Parse fail: %s", line)
+            # fall through
+        except StopIteration:
+            return -1
         except Exception:
-            print(f"Socket input error, reconnect plan = {self.listen.retry}")
+            logger.error("Socket input error")
             if self.listen.retry:
                 # TODO needs testing/improvement.  This didn't always work in the past...
+                logger.error("Attempting reconnect...")
                 time.sleep(2)
                 self.listen.connect()
             else:
@@ -150,8 +165,8 @@ class AdsbActions:
             # We got some data, process it.
             loc_update = Location.from_dict(jsondict)
             return self.flights.add_location(loc_update, self.rules)
-        else:
-            return 0
+
+        return 0
 
 
 class TCPConnection:
