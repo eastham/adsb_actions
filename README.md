@@ -8,6 +8,7 @@ Sample implementations of each are included, for example here is the UI "stripvi
 
 ![Screenshot of Stripview](misc/stripview.png?raw=true "Screenshot of Stripview")
 
+<h3>Overview</h3>
 Each YAML rule contains **conditions** and **actions**. 
 
 **conditions** are an ANDed set, and can include altitude ranges, lat/long proximity, location within a region specified in a KML file, etc.
