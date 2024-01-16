@@ -1,6 +1,6 @@
 <h2>adsb-actions: A package for taking actions based on ADS-B data.</h2>
 
-This module allows you apply rules and actions to data coming from readsb or other ADS-B
+This module allows you apply rules and actions to data coming from [readsb](https://github.com/wiedehopf/readsb) or other ADS-B
 data provider.  The rules and actions are specified in a simple human-readable format.  
 
 These actions can then:
