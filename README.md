@@ -3,6 +3,11 @@
 This module allows you to connect to a readsb or other ADS-B
 data provider, and have actions taken according to rules defined in a simple YAML format.  
 
+These actions can then drive a UI, do offline or real-time analysis and alerting, or push operations to a database.
+Sample implementations of each are included, for example here is the UI "stripview":
+
+![Screenshot of Stripview](misc/stripview.png?raw=true "Screenshot of Stripview")
+
 Each YAML rule contains **conditions** and **actions**. 
 
 **conditions** are an ANDed set, and can include altitude ranges, lat/long proximity, location within a region specified in a KML file, etc.

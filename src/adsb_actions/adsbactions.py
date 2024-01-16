@@ -129,13 +129,15 @@ class AdsbActions:
             a timestamp of the parsed location update if successful, 
             zero if not successful, -1 on EOF (in non-network cases)"""
 
+        # TODO this function is a bit of a mess with all the
+        # returns...needs cleanup and retest when/if we improve
+        # the network resiliency...
         jsondict = None
         try:
             if self.listen:
                 line = self.listen.readline()
                 if not line:
                     return -1
-                logger.debug("Read line: %s ", line.strip())
                 jsondict = json.loads(line)
             else:
                 jsondict = next(self.data_iterator)
@@ -159,6 +161,7 @@ class AdsbActions:
                 # sys.exit(0) # XXX adsb_pusher used this
             return 0
 
+        logger.debug("Read json: %s ", str(jsondict))
         Stats.json_readlines += 1
 
         if jsondict:

@@ -1,6 +1,7 @@
 """Flight module represents the internal state for one flight.
 Location last seen, tail number, etc."""
 
+import datetime
 import statistics
 import logging
 from dataclasses import dataclass, field
@@ -147,8 +148,10 @@ class Flight:
 
         # logging only below this point
         if self.inside_bboxes != self.prev_inside_bboxes:
-            logger.info("BBOX CHANGE %s: was %s now %s", self.flight_id,
-                         self.prev_inside_bboxes, self.inside_bboxes) 
+            timestamp = datetime.datetime.fromtimestamp(
+                self.lastloc.now).strftime("%m/%d/%y %H:%M")
+            logger.debug("%s BBOX CHANGE %s: was %s now %s", timestamp,
+                        self.flight_id, self.prev_inside_bboxes, self.inside_bboxes)
 
     def get_bbox_at_level(self, level) -> str:
         """return the bbox name that we're in for the given kml file."""

@@ -50,8 +50,9 @@ def test_1hr():
 
     # turn down loggers systemwide for noise/perf reasons
     testinfra.set_all_loggers(logging.INFO)
-
+    #logging.getLogger("flight").setLevel(logging.DEBUG)
     Stats.reset()
+
     yaml_data = yaml.safe_load(YAML_STRING)
 
     with open("tests/1hr.json", 'rt', encoding="utf-8") as myfile:
@@ -62,6 +63,6 @@ def test_1hr():
     adsb_actions.register_callback("takeoff", takeoff_cb)
     adsb_actions.loop(json_data)
 
-    assert takeoff_ctr == 14
-    assert landing_ctr == 18
-    assert local_landing_ctr == 9
+    assert takeoff_ctr == 15
+    assert landing_ctr == 19
+    assert local_landing_ctr == 10

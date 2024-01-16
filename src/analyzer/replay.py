@@ -85,16 +85,17 @@ def main(directory : str, port: int,
 
     signal.signal(signal.SIGINT, lambda *_: sys.exit(1))
 
-    # Read in the data.
+    print("Parsing data...")
     allpoints = read_data(directory)
     allpoints_iterable = yield_json_data(allpoints)
 
     sock = Socket('0.0.0.0', port) if port else 0
 
-    # Wait for first connection before starting data replay
-    while sock:
-        if sock.try_accept():
-            break
+    if sock:
+        print("Waiting for first network connection...")
+        while True:
+            if sock.try_accept():
+                break
 
     send_ctr = 0
 
@@ -181,5 +182,5 @@ if __name__ == "__main__":
     parser.add_argument('directory', type=str, help='Directory to scan')
 
     args = parser.parse_args()
-    print("Parsing data...")
+
     main(args.directory, args.port, args.utc_convert, args.speed_x)
