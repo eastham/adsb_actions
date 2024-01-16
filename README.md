@@ -5,7 +5,8 @@ data provider.  The conditions and actions are specified in a simple human-reada
 
 These actions can then:
 - Drive a UI
-- Do offline or real-time analysis and alerting
+- Do real-time analysis and alerting, for example for aircraft of interest
+- Do offline analysis, for example to  generate operational counts and statistics
 - Push operations to a database
 - Whatever else you can imagine!
 
