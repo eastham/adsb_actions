@@ -1,6 +1,6 @@
 <h2>adsb-actions: A package for taking actions based on ADS-B data.</h2>
 
-This module allows you apply conditions and actions to data coming from [readsb](https://github.com/wiedehopf/readsb) or other ADS-B
+This module allows you apply conditions and actions to data coming from [readsb](https://github.com/wiedehopf/readsb), or another ADS-B
 data provider.  The conditions and actions are specified in a simple human-readable YAML format.  
 
 These actions can then:
@@ -19,7 +19,7 @@ Each YAML rule contains **conditions** and **actions**.
 
 **conditions** are an ANDed set, and can include altitude ranges, lat/long proximity, location within a region specified in a KML file, etc.
 
-**actions** include Slack, paging / JSON webhook, and python callback.  See CONFIG_INSTRUCTIONS.yaml for more.
+**actions** include Slack, paging / JSON webhook, and python callback.  See CONFIG_INSTRUCTIONS.yaml for more info.
 
 <h3>Example YAML config:</h3>
 

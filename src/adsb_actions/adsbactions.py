@@ -30,8 +30,18 @@ class AdsbActions:
     """Main API for the library."""
 
     def __init__(self, yaml, ip=None, port=None, bboxes=None):
-        """optional arg bboxes forces what bboxes the system uses,
-        overriding anything specified in the yaml."""
+        """Main API for the library.  You can provide connection info in the
+        constructor here, or specify data sources in the subsequent call to
+        loop().
+
+        Args:
+            ip: optional ip address to connect to
+            port: optional port to conect to
+            exit_cb: optional callback to fire when socket closes or EOF is
+                reached.
+            bboxes: optional - forces what bounding boxes the system uses,
+                overriding anything specified in the yaml."""
+
         self.flights = Flights(bboxes or self._load_bboxes(yaml))
         self.rules = Rules(yaml)
         self.listen = None
@@ -45,10 +55,11 @@ class AdsbActions:
         Will terminate when socket is closed.
 
         Args:
-            data: instead of using the socket, process this data instead. 
-                Useful for testing.
+            string_data: optional: process this strinfigied JSON data instead
+            iterator_data: optional: process data from this iterator that yields
+                JSON instead
             delay: pause for this many seconds between input lines, for testing.
-                .01-.05 is reasonable.
+                .01-.05 is reasonable to be able to see what's going on.
         """
         # TODO this probably should be a configurable instance variable:
         CHECKPOINT_INTERVAL = 5 # seconds.  How often to do mainentance tasks.
@@ -88,7 +99,9 @@ class AdsbActions:
         logger.info("Parsed %s points.", Stats.json_readlines)
 
     def register_callback(self, name: str, fn: Callable) -> None:
-        """Associate the given name string with a function to call."""
+        """Associate the given name string, used in the configuration YAML,
+        with a function to call.
+        """
         self.rules.callbacks[name] = fn
 
     def register_webhook(self, url: str) -> None:
@@ -123,7 +136,8 @@ class AdsbActions:
         return conn
 
     def _flight_update_read(self) -> float:
-        """Attempt to read a line from the socket, and process it.
+        """Attempt to read a line from the socket or other data source,
+        and process it.
 
         Returns:
             a timestamp of the parsed location update if successful, 
