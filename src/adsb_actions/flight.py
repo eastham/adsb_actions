@@ -26,7 +26,7 @@ class Flight:
     flight_id: str
 
     # User-provided "flight" field from ADS-B.
-    # Might be tail number or flight name.
+    # Might be a tail number, flight name, or nothing / None.
     # Watch out for differences like flight_id = "N1234", other_id = "1234"
     other_id: str
     firstloc: Location  # first location we ever saw this aircraft

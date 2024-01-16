@@ -10,7 +10,7 @@ These actions can then:
 - Push operations to a database
 - Whatever else you can imagine!
 
-Sample implementations of each of these are included, for example here is the UI "stripview":
+Sample implementations of each of these are included -- here is a screenshot of the UI "stripview":
 
 ![Screenshot of Stripview](misc/stripview.png?raw=true "Screenshot of Stripview")
 

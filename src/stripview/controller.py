@@ -145,7 +145,7 @@ def aircraft_annotate_cb(f1: Flight, f2: Flight):
     logger.debug("annotate_cb: %s", f1.flight_id)
     controllerapp.annotate_strip(f1)
 
-def run(focus_q, admin_q):
+def setup(focus_q, admin_q):
     logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
     logging.info('System started.')
 
@@ -194,11 +194,15 @@ def run(focus_q, admin_q):
     adsb_actions.register_callback("aircraft_remove_cb", aircraft_remove_cb)
     adsb_actions.register_callback("abe_update_cb", aircraft_annotate_cb)
 
-    # Start event loop
     read_thread = threading.Thread(target=adsb_actions.loop,
         kwargs={'string_data': json_data, 'delay': float(args.delay)})
+
+    # Don't update the UI before it's drawn...
     Clock.schedule_once(lambda x: read_thread.start(), 2)
-    controllerapp.run()
+
+    # TODO probably cleaner to put this method+state in a class.
+    return (adsb_actions, controllerapp)
 
 if __name__ == '__main__':
-    run(None, None)
+    _, app = setup(None, None)
+    app.run()

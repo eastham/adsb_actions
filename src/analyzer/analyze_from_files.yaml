@@ -11,7 +11,7 @@
         callback: "takeoff"
         note: "saw_takeoff"
 
-    takeoff_popup: # XXX test needed
+    takeoff_popup: # XXX test needed ... not firing...
       conditions:
         transition_regions: [ ~, "Generic Gate Air" ]
       actions:

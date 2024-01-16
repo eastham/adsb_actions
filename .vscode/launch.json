@@ -18,6 +18,16 @@
             "justMyCode": true
         },
         {
+            "name": "Public UI",
+            "type": "python",
+            "request": "launch",
+            "program": "public_ui.py",
+            "cwd": "${workspaceFolder}/src/stripview",
+            "args": " -- --testdata ../../tests/20minutes.json --delay .01 --rules public_ui.yaml ../../tests/test2.kml",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
             "name": "Push ops to appsheet",
             "type": "python",
             "request": "launch",
