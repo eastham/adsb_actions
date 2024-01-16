@@ -1,7 +1,6 @@
 #!/usr/bin/python3
-"""Sample implementation for the library.  
-
-Takes ip address/port/yaml from command line and processes the data."""
+"""Run the rules in analyze_from_files.yaml against a nested
+directory structure with readsb data dumps in it."""
 
 import logging
 import sys
@@ -29,7 +28,7 @@ if __name__ == "__main__":
     setup_logger()
 
     parser = argparse.ArgumentParser(description=
-        "detect landings/takeoffs/etc from directory of readsb output files.")
+        "Detect landings/takeoffs/etc from directory of readsb output files.")
     parser.add_argument("-d", "--debug", action="store_true") # XXX not implemented
     parser.add_argument('directory', help='Path to the data')
     args = parser.parse_args()
