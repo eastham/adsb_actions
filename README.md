@@ -1,12 +1,13 @@
 <h2>adsb-actions: A package for taking actions based on ADS-B data.</h2>
 
 This module allows you apply rules and actions to data coming from [readsb](https://github.com/wiedehopf/readsb) or other ADS-B
-data provider.  The rules and actions are specified in a simple human-readable format.  
+data provider.  The rules and actions are specified in a simple human-readable YAML format.  
 
 These actions can then:
 - Drive a UI
 - Do offline or real-time analysis and alerting, or
 - Push operations to a database.
+- Whatever else you can imagine
 Sample implementations of each are included, for example here is the UI "stripview":
 
 ![Screenshot of Stripview](misc/stripview.png?raw=true "Screenshot of Stripview")
