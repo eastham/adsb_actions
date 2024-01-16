@@ -2,6 +2,7 @@
 
 import logging
 import yaml
+import pytest
 
 from stats import Stats
 from adsbactions import AdsbActions
@@ -33,15 +34,21 @@ JSON_STRING_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat":
 JSON_STRING_GROUND = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
 JSON_STRING_AIR = '{"now": 1661692178, "alt_baro": 4500, "gscp": 128, "lat": 40.748708, "lon": -119.2489313, "track": 203.4, "hex": "a061d9", "flight": "N12345"}'
 
-def test_transitions():
-    Stats.reset()
-    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
+@pytest.fixture
+def adsb_actions():
+    logging.basicConfig(format='%(levelname)s: %(message)s',
+                        level=logging.DEBUG)
+    testinfra.set_all_loggers(logging.DEBUG)
     logging.info('System started.')
+    Stats.reset()
 
     yaml_data = yaml.safe_load(YAML_STRING)
     adsb_actions = AdsbActions(yaml_data)
     testinfra.setup_test_callback(adsb_actions)
 
+    yield adsb_actions
+
+def test_transitions(adsb_actions):
     adsb_actions.loop((JSON_STRING_DISTANT+'\n')*3)
     assert Stats.callbacks_fired == 0
 

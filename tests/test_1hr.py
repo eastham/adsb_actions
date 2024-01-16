@@ -55,8 +55,7 @@ def test_1hr():
 
     yaml_data = yaml.safe_load(YAML_STRING)
 
-    with open("tests/1hr.json", 'rt', encoding="utf-8") as myfile:
-        json_data = myfile.read()
+    json_data = testinfra.load_json("tests/1hr.json")
 
     adsb_actions = AdsbActions(yaml_data)
     adsb_actions.register_callback("landing", landing_cb)
