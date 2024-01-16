@@ -12,7 +12,6 @@ ALIASES = {
 }
 
 def public_update_cb(f: Flight):
-    # TODO add a lookup to map from N
     if f.flight_id in ALIASES:
         f.other_id = ALIASES[f.flight_id]
 

@@ -70,14 +70,18 @@ def yield_json_data(allpoints):
         f"First point seen at {first_ts} / {first_time}, last at {last_ts} / {last_time}")
     print(f"Parse of {len(allpoints)} points complete, ready to connect")
 
-    for k in list(range(first_ts, last_ts)):
+    counter = 0
+    for k in range(first_ts, last_ts):
         if not k in allpoints:
-            # send dummy entry so the client can account for time passage w/ no a/c
-            EMPTY_MESSAGE['now'] = k
-            yield EMPTY_MESSAGE
+            # send an entry at least every 20 iterations to make it easy for the
+            # client to account for the passage of time, do maintenance work, etc
+            if counter % 20 == 0:
+                EMPTY_MESSAGE['now'] = k
+                yield EMPTY_MESSAGE
         else:
             for point in allpoints[k]:
                 yield point
+        counter += 1
 
 def main(directory : str, port: int,
          utc_convert : int, speed_x : int):

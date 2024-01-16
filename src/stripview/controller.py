@@ -43,7 +43,7 @@ class ControllerApp(MDApp):
 
     def build(self):
         logging.debug("controller build")
- 
+
         self.controller = Controller()
         self.dialog = Dialog()
         self.theme_cls.theme_style="Dark"
@@ -78,7 +78,7 @@ class ControllerApp(MDApp):
                 # Don't move strip but continue to update indefinitely
                 # XXX probably not right behavior for everyone
                 return
-            
+
             if strip.scrollview_index != new_scrollview_index:
                 # move strip to new scrollview
                 logger.debug(f"UI index CHANGE to {new_scrollview_index}")
@@ -110,7 +110,8 @@ class ControllerApp(MDApp):
         del self.strips[flight.flight_id]
 
     @mainthread
-    def annotate_strip(self, flight):
+    def annotate_strip(self, flight, flight2):
+        """Change the color and text of the strip for extra attention"""
         logging.debug("annotate strip %s", flight.flight_id)
         id = flight.flight_id
         try:
@@ -123,27 +124,15 @@ class ControllerApp(MDApp):
         strip.update_strip_text()
 
     @mainthread
-    def set_strip_color(self, id, color):
+    def set_strip_color(self, strip_id, color):
         try:
-            strip = self.strips[id]
+            strip = self.strips[strip_id]
         except KeyError:
             return
         strip.background_color = color
 
 def sigint_handler(signum, frame):
     exit(1)
-
-def aircraft_update_cb(f: Flight):
-    logger.debug("update_cb: %s", f.flight_id)
-    controllerapp.update_strip(f)
-
-def aircraft_remove_cb(f: Flight):
-    logger.debug("remove_cb: %s", f.flight_id)
-    controllerapp.remove_strip(f)
-
-def aircraft_annotate_cb(f1: Flight, f2: Flight):
-    logger.debug("annotate_cb: %s", f1.flight_id)
-    controllerapp.annotate_strip(f1)
 
 def setup(focus_q, admin_q):
     logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
@@ -190,9 +179,12 @@ def setup(focus_q, admin_q):
         with open(args.testdata, 'rt', encoding="utf-8") as myfile:
             json_data = myfile.read()
 
-    adsb_actions.register_callback("aircraft_update_cb", aircraft_update_cb)
-    adsb_actions.register_callback("aircraft_remove_cb", aircraft_remove_cb)
-    adsb_actions.register_callback("abe_update_cb", aircraft_annotate_cb)
+    adsb_actions.register_callback(
+        "aircraft_update_cb", controllerapp.update_strip)
+    adsb_actions.register_callback(
+        "aircraft_remove_cb", controllerapp.remove_strip)
+    adsb_actions.register_callback(
+        "abe_update_cb", controllerapp.annotate_strip)
 
     read_thread = threading.Thread(target=adsb_actions.loop,
         kwargs={'string_data': json_data, 'delay': float(args.delay)})
@@ -201,6 +193,9 @@ def setup(focus_q, admin_q):
     Clock.schedule_once(lambda x: read_thread.start(), 2)
 
     # TODO probably cleaner to put this method+state in a class.
+    # we need to return both, derivative UIs will want to play
+    # with adsb_actions, and you also need to return controllerapp
+    # to start it running.
     return (adsb_actions, controllerapp)
 
 if __name__ == '__main__':
