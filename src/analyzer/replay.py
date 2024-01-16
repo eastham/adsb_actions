@@ -1,11 +1,12 @@
 #!/usr/bin/python3
 """
-Replay a directory of tar1090 trace files, make available on a socket
-or stdout in the same format as tar1090 running in realtime.
+Replay a directory of tar1090 trace files, and make the data available
+in json form, on a socket, or stdout, using the same format as tar1090
+running in realtime.
 
-CAUTION: this silently drops data when run at high speed (>1000x), 
-not sure why.  If you need that kind of speed, probably better to 
-read the data directly from files...
+CAUTION: in socket mode, this silently drops data when run at high
+speed (>1000x), not sure why.  If you need that kind of speed,
+probably better to use the native/json mode.
 """
 
 import argparse
