@@ -1,12 +1,20 @@
 #!/usr/bin/python3
 """
-Replay a directory of tar1090 trace files, and make the data available
-in json form, on a socket, or stdout, using the same format as tar1090
-running in realtime.
+Replay a directory of readsb trace files, and make the data available
+in json form, on a socket, or stdout, using the same format as readsb
+running in realtime (which is unfortunately different from the disk 
+format).
+
+Example Usage:
+Socket output mode: replay.py --port 6666 --utc_convert=-7 --speed_x=.01 [file]
+String output mode: replay.py --utc_convert=-7 --speed_x=.01[file]
+json API:    
+    allpoints = read_data(directory)
+    allpoints_iterable = yield_json_data(allpoints)
 
 CAUTION: in socket mode, this silently drops data when run at high
 speed (>1000x), not sure why.  If you need that kind of speed,
-probably better to use the native/json mode.
+probably better to use the json API.
 """
 
 import argparse
@@ -66,8 +74,8 @@ def yield_json_data(allpoints):
     last_time = datetime.datetime.fromtimestamp(
         last_ts).strftime("%m/%d/%y %H:%M")
 
-    print(
-        f"First point seen at {first_ts} / {first_time}, last at {last_ts} / {last_time}")
+    print(f"First point seen at {first_ts} / {first_time}, last at ",
+          f"{last_ts} / {last_time}")
     print(f"Parse of {len(allpoints)} points complete, ready to connect")
 
     counter = 0
@@ -98,10 +106,8 @@ def main(directory : str, port: int,
 
     if sock:
         print("Waiting for first network connection...")
-        while True:
-            if sock.try_accept():
-                break
-
+    while not sock.try_accept():
+        pass
     send_ctr = 0
 
     # Iterate through the points in time order.  One second at a time,

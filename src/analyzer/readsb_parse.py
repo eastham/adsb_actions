@@ -4,7 +4,7 @@ from datetime import datetime
 pp = pprint.PrettyPrinter(indent=4)
 
 def parse_readsb_json(input_dict: dict, parsed_output: dict, tp_callback = None) -> dict:
-    """Analyze a single tar1090 json file, which contains a handful of aircraft's
+    """Analyze a single readsb json file, which contains a handful of aircraft's
     traces for the day.  Unfortunately it is stored in a totally different
     format than the wire format, which we restore here.
 

@@ -1,5 +1,7 @@
 """Main module to start and build the UI."""
 
+from kivy.clock import Clock, mainthread
+from kivy.uix.floatlayout import FloatLayout
 import signal
 import threading
 import argparse
@@ -12,14 +14,13 @@ from bboxes import Bboxes
 from flight import Flight
 from adsbactions import AdsbActions
 from flightstrip import FlightStrip
-from flightstrip import Controller
 
 import kivy
 kivy.require('1.0.5')
 from kivy.config import Config
 Config.set('graphics', 'width', '600')
 Config.set('graphics', 'height', '800')
-from kivy.clock import Clock, mainthread
+
 from kivymd.app import MDApp
 from dialog import Dialog
 
@@ -125,11 +126,17 @@ class ControllerApp(MDApp):
 
     @mainthread
     def set_strip_color(self, strip_id, color):
+        """Actually write the strip color to the screen."""
         try:
             strip = self.strips[strip_id]
         except KeyError:
             return
         strip.background_color = color
+
+class Controller(FloatLayout):
+    """Placeholder for controller.kv to be loaded into."""
+    def do_add_click(self, n):
+        logging.debug("add click %d" % n)
 
 def sigint_handler(signum, frame):
     exit(1)

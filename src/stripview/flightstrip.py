@@ -16,7 +16,6 @@ from kivy.config import Config
 Config.set('graphics', 'width', '600')
 Config.set('graphics', 'height', '800')
 from kivy.clock import Clock
-from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.button import Button
 
@@ -158,7 +157,7 @@ class FlightStrip:
         Clock.schedule_once(lambda dt: self.set_normal(), 5)
 
     def set_normal(self):
-        """Set strip to its steady-state color based on its state"""
+        """Set strip to its normal color based on its state"""
         if self.bg_color_warn:
             self.main_button.background_color = (1,0,0)
         else:
@@ -181,7 +180,3 @@ class FlightStrip:
         self.note_string = ""
         self.set_normal()
         self.update_strip_text()
-
-class Controller(FloatLayout):
-    def do_add_click(self, n):
-        logging.debug("add click %d" % n)

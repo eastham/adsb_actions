@@ -65,3 +65,4 @@ Each YAML rule contains **conditions** and **actions**.
 
 1. Tests are available: pytest -s tests/*.py
 1. Invoke a sample UI: cd src/stripview ;  python3 controller.py -- --testdata ../../tests/1hr.json --rules ui.yaml --delay .01 ../../tests/test2.kml
+1. Command lines for other sample applications can be found in launch.json.
