@@ -47,6 +47,7 @@ class FlightMonitor(GridLayout):
 
     def generate_button(self, bgcolor, color=WHITE, text=None):
         """Create a button with an optional text."""
+
         if text is None:
             text = ''
         return Button(font_name='Silkscreen-Regular.ttf', text=text,
@@ -72,15 +73,17 @@ class FlightMonitor(GridLayout):
 
     def add_header_row(self, text, color=WHITE):
         """window-spanning headline row"""
+
         button = self.generate_button(text=text, bgcolor=BLACK, color=color)
         self.add_widget(button)
 
     def change_button_text(self, index, text_tuple):
         """Set the text of the row at the given index."""
+
         print(f"change button {index} to {text_tuple}")
         row = self.rowstore[index]
         buttons = row.children
         text_tuple = reversed(text_tuple)
         for i, text in enumerate(text_tuple):
             buttons[i].text = text
-            buttons[i].text_size = buttons[i].size
+            buttons[i].text_size = buttons[i].size  # left-justify text
