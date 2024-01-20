@@ -53,7 +53,7 @@ class AdsbActions:
             self.listen = self._setup_network(ip, port)
 
     def loop(self, string_data = None, iterator_data = None, delay: float = 0.) -> None:
-        """Run forever, processing ADS-B json data on the previously-opened socket.
+        """Process ADS-B json data in a loop on the previously-opened socket.
         Will terminate when socket is closed.
 
         Args:
@@ -83,7 +83,8 @@ class AdsbActions:
 
             # Run a "Checkpoint".
             # Here we do periodic maintenance tasks, and expensive operations.
-            # Note: this will fail during gaps when no aircraft are seen.
+            # Note: this will of course not work during gaps when no aircraft
+            # are seen.
             # If timely expiration/maintenance is needed, dummy events can be
             # injected.
             if (last_read_time and
@@ -98,7 +99,9 @@ class AdsbActions:
 
             if delay:
                 time.sleep(delay)
+
         logger.info("Parsed %s points.", Stats.json_readlines)
+        self.rules.print_final_report()
 
     def register_callback(self, name: str, fn: Callable) -> None:
         """Associate the given name string, used in the configuration YAML,

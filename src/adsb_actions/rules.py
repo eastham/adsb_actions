@@ -5,16 +5,27 @@ import logging
 from flight import Flight
 from stats import Stats
 from typing import Callable
+from ruleexecutionlog import RuleExecutionLog, ExecutionCounter
 
 logger = logging.getLogger(__name__)
-logger.level = logging.INFO
+logger.level = logging.WARNING
 
 class Rules:
-    """This class represents the rules and associated state from one yaml rule file."""
+    """
+    This class represents the conditions, agctions, and associated state from one
+    yaml rule file.
 
-    def __init__(self, data: dict):
+    Attributes:
+        yaml_data (dict): A dictionary containing the data from the YAML file.
+        rule_exection_log (RuleExecutionLog): Tracks when rules were last fired,
+            to support the "cooldown" condition.
+        callbacks (dict[str, Callable]): A dictionary mapping from YAML 
+            name to function.
+    """
+
+    def __init__(self, data):
         self.yaml_data : dict = data
-        self.rule_exection_log = RuleExecutionLog()
+        self.rule_execution_log = RuleExecutionLog()
         self.callbacks : dict[str, Callable]= {}    # mapping from yaml name to fn
         # TODO add some sanity checks to rules...no duplicate rule names, at least...
 
@@ -32,7 +43,6 @@ class Rules:
                 self.do_actions(flight, rule_value['actions'], rule_name)
             else:
                 logger.debug("NOMATCH for rule '%s' for flight %s", rule_name, flight.flight_id)
-
 
     def conditions_match(self, flight: Flight, conditions: dict,
                          rule_name: str) -> bool:
@@ -83,7 +93,7 @@ class Rules:
         if 'cooldown' in conditions:
             match_count += 1
             condition_value = conditions['cooldown']
-            result &= not self.rule_exection_log.within_cooldown(rule_name,
+            result &= not self.rule_execution_log.within_cooldown(rule_name,
                                                                  flight.flight_id,
                                                                  condition_value * 60,
                                                                  flight.lastloc.now)
@@ -96,11 +106,13 @@ class Rules:
 
     def do_actions(self, flight: Flight, action_items: dict, rule_name: str,
                    cb_arg = None) -> None:
-        """Execute the actions for the given flight."""
+        """Rule matched, now execute the actions for the given flight."""
+
+        self.rule_execution_log.log(rule_name, flight.flight_id, 
+                                    flight.lastloc.now, 
+                                    flight.flags.get('note', ''))
 
         for action_name, action_value in action_items.items():
-            self.rule_exection_log.log(rule_name, flight.flight_id, flight.lastloc.now)
-
             if 'webhook' == action_name:
                 Stats.webhooks_fired += 1
                 # TODO not implemented - see page.py for more info
@@ -139,6 +151,9 @@ class Rules:
             elif 'expire_callback' == action_name:
                 pass # this is handled upon asynchronous expiration in do_expire()
 
+            elif 'track' == action_name:
+                pass # handled after execution is complete
+
             else:
                 logger.warning("Unmatched action: %s", action_name)
 
@@ -166,6 +181,16 @@ class Rules:
         ret = []
         for rule_name, rule_body in rules_list.items():
             if condition_type in rule_body['conditions']:
+                ret.append((rule_name, rule_body))
+        return ret
+
+    def get_rules_with_action(self, action_type) -> list:
+        """Returns a list of name/rule tuples that have an action of the given type."""
+
+        rules_list = self.yaml_data['rules']
+        ret = []
+        for rule_name, rule_body in rules_list.items():
+            if action_type in rule_body['actions']:
                 ret.append((rule_name, rule_body))
         return ret
 
@@ -208,30 +233,16 @@ class Rules:
                         self.do_actions(flight1, rule_body['actions'], rule_name,
                                         flight2)
 
-class RuleExecutionLog:
-    """Keep track of last execution times for each rule/aircraft.
-    This enables the "cooldown" condition to inhibit rules that 
-    shouldn't fire frequently (like a rule sending a pager alert)
-    
-    Basically a dict of (rulename, flight_id) -> last-execution-timestamp"""
+    def print_final_report(self):
+        """Print a report of rule execution statistics, for any rule
+        that contains a "track" action."""
 
-    def __init__(self):
-        # (rulename, flight_id) -> last-execution-timestamp
-        self.log_entries: dict[tuple[str, str], int] = {}
+        tracked_rules = self.get_rules_with_action("track")
+        for rule_name, _ in tracked_rules:
+            log = self.rule_execution_log
+            if rule_name in log.rule_execution_counters:
+                counter = log.rule_execution_counters[rule_name]
+            else:
+                counter = ExecutionCounter(rule_name)
 
-    def log(self, rulename: str, flight_id: str, now: int) -> None:
-        """Log a firing of the given rulename + flight"""
-        entry_key = self._generate_entry_key(rulename, flight_id)
-        self.log_entries[entry_key] = now
-
-    def within_cooldown(self, rulename: str, flight_id: str, cooldown_secs: int, 
-                        now: int) -> bool:
-        """Has the given rulename fired for the given flight within cooldown_secs?"""
-        entry_key = self._generate_entry_key(rulename, flight_id)
-        if entry_key in self.log_entries:
-            if now - self.log_entries[entry_key] < cooldown_secs:
-                return True
-        return False
-
-    def _generate_entry_key(self, rulename: str, flight_id: str) -> tuple:
-        return rulename, flight_id
+            counter.print_report()
