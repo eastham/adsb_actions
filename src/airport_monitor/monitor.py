@@ -10,6 +10,8 @@ from kivy.app import App
 from kivy.uix.textinput import TextInput
 from kivy.clock import Clock, mainthread
 from kivy.utils import escape_markup
+from kivy.core.window import Window
+Window.size = (1000, 800)
 
 sys.path.insert(0, '../adsb_actions')
 from bboxes import Bboxes
@@ -20,11 +22,34 @@ logger = logging.getLogger(__name__)
 logger.level = logging.DEBUG
 adsb_actions = None
 
+from kivy.uix.image import Image
+from kivy.uix.boxlayout import BoxLayout
+
+from kivy.uix.floatlayout import FloatLayout
+
+from kivy.core.window import Window
+
 class Monitor(App):
     def build(self):
-        self.text_input = TextInput(multiline=True)
-        self.update_text("Loading...")
-        return self.text_input
+        self.text_input = TextInput(multiline=True, pos=(200, -300))
+        self.image = Image(source='tv2.png', fit_mode='fill')
+
+        layout = FloatLayout()
+        layout.add_widget(self.text_input)
+        layout.add_widget(self.image)
+
+        # setup sizes and positions once the window is renderedq
+        layout.bind(size=self.on_size, pos=self.on_pos)
+
+        return layout
+
+    def on_size(self, instance, value):
+        self.text_input.size = value
+        self.image.size = value
+
+    def on_pos(self, instance, value):
+        self.text_input.pos = value
+        self.image.pos = value
 
     def update_text(self, text):
         self.text_input.text = text
