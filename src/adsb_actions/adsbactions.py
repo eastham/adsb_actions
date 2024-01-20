@@ -58,8 +58,10 @@ class AdsbActions:
 
         Args:
             string_data: optional: process this strinfigied JSON data instead
+                of going to network
             iterator_data: optional: process data from this iterator that yields
-                JSON instead
+                JSON instead of going to network.  Used for streaming large 
+                amounts of data.
             delay: pause for this many seconds between input lines, for testing.
                 .01-.05 is reasonable to be able to see what's going on.
         """
@@ -156,18 +158,15 @@ class AdsbActions:
             if self.listen:
                 line = self.listen.readline()
                 if not line:
-                    return -1
+                    return -1   # file EOF
                 jsondict = json.loads(line)
             else:
                 jsondict = next(self.data_iterator)
 
         except json.JSONDecodeError:
-            if not self.listen.sock:
-                return -1  # test environment
             logger.error("JSON Parse fail: %s", line)
-            # fall through
         except StopIteration:
-            return -1
+            return -1       # iterator EOF
         except Exception:
             logger.error("Socket input error")
             if self.listen.retry:
@@ -175,10 +174,9 @@ class AdsbActions:
                 logger.error("Attempting reconnect...")
                 time.sleep(2)
                 self.listen.connect()
+                return 0
             else:
                 return -1
-                # sys.exit(0) # XXX adsb_pusher used this
-            return 0
 
         logger.debug("Read json: %s ", str(jsondict))
         Stats.json_readlines += 1
