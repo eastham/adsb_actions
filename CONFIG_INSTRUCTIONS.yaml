@@ -26,7 +26,8 @@
         webhook: True        # slack etc
         print: True          # print info about this aircraft to console
         note: "text flag"    # apply this note to aircraft, for use in later callbacks
-
+        note: ~              # clear note
+        track: True          # track execution statistics for this rule, to be printed later
 
 # Other notes:
 # - Callbacks take one arg (the flight) unless matching on a proximity condition -- in that
