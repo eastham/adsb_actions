@@ -19,6 +19,20 @@ class Flights:
         self.lock: threading.Lock = threading.Lock()    # XXX may not be needed anymore...
         self.bboxes : list[bboxes.BBoxes] = bboxes      # all bboxes in the system.
         self.last_checkpoint = 0                        # timestamp of last maintenance
+        self.iterator_index = 0                         # support for __next__()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.iterator_index >= len(self.flight_dict):
+            self.iterator_index = 0
+            raise StopIteration
+        keys = list(self.flight_dict.keys())
+        key = keys[self.iterator_index]
+        self.iterator_index += 1
+
+        return self.flight_dict[key]
 
     def add_location(self, loc: Location, rules: Rules) -> float:
         """
