@@ -1,4 +1,4 @@
-<h2>adsb-actions: A package for taking actions based on ADS-B data.</h2>
+<h2>adsb-actions: A package for taking actions based on live or recorded ADS-B data.</h2>
 
 This module allows you apply conditions and actions to data coming from [readsb](https://github.com/wiedehopf/readsb), or another ADS-B
 data provider.  The conditions and actions are specified in a simple human-readable YAML format.  
