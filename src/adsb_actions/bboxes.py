@@ -1,4 +1,9 @@
 """Representation for bounding boxes found in kml files.
+These must be specified in the KML as a Polygon with a name of the form:
+label: minalt-maxalt minhdg-maxhdg
+For example:
+Rwy 25 Approach: 4500-5500 230-270
+
 Note there is a Bbox object and a Bboxes object, the latter containing Bbox objects."""
 
 import logging

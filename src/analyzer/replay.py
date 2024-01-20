@@ -7,7 +7,7 @@ format).
 
 Example Usage:
 Socket output mode: replay.py --port 6666 --utc_convert=-7 --speed_x=.01 [file]
-String output mode: replay.py --utc_convert=-7 --speed_x=.01[file]
+String output mode: replay.py --utc_convert=-7 --speed_x=.01 [file]
 json API:    
     allpoints = read_data(directory)
     allpoints_iterable = yield_json_data(allpoints)

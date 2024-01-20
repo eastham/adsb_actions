@@ -1,10 +1,12 @@
-"""This is the main API For the library.
+"""This is the main API For the AdsbActions library.
 
 The following code will instantiate the library, attempt to connect to a network
 socket, and process the ADS-B data coming in:
     adsb_actions = AdsbActions(yaml_config, ip=args.ipaddr, port=args.port)
-    adsb_actions.register_callback("nearby_cb", nearby_cb)
     adsb_actions.loop()
+
+Also useful, to support rules that want to call code:
+    adsb_actions.register_callback("nearby_cb", nearby_cb)
 
 See CONFIGURATION_INSTRUCTIONS.yaml for yaml_config specs.
 """
