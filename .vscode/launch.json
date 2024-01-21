@@ -53,7 +53,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}/src/adsb_actions",
             "program": "main.py",
-            "args": "--ipaddr 127.0.0.1 --port 6666 ../op_pusher/rules.yaml",
+            "args": "--ipaddr 127.0.0.1 --port 6666 basic_rules.yaml",
             "console": "integratedTerminal",
             "justMyCode": true
         },

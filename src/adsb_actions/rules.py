@@ -19,8 +19,9 @@ class Rules:
         yaml_data (dict): A dictionary containing the data from the YAML file.
         rule_exection_log (RuleExecutionLog): Tracks when rules were last fired,
             to support the "cooldown" condition.
-        callbacks (dict[str, Callable]): A dictionary mapping from YAML 
-            name to function.
+        callbacks (dict[str, Callable]): callbacks that were registered with
+            AdsbActions.register_callback().  Mapping from callback name to 
+            function.
     """
 
     def __init__(self, data):
@@ -122,7 +123,7 @@ class Rules:
                 timestamp = datetime.datetime.fromtimestamp(
                     flight.lastloc.now).strftime("%m/%d/%y %H:%M")
                 print(
-                    f"{timestamp}: Rule {rule_name} matched for {flight.flight_id}",
+                    f"{timestamp}: Rule {rule_name} matched for {flight.to_str()}",
                     f"{flight.flags.get('note', '')}")
 
             elif 'callback' == action_name:

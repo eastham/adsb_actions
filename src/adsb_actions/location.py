@@ -46,7 +46,7 @@ class Location:
         return Location(**nd)
 
     def to_str(self):
-        s = "%s: %d MSL %d deg %.1f kts %.4f, %.4f" % (self.flight, self.alt_baro,
+        s = "%s: %d MSL %d deg %.1f kts %.4f, %.4f" % (self.tail, self.alt_baro,
             self.track, self.gs, self.lat, self.lon)
         return s
 

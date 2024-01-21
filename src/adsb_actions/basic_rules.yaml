@@ -1,0 +1,10 @@
+
+  rules:
+    print_all_aircraft:
+      conditions:
+        min_alt: 0
+        max_alt: 40000
+        cooldown: 1
+
+      actions:
+        print: True
