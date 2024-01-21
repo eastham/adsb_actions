@@ -33,10 +33,8 @@ if __name__ == "__main__":
     parser.add_argument('yaml', help='Path to the YAML file')
     args = parser.parse_args()
 
-    with open(args.yaml, 'r', encoding='utf-8') as file:
-        yaml_data = yaml.safe_load(file)
     setup_logger()
 
-    adsb_actions = AdsbActions(yaml_data, ip=args.ipaddr, port=args.port)
+    adsb_actions = AdsbActions(yaml_file=args.yaml, ip=args.ipaddr, port=args.port)
     adsb_actions.loop()
  

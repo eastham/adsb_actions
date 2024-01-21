@@ -50,11 +50,11 @@ Each YAML rule contains **conditions** and **actions**.
 
 ```
     # First, (re)start your readsb including the option --net-json-port=[port]
-    # This exposes a json-parsed live stream on that port.  
-    # To receive the data:
+    # This exposes a json-formatted live stream on that port. 
+    # Then, to receive the data:
 
-    adsb_actions = AdsbActions(yaml_config, ip=[ipaddr], port=[port])
-    adsb_actions.register_callback("nearby_cb", nearby_cb)
+    yaml_file = "src/adsb_actions/basic_config.yaml" # simple test config
+    adsb_actions = AdsbActions(yaml_file=yaml_file, ip=[ipaddr], port=[port])
     adsb_actions.loop()
 ```
 

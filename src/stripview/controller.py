@@ -162,9 +162,6 @@ def setup(focus_q, admin_q):
     if args.ipaddr and args.delay:
         logger.warning("--delay has no effect when ipaddr is given")
 
-    with open(args.rules, 'r', encoding='utf-8') as file:
-        yaml_data = yaml.safe_load(file)
-
     # Load state needed to define and label the 4 strip racks.
     bboxes_list = [] 
     for f in args.file:
@@ -178,9 +175,10 @@ def setup(focus_q, admin_q):
     # Setup flight data handling.
     json_data = None
     if not args.testdata:
-        adsb_actions = AdsbActions(yaml_data, ip=args.ipaddr, port=args.port)
+        adsb_actions = AdsbActions(
+            yaml_file=args.rules, ip=args.ipaddr, port=args.port)
     else:
-        adsb_actions = AdsbActions(yaml_data)
+        adsb_actions = AdsbActions(yaml_file=args.rules)
 
         with open(args.testdata, 'rt', encoding="utf-8") as myfile:
             json_data = myfile.read()

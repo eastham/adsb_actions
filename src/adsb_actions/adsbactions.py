@@ -17,6 +17,7 @@ import time
 import signal
 import socket
 import sys
+import yaml
 from io import StringIO
 from typing import Callable
 
@@ -31,12 +32,15 @@ logger = logging.getLogger(__name__)
 class AdsbActions:
     """Main API for the library."""
 
-    def __init__(self, yaml, ip=None, port=None, bboxes=None):
+    def __init__(self, yaml_data=None, yaml_file=None, ip=None, port=None, 
+                 bboxes=None):
         """Main API for the library.  You can provide connection info in the
         constructor here, or specify data sources in the subsequent call to
-        loop().
+        loop().  Either yaml_data or yaml_file must be specified.
 
         Args:
+            yaml_data: optional yaml data to use instead of loading from a file
+            yaml_file: optional path to a yaml file to load
             ip: optional ip address to connect to
             port: optional port to conect to
             exit_cb: optional callback to fire when socket closes or EOF is
@@ -44,8 +48,13 @@ class AdsbActions:
             bboxes: optional - forces what bounding boxes the system uses,
                 overriding anything specified in the yaml."""
 
-        self.flights = Flights(bboxes or self._load_bboxes(yaml))
-        self.rules = Rules(yaml)
+        assert yaml_data or yaml_file, "Must provide yaml or yaml_file"
+        if yaml_file:
+            with open(yaml_file, 'r', encoding='utf-8') as file:
+                yaml_data = yaml.safe_load(file)
+
+        self.flights = Flights(bboxes or self._load_bboxes(yaml_data))
+        self.rules = Rules(yaml_data)
         self.listen = None
         self.data_iterator = None
 
