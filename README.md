@@ -1,7 +1,9 @@
 <h2>adsb-actions: A package for taking actions based on live or recorded ADS-B data.</h2>
 
-This module allows you apply conditions and actions to data coming from [readsb](https://github.com/wiedehopf/readsb), or another ADS-B
-data provider.  The conditions and actions are specified in a simple human-readable YAML format.  
+This module allows you apply conditions and actions to JSON flight
+data coming from [readsb](https://github.com/wiedehopf/readsb), or
+another ADS-B data provider.  The conditions and actions are
+specified in a simple human-readable YAML format.
 
 These actions can then:
 - Drive a UI
@@ -47,8 +49,12 @@ Each YAML rule contains **conditions** and **actions**.
 <h3>API Usage:</h3>
 
 ```
-    adsb_actions = AdsbActions(yaml_config, ip=args.ipaddr, port=args.port)
-    adsb_actions.register_callback("nearby_cb", nearby_cb)
+    # First, (re)start your readsb including the option --net-json-port=[port]
+    # This exposes a json-formatted live stream on that port. 
+    # Then, to receive the data:
+
+    yaml_file = "src/adsb_actions/basic_config.yaml" # simple test config
+    adsb_actions = AdsbActions(yaml_file=yaml_file, ip=[ipaddr], port=[port])
     adsb_actions.loop()
 ```
 

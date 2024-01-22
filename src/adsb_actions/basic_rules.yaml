@@ -1,3 +1,4 @@
+# Just print all aircraft seen every minute.
 
   rules:
     print_all_aircraft:

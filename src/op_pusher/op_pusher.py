@@ -56,16 +56,13 @@ def run(focus_q, admin_q):
     if args.ipaddr and args.delay:
         logger.warning("--delay has no effect when ipaddr is given")
 
-    with open(args.rules, 'r', encoding='utf-8') as file:
-        yaml_data = yaml.safe_load(file)
-
     json_data = None
     if not args.testdata:
-        adsb_actions = AdsbActions(yaml_data, ip=args.ipaddr, port=args.port)
+        adsb_actions = AdsbActions(yaml_file=args.rules, ip=args.ipaddr, port=args.port)
     else:
         with open(args.testdata, 'rt', encoding="utf-8") as myfile:
             json_data = myfile.read()
-        adsb_actions = AdsbActions(yaml_data)
+        adsb_actions = AdsbActions(yaml_file=args.rules)
 
     adsb_actions.register_callback("landing", landing_cb)
     adsb_actions.register_callback("takeoff", takeoff_cb)
