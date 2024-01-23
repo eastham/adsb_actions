@@ -7,7 +7,6 @@ import webbrowser
 import sys
 import logging
 
-from dbinterface import DbInterface
 sys.path.insert(0, '../adsb_actions')
 
 import kivy
@@ -22,7 +21,7 @@ from kivy.uix.button import Button
 logger = logging.getLogger(__name__)
 logger.level = logging.DEBUG
 
-USE_DATABASE = True
+USE_DATABASE = False
 SERVER_REFRESH_RATE = 60 # seconds
 
 class FlightStrip:
@@ -65,6 +64,8 @@ class FlightStrip:
         self.main_button.background_normal = ''  # colors don't render right without this
 
         if USE_DATABASE:
+            from dbinterface import DbInterface
+
             self.db_interface = DbInterface(self.flight, self.handle_db_update)
             self.update_thread = threading.Thread(target=self.server_refresh_thread)
             self.update_thread.start()
