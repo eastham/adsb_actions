@@ -43,7 +43,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}/src/analyzer",
             "program": "replay.py",
-            "args": "--port 6666  --speed_x 1000 ~/adsb_data/2023/08/30",
+            "args": "--port 6666  --speed_x 1000 ../../tests/sample_readsb_data",
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -63,7 +63,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}/src/analyzer",
             "program": "analyze_from_files.py",
-            "args": "~/adsb_data/2023/08/30",
+            "args": "../../tests/sample_readsb_data",
             "console": "integratedTerminal",
             "justMyCode": true
         },

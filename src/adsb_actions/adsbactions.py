@@ -190,8 +190,9 @@ class AdsbActions:
         logger.debug("Read json: %s ", str(jsondict))
         Stats.json_readlines += 1
 
-        if jsondict:
-            # We got some data, process it.
+        if jsondict and 'alt_baro' in jsondict:
+            # We got some valid data, process it. (points with no altitude 
+            # are ignored, they are likely to be dummy entries anyway)
             loc_update = Location.from_dict(jsondict)
             return self.flights.add_location(loc_update, self.rules)
 
