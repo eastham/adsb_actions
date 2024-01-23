@@ -19,7 +19,7 @@ YAML_STRING = """
     banned_aircraft:
       conditions:
         aircraft_list: banned
-        cooldown: 180 # seconds
+        cooldown: 3     # minutes
       actions:
         callback: test_callback
 """

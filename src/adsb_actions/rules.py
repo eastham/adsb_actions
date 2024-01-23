@@ -93,10 +93,10 @@ class Rules:
 
         if 'cooldown' in conditions:
             match_count += 1
-            condition_value = conditions['cooldown']
+            cooldown_secs = int(conditions['cooldown']) * 60
             result &= not self.rule_execution_log.within_cooldown(rule_name,
                                                                  flight.flight_id,
-                                                                 condition_value * 60,
+                                                                 cooldown_secs,
                                                                  flight.lastloc.now)
 
         if match_count < len(conditions):
