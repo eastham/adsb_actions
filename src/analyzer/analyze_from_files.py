@@ -30,15 +30,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=
         "Detect landings/takeoffs/etc from directory of readsb output files.")
     parser.add_argument("-d", "--debug", action="store_true") # XXX not implemented
+    parser.add_argument('--yaml', help='Path to the YAML file')
     parser.add_argument('directory', help='Path to the data')
     args = parser.parse_args()
 
-    with open(YAML_FILE, 'r', encoding='utf-8') as file:
-        yaml_data = yaml.safe_load(file)
+    if args.yaml:
+        fn = args.yaml
+    else:
+        fn = YAML_FILE
 
     allpoints = replay.read_data(args.directory)
     allpoints_iterator = replay.yield_json_data(allpoints)
 
-    adsb_actions = AdsbActions(yaml_data)
+    adsb_actions = AdsbActions(yaml_file=fn)
     adsb_actions.loop(iterator_data = allpoints_iterator)
  
