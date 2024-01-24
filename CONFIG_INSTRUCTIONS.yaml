@@ -19,6 +19,7 @@
         latlongring: [20, 40.763537, -119.2122323] # nm, lat, long
         proximity: [400, .3] # alt separation in feet, lateral separation in nm
         cooldown: 1          # minutes to wait before matching again
+        has_attr: wd         # last report has a json element matching the string
       actions:
         # what should we do when triggered?
         callback: ground_cb  # call a function as specified by AdsbActions.register_callback()

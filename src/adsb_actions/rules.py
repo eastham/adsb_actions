@@ -99,6 +99,14 @@ class Rules:
                                                                  cooldown_secs,
                                                                  flight.lastloc.now)
 
+        if 'has_attr' in conditions:
+            match_count += 1
+            condition_value = conditions['has_attr']
+            if flight.lastloc.flightdict:
+                result &= condition_value in flight.lastloc.flightdict
+            else:
+                result = False
+
         if match_count < len(conditions):
             logger.critical("unmatched condition: %s", conditions.keys())
 
@@ -130,8 +138,8 @@ class Rules:
                 Stats.callbacks_fired += 1
                 Stats.last_callback_flight = flight
                 if not action_value in self.callbacks:
-                    logger.debug("No callback defined: %s, %s", 
-                                 rule_name, flight.flight_id)
+                    logger.error("No callback defined: %s, %s",
+                                 action_value, flight.flight_id)
                     continue
 
                 logger.debug("Doing callback for %s", flight.flight_id)
