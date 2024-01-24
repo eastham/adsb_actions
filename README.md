@@ -64,7 +64,7 @@ Each YAML rule contains **conditions** and **actions**.
 1. python3 -m venv .venv
 1. source .venv/bin/activate
 1. pip3 install .
-1. (install geos native library: https://libgeos.org/usage/install/)
+1. (install geos native library: https://libgeos.org/usage/install/ -- "apt_get install geos" may do it)
 1. pytest -s tests/test_1hr.py
 
 <h3> Quick initial testing: </h3>
@@ -72,12 +72,12 @@ Each YAML rule contains **conditions** and **actions**.
 1. Add "--net-json-port <port number> to readsb startup args as adsb_actions reads the json output
 1. Run python3 src/adsb_actions/main.py --ipaddr <readsb host> --port <port nunber> src/adsb_actions/basic_rules.yaml
 1. you should see output for the aircraft readsb is seeing.
-Successful Connection
-INFO:adsbactions:Setup done
-01/21/24 14:38: Rule print_all_aircraft matched for N57111: 5350 MSL 141 deg 166.6 kts 37.8715, -122.2719
-01/21/24 14:38: Rule print_all_aircraft matched for N449WN: 7150 MSL 322 deg 194.8 kts 37.8703, -122.1147
+    Successful Connection
+    INFO:adsbactions:Setup done
+    01/21/24 14:38: Rule print_all_aircraft matched for N57111: 5350 MSL 141 deg 166.6 kts 37.8715, -122.2719
+    01/21/24 14:38: Rule print_all_aircraft matched for N449WN: 7150 MSL 322 deg 194.8 kts 37.8703, -122.1147
 
-<h3> Running and testing: </h3>
+<h3> More things to try: </h3>
 
 1. Tests are available: pytest -s tests/*.py
 1. Invoke a sample UI: cd src/stripview ;  python3 controller.py -- --testdata ../../tests/1hr.json --rules ui.yaml --delay .01 ../../tests/test2.kml
