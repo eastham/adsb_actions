@@ -44,7 +44,8 @@ def parse_readsb_json(input_dict: dict, parsed_output: dict, tp_callback = None)
 
         # Add this location to allpoints
         newdict = {'now': this_ts, 'alt_baro': alt, 'gscp': gs, 'lat': lat,
-            'lon':long, 'track': track, 'hex': icao_num, 'flight': flight_str}
+            'lon':long, 'track': track, 'hex': icao_num, 'flight': flight_str,
+            'flightdict': flightdict}
 
         if this_ts in parsed_output:
             parsed_output[this_ts].append(newdict)

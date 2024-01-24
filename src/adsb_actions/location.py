@@ -21,6 +21,7 @@ class Location:
     tail: Optional[str] = None  # tail number from ICAO code
     gs: Optional[float] = 0
     track: float = 0.
+    flightdict: Optional[dict] = None
 
     def __post_init__(self):
         """sometimes these values come in as strings when not available"""
