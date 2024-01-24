@@ -53,10 +53,10 @@ def parse_files(files: list) -> dict:
         fd = gzip.open(file, mode="r")
         try:
             jsondict = json.loads(fd.read())
+        except gzip.BadGzipFile:
+            print(f"Failed to un-gzip file {file}, skipping.")
         except Exception as e:
-            print("failed to parse " + file)
-            raise e
-
+            print(f"JSON parse error in file {file}, skipping: {e}")
         readsb_parse.parse_readsb_json(jsondict, allpoints)
 
     return allpoints
