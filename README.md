@@ -2,7 +2,7 @@
 
 This module allows you to apply conditions and actions to JSON flight
 data coming from [readsb](https://github.com/wiedehopf/readsb), or
-another ADS-B data provider.  The conditions and actions are
+other ADS-B data provider.  The conditions and actions are
 specified in a simple human-readable YAML format.
 
 These actions can then:
@@ -53,7 +53,7 @@ Each YAML rule contains **conditions** and **actions**.
     # This exposes a json-formatted live stream on that port. 
     # Then, to receive the data:
 
-    yaml_file = "src/adsb_actions/basic_config.yaml" # simple test config
+    yaml_file = "src/adsb_actions/basic_rules.yaml" # simple test config
     adsb_actions = AdsbActions(yaml_file=yaml_file, ip=[ipaddr], port=[port])
     adsb_actions.loop()
 ```
