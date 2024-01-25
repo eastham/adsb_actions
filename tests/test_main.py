@@ -52,14 +52,12 @@ def test_main(adsb_state):
 
     assert Stats.json_readlines == 1
     assert Stats.condition_match_calls == 2
-    assert Stats.condition_matches_true == 1
     assert Stats.callbacks_fired == 0
 
     adsb_state.loop(JSON_STRING_AIR)
 
     assert Stats.json_readlines == 2
     assert Stats.condition_match_calls == 4  # 2 per position
-    assert Stats.condition_matches_true == 3  # 1 the first positon, 2 second
     assert Stats.callbacks_fired == 1
 
 # test proper handling of non-US ICAO hex codes.
@@ -77,5 +75,3 @@ def test_foreign_icao(adsb_state):
     adsb_state.loop(JSON_MEXICO_GROUND)
     adsb_state.loop(JSON_MEXICO_AIR)
     assert Stats.callbacks_fired == 2
-
-

@@ -69,6 +69,7 @@ def read_data(directory):
     return allpoints
 
 def yield_json_data(allpoints):
+
     first_ts = min(allpoints.keys())
     last_ts = max(allpoints.keys())
     first_time = datetime.datetime.fromtimestamp(
@@ -78,7 +79,7 @@ def yield_json_data(allpoints):
 
     print(f"First point seen at {first_ts} / {first_time}, last at ",
           f"{last_ts} / {last_time}")
-    print(f"Parse of {len(allpoints)} points complete, ready to connect")
+    print(f"Parse of {len(allpoints)} points complete, beginning processing...")
 
     counter = 0
     for k in range(first_ts, last_ts):
@@ -102,6 +103,9 @@ def main(directory : str, port: int,
 
     print("Parsing data...")
     allpoints = read_data(directory)
+    if not allpoints:
+        print("No data found, exiting.")
+        sys.exit(1)
     allpoints_iterable = yield_json_data(allpoints)
 
     sock = Socket('0.0.0.0', port) if port else 0

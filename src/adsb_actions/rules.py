@@ -28,7 +28,11 @@ class Rules:
         self.yaml_data : dict = data
         self.rule_execution_log = RuleExecutionLog()
         self.callbacks : dict[str, Callable]= {}    # mapping from yaml name to fn
-        # TODO add some sanity checks to rules...no duplicate rule names, at least...
+
+        # YAML rules correctness checks
+        for rule in self.yaml_data['rules'].values():
+            assert self.conditions_valid(rule['conditions']), "Invalid conditions"
+            assert self.actions_valid(rule['actions']), "Invalid actions"
 
     def process_flight(self, flight: Flight) -> None:
         """Apply rules and actions to the current position of a given flight. """
@@ -45,73 +49,116 @@ class Rules:
             else:
                 logger.debug("NOMATCH for rule '%s' for flight %s", rule_name, flight.flight_id)
 
+    def conditions_valid(self, conditions: dict):
+        """Check for invalid or unknown conditions, return True if valid."""
+        VALID_CONDITIONS = ['proximity', 'aircraft_list', 'min_alt', 'max_alt',
+                            'transition_regions', 'regions', 'latlongring',
+                            'cooldown', 'has_attr', 'min_time', 'max_time']
+
+        for condition in conditions.keys():
+            if condition not in VALID_CONDITIONS:
+                logger.error("Unknown condition: %s", condition)
+                return False
+        return True
+
     def conditions_match(self, flight: Flight, conditions: dict,
                          rule_name: str) -> bool:
-        """Determine if the given rule conditions match for the given flight."""
+        """Determine if the given rule conditions match for the given 
+        flight.  Put expensive rules toward the bottom for performance
+        reasons."""
 
         logger.debug("condition_match checking rules: %s", str(conditions))
         Stats.condition_match_calls += 1
-        match_count = 0
-        result = True
-
-        if 'aircraft_list' in conditions:
-            match_count += 1
-            condition_value = conditions['aircraft_list']
-            ac_list = self.yaml_data['aircraft_lists'][condition_value]
-            result &= flight.flight_id in ac_list
-
-        if 'min_alt' in conditions:
-            match_count += 1
-            condition_value = conditions['min_alt']
-            result &= flight.lastloc.alt_baro >= int(condition_value)
-
-        if 'max_alt' in conditions:
-            match_count += 1
-            condition_value = conditions['max_alt']
-            result &= flight.lastloc.alt_baro <= int(condition_value)
-
-        if 'transition_regions' in conditions:
-            match_count += 1
-            condition_value = conditions['transition_regions']
-            result &= (flight.was_in_bboxes([condition_value[0]]) and
-                       flight.is_in_bboxes([condition_value[1]]))
-
-        if 'regions' in conditions:
-            match_count += 1
-            condition_value = conditions['regions']
-            result &= flight.is_in_bboxes(condition_value)
-
-        if 'latlongring' in conditions:
-            match_count += 1
-            condition_value = conditions['latlongring']
-            dist = flight.lastloc.distfrom(condition_value[1], condition_value[2])
-            result &= condition_value[0] >= dist
 
         if 'proximity' in conditions:
-            match_count += 1
-            result = False  # handled asynchronously in handle_proximity_conditions
+            return False  # handled asynchronously in handle_proximity_conditions
+
+        if 'aircraft_list' in conditions:
+            condition_value = conditions['aircraft_list']
+            ac_list = self.yaml_data['aircraft_lists'][condition_value]
+            result = flight.flight_id in ac_list
+            if not result:
+                return False
+    
+        if 'min_alt' in conditions:
+            condition_value = conditions['min_alt']
+            result = flight.lastloc.alt_baro >= int(condition_value)
+            if not result:
+                return False
+
+        if 'max_alt' in conditions:
+            condition_value = conditions['max_alt']
+            result = flight.lastloc.alt_baro <= int(condition_value)
+            if not result:
+                return False
+
+        if 'transition_regions' in conditions:
+            condition_value = conditions['transition_regions']
+            result = (flight.was_in_bboxes([condition_value[0]]) and
+                       flight.is_in_bboxes([condition_value[1]]))
+            if not result:
+                return False
+
+        if 'regions' in conditions:
+            condition_value = conditions['regions']
+            result = flight.is_in_bboxes(condition_value)
+            if not result:
+                return False
+
+        if 'latlongring' in conditions:
+            condition_value = conditions['latlongring']
+            dist = flight.lastloc.distfrom(
+                condition_value[1], condition_value[2])
+            result = condition_value[0] >= dist
+            if not result:
+                return False
 
         if 'cooldown' in conditions:
-            match_count += 1
-            cooldown_secs = int(conditions['cooldown']) * 60
-            result &= not self.rule_execution_log.within_cooldown(rule_name,
-                                                                 flight.flight_id,
-                                                                 cooldown_secs,
-                                                                 flight.lastloc.now)
+            cooldown_secs = int(conditions['cooldown'] * 60)
+            result = not self.rule_execution_log.within_cooldown(rule_name,
+                                                            flight.flight_id,
+                                                            cooldown_secs,
+                                                            flight.lastloc.now)
+            if not result:
+                return False
 
         if 'has_attr' in conditions:
-            match_count += 1
             condition_value = conditions['has_attr']
             if flight.lastloc.flightdict:
-                result &= condition_value in flight.lastloc.flightdict
+                result = condition_value in flight.lastloc.flightdict
             else:
                 result = False
+            if not result:
+                return False
 
-        if match_count < len(conditions):
-            logger.critical("unmatched condition: %s", conditions.keys())
+        if 'min_time' in conditions:
+            condition_value = conditions['min_time']
+            ts_24hr = int(datetime.datetime.utcfromtimestamp(
+                flight.lastloc.now).strftime("%H%M"))
+            result = (ts_24hr >= condition_value)
+            if not result:
+                return False
 
-        Stats.condition_matches_true += match_count if result else 0
-        return result
+        if 'max_time' in conditions:
+            condition_value = conditions['max_time']
+            ts_24hr = int(datetime.datetime.utcfromtimestamp(
+                flight.lastloc.now).strftime("%H%M"))
+            result = (ts_24hr <= condition_value)
+            if not result:
+                return False
+
+        return True
+
+    def actions_valid(self, actions: dict):
+        """Check for invalid or unknown actions, return True if valid."""
+        VALID_ACTIONS = ['webhook', 'print', 'callback', 'note', 'track',
+                         'expire_callback']
+
+        for action in actions.keys():
+            if action not in VALID_ACTIONS:
+                logger.error("Unknown action: %s", action)
+                return False
+        return True
 
     def do_actions(self, flight: Flight, action_items: dict, rule_name: str,
                    cb_arg = None) -> None:
