@@ -40,7 +40,7 @@ def send_page(recipient: str, msg: str):
     try:
         recipient_id = CONFIG.private_vars['page_recipients'][recipient.lower()]
     except KeyError:
-        print(f"Recipient {recipient} not found in config")
+        print(f"Failed: Recipient \"{recipient}\" not found in config")
         return False
 
     body = {
@@ -60,7 +60,7 @@ def send_page(recipient: str, msg: str):
     requests_log.propagate = True
 
     response = requests.Session().post(CONFIG.private_vars['page_url'],
-                                       json=body)
+                                       json = body)
     success = "success" in response.json().get('status')
 
     print("Page success: " + str(success))
@@ -68,7 +68,11 @@ def send_page(recipient: str, msg: str):
     return success
 
 if __name__ == "__main__":
-    # first arg: recipient, remaining args: message
+    if len(sys.argv) < 3:
+        print("Usage: page.py <recipient> <message ...>")
+        print("Example: page.py deputy The network is down!")
+        sys.exit(1)
+
     ret = send_page(sys.argv[1], " ".join(sys.argv[2:]))
 
     sys.exit(0 if ret else 1)
