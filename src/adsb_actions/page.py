@@ -2,8 +2,9 @@
 
 import logging
 import requests
-import playapage
+import sys
 from config import Config
+
 CONFIG = Config()
 
 # TODO make this more generic -- the "webhook" action ideally could
@@ -24,17 +25,22 @@ def send_slack(text):
     else:
         print("Skipping slack send")
 
-def send_page(msg):
+def send_page(recipient: str, msg: str):
+    """Send a page with body of "msg"."""
+
+    # lookup the recipient's id from the config
+    recipient_id = CONFIG.private_vars['page_recipients'][recipient.lower()]
+
     body = {
     "username": CONFIG.private_vars['page_user'],
     "password": CONFIG.private_vars['page_pw'],
     "sendpage": {
         "recipients": {
             "people":
-                ["488"]
+                [str(recipient_id)]
         },
         "message":
-            "Test message"
+            msg
     }}
 
     logging.basicConfig()
@@ -50,4 +56,5 @@ def send_page(msg):
     return response.text
 
 if __name__ == "__main__":
-    send_page("test")
+    # first arg: recipient, remaining args: message
+    send_page(sys.argv[1], " ".join(sys.argv[2:]))
