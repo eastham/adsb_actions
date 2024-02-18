@@ -2,9 +2,9 @@
 
 import datetime
 import logging
+from typing import Callable
 from flight import Flight
 from stats import Stats
-from typing import Callable
 from ruleexecutionlog import RuleExecutionLog, ExecutionCounter
 
 logger = logging.getLogger(__name__)
@@ -64,8 +64,8 @@ class Rules:
     def conditions_match(self, flight: Flight, conditions: dict,
                          rule_name: str) -> bool:
         """Determine if the given rule conditions match for the given 
-        flight.  Put expensive rules toward the bottom for performance
-        reasons."""
+        flight.  Put expensive-to-evaluate conditions toward the bottom,
+        for best performance."""
 
         logger.debug("condition_match checking rules: %s", str(conditions))
         Stats.condition_match_calls += 1
@@ -79,7 +79,7 @@ class Rules:
             result = flight.flight_id in ac_list
             if not result:
                 return False
-    
+
         if 'min_alt' in conditions:
             condition_value = conditions['min_alt']
             result = flight.lastloc.alt_baro >= int(condition_value)
@@ -93,6 +93,7 @@ class Rules:
                 return False
 
         if 'transition_regions' in conditions:
+            # moved from one region to another.  None is a valid region.
             condition_value = conditions['transition_regions']
             result = (flight.was_in_bboxes([condition_value[0]]) and
                        flight.is_in_bboxes([condition_value[1]]))
@@ -100,8 +101,17 @@ class Rules:
                 return False
 
         if 'regions' in conditions:
+            # KML region match
             condition_value = conditions['regions']
             result = flight.is_in_bboxes(condition_value)
+            if not result:
+                return False
+
+        if 'cooldown' in conditions:
+            # reduce firing rate to every n minutes
+            cooldown_secs = int(conditions['cooldown'] * 60)  # convert to seconds
+            result = not self.rule_execution_log.within_cooldown(rule_name,
+                flight.flight_id, cooldown_secs, flight.lastloc.now)
             if not result:
                 return False
 
@@ -110,15 +120,6 @@ class Rules:
             dist = flight.lastloc.distfrom(
                 condition_value[1], condition_value[2])
             result = condition_value[0] >= dist
-            if not result:
-                return False
-
-        if 'cooldown' in conditions:
-            cooldown_secs = int(conditions['cooldown'] * 60)
-            result = not self.rule_execution_log.within_cooldown(rule_name,
-                                                            flight.flight_id,
-                                                            cooldown_secs,
-                                                            flight.lastloc.now)
             if not result:
                 return False
 
@@ -135,7 +136,7 @@ class Rules:
             condition_value = conditions['min_time']
             ts_24hr = int(datetime.datetime.utcfromtimestamp(
                 flight.lastloc.now).strftime("%H%M"))
-            result = (ts_24hr >= condition_value)
+            result = ts_24hr >= condition_value
             if not result:
                 return False
 
@@ -143,7 +144,7 @@ class Rules:
             condition_value = conditions['max_time']
             ts_24hr = int(datetime.datetime.utcfromtimestamp(
                 flight.lastloc.now).strftime("%H%M"))
-            result = (ts_24hr <= condition_value)
+            result = ts_24hr <= condition_value
             if not result:
                 return False
 
@@ -191,7 +192,7 @@ class Rules:
 
                 logger.debug("Doing callback for %s", flight.flight_id)
                 if cb_arg:
-                    # this is used for proximity events when you want to 
+                    # this is used for proximity events where you need to
                     # be able to refer to both flights that are near each other
                     self.callbacks[action_value](flight, cb_arg)
                 else:
@@ -205,9 +206,11 @@ class Rules:
                 flight.flags['note'] = action_value
 
             elif 'expire_callback' == action_name:
+                # triggered on flight eviction from the system.
                 pass # this is handled upon asynchronous expiration in do_expire()
 
             elif 'track' == action_name:
+                # statistics gathering.
                 pass # handled after execution is complete
 
             else:
@@ -254,7 +257,7 @@ class Rules:
         """
         This is run periodically to check distance between all aircraft --
         to check for any matching proximity conditions.  
-        It's O(n^2), can be expensive, but altitude and bbox limits help...
+        It's O(n^2), can be expensive, but altitude and bbox limits can help...
 
         NOTE: currently flights not in any bbox are not checked, to improve
         execution time.
@@ -270,7 +273,7 @@ class Rules:
 
             for rule_name, rule_body in prox_rules_list:
                 # For each proximity rule, we want to check the rule conditions
-                # here, first removing the prox part of the rule which will 
+                # here, first removing the prox part of the rule which will
                 # never match during the usual synchronous update.
                 rule_conditions = rule_body['conditions'].copy() # XXX inefficient?
                 prox_rule_element = rule_conditions['proximity']
