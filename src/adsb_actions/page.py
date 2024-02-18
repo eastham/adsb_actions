@@ -10,14 +10,8 @@ CONFIG = Config()
 SEND_SLACK = False
 SEND_PAGE = True
 
-# TODO make this more generic -- the "webhook" action ideally could
-# cover the functionality of either of these methods.
-# maybe change the format of the webhook action to be something like:
-#   webhook: [ payload_filename ]
-# ...and then a way to regexp-replace the body text into the payload?
-#
-# (ideally the file would be read in one time and cached for efficiency.)
-
+# TODO need to clean up the webhook actions in rules.py to
+# use these.
 def send_slack(text):
     print(f"Slack msg: {text}")
     if SEND_SLACK:
