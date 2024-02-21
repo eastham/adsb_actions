@@ -16,9 +16,21 @@ import pprint
 sys.path.insert(0, '../adsb_actions')
 from config import Config
 
-logger = logging.getLogger(__name__)
+# NOTE: real-life server calls can be enabled/disabled here
+FAKE_AIRCRAFT_CREATE = False
+FAKE_AIRCRAFT_LOOKUP = False
+FAKE_CPE_CREATE = False
+INHIBIT_ADD_OPS = False
 
-BODY = {
+logger = logging.getLogger(__name__)
+logger.level = logging.INFO
+
+pp = pprint.PrettyPrinter(indent=4)
+def pprint_format(arg):
+    """return the complex arg as a pretty-printed string"""
+    return pp.pformat(arg)
+
+REQUEST_BODY = {
 "Properties": {
    "Locale": "en-US",
    "Timezone": "Pacific Standard Time",
@@ -27,15 +39,10 @@ BODY = {
 ]
 }
 
-# NOTE: real-life server calls can be enabled/disabled here
-SEND_AIRCRAFT = False
-LOOKUP_AIRCRAFT = False
-SEND_OPS = False
-SEND_CPES = False
-
 # Testing flags/constants
 DELAYTEST = False            # add random delay for threading testing
 FAKE_KEY = "XXXfake keyXXX"  # fake db key to use if real db calls disabled
+DUMMY_AIRCRAFT = "N1911"     # aircraft to use for dummy ops
 
 class Appsheet:
     def __init__(self):
@@ -45,14 +52,12 @@ class Appsheet:
 
     def aircraft_lookup(self, tail, wholeobj=False):
         """return database internal ID for this tail number """
-        logger.debug("aircraft_lookup %s" % (tail))
 
-        body = copy.deepcopy(BODY)
+        body = copy.deepcopy(REQUEST_BODY)
         body["Action"] = "Find"
         body["Properties"]["Selector"] = "Select(Aircraft[Row ID], [Regno] = \"%s\")" % tail
-        # ppd(body)
         try:
-            if LOOKUP_AIRCRAFT:
+            if not FAKE_AIRCRAFT_LOOKUP:
                 ret = self.sendop(self.config.private_vars["appsheet"]["aircraft_url"], body)
                 if ret:
                     logger.debug("lookup for tail " + tail + " lookup returning "+ ret[0]["Row ID"])
@@ -70,41 +75,34 @@ class Appsheet:
 
     def add_aircraft(self, regno, test=False, description=""):
         """Create aircraft in database"""
-        logger.debug("add_aircraft %s" % (regno))
 
-        body = copy.deepcopy(BODY)
+        body = copy.deepcopy(REQUEST_BODY)
         body["Action"] = "Add"
         body["Rows"] = [{
             "regno": regno,
             "test": test,
             "description": description
         }]
-        #ppd(self.headers)
-        #ppd(body)
         try:
-            if SEND_AIRCRAFT :
+            if not FAKE_AIRCRAFT_CREATE:
                 ret = self.sendop(self.config.private_vars["appsheet"]["aircraft_url"], body)
                 return ret["Rows"][0]["Row ID"]
             else:
                 return FAKE_KEY
         except Exception as e:
             logger.info("add_aircraft op raised exception: " + str(e))
-
         return None
 
     def get_all_entries(self, table):
-        logger.debug("get_all_entries " + table)
-
-        body = copy.deepcopy(BODY)
+        body = copy.deepcopy(REQUEST_BODY)
         body["Action"] = "Find"
-        #ppd(body)
         url = table + "_url"
         try:
             ret = self.sendop(self.config.private_vars["appsheet"][url], body)
             if ret:
                 return ret
-        except Exception:
-            pass
+        except Exception as e:
+            logger.info("get_all_entries raised exception: " + str(e))
         return None
 
     def delete_all_entries(self, table):
@@ -115,12 +113,11 @@ class Appsheet:
 
         logger.debug("delete rows are " + str(deleterows))
 
-        body = copy.deepcopy(BODY)
+        body = copy.deepcopy(REQUEST_BODY)
         body["Action"] = "Delete"
         body["Rows"] = deleterows
         url = table + "_url"
-        #ppd(body)
-        ret = self.sendop(self.config.private_vars["appsheet"][url], body, timeout=None)
+        self.sendop(self.config.private_vars["appsheet"][url], body, timeout=None)
 
     def delete_aircraft(self, regno):
         allentries = self.get_all_entries("aircraft")
@@ -129,14 +126,13 @@ class Appsheet:
             if op["Regno"].lower() == regno.lower():
                 deleterows.append({"Row ID": op["Row ID"]})
 
-        logger.debug("delete rows are " + str(deleterows))
+        logger.info("delete rows are %s", str(deleterows))
 
-        body = copy.deepcopy(BODY)
+        body = copy.deepcopy(REQUEST_BODY)
         body["Action"] = "Delete"
         body["Rows"] = deleterows
         url = "aircraft" + "_url"
-        #ppd(body)
-        ret = self.sendop(self.config.private_vars["appsheet"][url], body, timeout=None)
+        self.sendop(self.config.private_vars["appsheet"][url], body, timeout=None)
 
     def add_aircraft_from_file(self, fn):
         with open(fn, 'r') as file:
@@ -147,10 +143,9 @@ class Appsheet:
                     self.add_aircraft(line)
 
     def add_op(self, aircraft, time, scenic, optype, flight_name):
-        logger.debug("add_op %s %s %s" % (aircraft, optype, scenic))
         optime = datetime.datetime.fromtimestamp(time)
 
-        body = copy.deepcopy(BODY)
+        body = copy.deepcopy(REQUEST_BODY)
         body["Action"] = "Add"
         body["Rows"] = [{
             "Aircraft": aircraft,
@@ -161,22 +156,28 @@ class Appsheet:
             "Time": optime.strftime("%m/%d/%Y %H:%M:%S"),
             "Flight Name": flight_name
         }]
-
         try:
-            if SEND_OPS:
-                ret = self.sendop(self.config.private_vars["appsheet"]["ops_url"], body)
+            if not INHIBIT_ADD_OPS:
+                self.sendop(self.config.private_vars["appsheet"]["ops_url"], body)
             return True
-        except Exception:
-            logger.info("add_op raised exception")
+        except Exception as e:
+            logger.info("add_op raised exception: " + str(e))
 
         return None
 
+    def add_dummy_ops(self):
+        # add a bunch of ops for testing
+        ac_ref = self.aircraft_lookup(DUMMY_AIRCRAFT)
+        assert ac_ref, "Could not find aircraft for dummy entry"
+        for _ in range(100):
+            self.add_op(ac_ref, time.time(), False,
+                        "Arrival", "Test Flight")
+
     def add_cpe(self, flight1, flight2, latdist, altdist, time, lat, long):
         # XXX needs test w/ lat /long addition
-        logger.info("add_cpe %s %s" % (flight1, flight2))
         optime = datetime.datetime.fromtimestamp(time)
 
-        body = copy.deepcopy(BODY)
+        body = copy.deepcopy(REQUEST_BODY)
         body["Action"] = "Add"
         body["Rows"] = [{
             "Aircraft1": flight1,
@@ -187,21 +188,19 @@ class Appsheet:
             "lat": lat,
             "long": long
         }]
-        #ppd(body)
+
         try:
-            if SEND_CPES:
+            if not FAKE_CPE_CREATE:
                 ret = self.sendop(self.config.private_vars["appsheet"]["cpe_url"], body)
                 return ret["Rows"][0]["Row ID"]
-            else:
-                return FAKE_KEY
+            return FAKE_KEY
         except Exception:
             logger.info("add_cpe op raised exception")
         return None
 
     def update_cpe(self, flight1, flight2, latdist, altdist, time, rowid):
-        logger.info("update_cpe %s %s" % (flight1, flight2))
         optime = datetime.datetime.fromtimestamp(time)
-        body = copy.deepcopy(BODY)
+        body = copy.deepcopy(REQUEST_BODY)
         body["Action"] = "Edit"
         body["Rows"] = [{
             "Row ID": rowid,
@@ -212,38 +211,45 @@ class Appsheet:
             "Min lat sep": latdist*6076,
             "Final": True
         }]
-        #ppd(body)
 
         try:
-            if SEND_CPES:
+            if not FAKE_CPE_CREATE:
                 ret = self.sendop(self.config.private_vars["appsheet"]["cpe_url"], body)
                 return ret
-            else:
-                return FAKE_KEY
+            return FAKE_KEY
         except Exception:
             logger.info("update_cpe op raised exception")
         return None
 
     def sendop(self, url, body, timeout=30):
-        logger.info("sending to url "+url)
+        """send a request to the appsheet server and return the response dict.
+        If the response is not 200, raise an HTTPError. If the response is
+        empty, return None. If the response is not empty, return the response
+        dict."""
         response_dict = None
+
+        caller = sys._getframe(1).f_code.co_name
 
         if DELAYTEST:
             delay = random.uniform(1, 3)
-            logger.info(f"delaying {delay}")
+            logger.info("debug delay of %ss", delay)
             time.sleep(delay)
+
         response = requests.post(
             url,
             headers=self.headers, json=body, timeout=timeout)
         if response.status_code != 200:
-            #ppd(response)
-            raise Exception("op returned non-200 code: "+str(response))
-        # ppd(response)
-        if not response.text: return None
-        response_dict = json.loads(response.text)
-        logger.debug(f"sendop response_dict for op ...{url[-20:]}: {response_dict}")
+            logger.debug("non-200 return: %s", pprint_format(response))
+            raise requests.HTTPError("op returned non-200 code: " +
+                                     str(response))
 
-        if not len(response_dict): return None
+        if not response.text:
+            return None
+        response_dict = json.loads(response.text)
+        if not response_dict:
+            return None
+        logger.debug("sendop response_dict for op %s: %s",
+                     caller, pprint_format(response_dict))
 
         return response_dict
 
@@ -255,6 +261,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="match flights against kml bounding boxes")
     parser.add_argument("--get_all_ops", action="store_true")
+
     parser.add_argument("--delete_all_ops", action="store_true")
     parser.add_argument("--delete_all_pilots", action="store_true")
     parser.add_argument("--delete_all_aircraft", action="store_true")
@@ -262,8 +269,13 @@ if __name__ == "__main__":
     parser.add_argument("--delete_all_notes", action="store_true")
     parser.add_argument("--add_aircraft", help="add all aircraft listed in file, one per line")
     parser.add_argument("--delete_aircraft", help="delete all copies of argument aircraft")
+    parser.add_argument("--add_dummy_ops", action="store_true")
 
     args = parser.parse_args()
+
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
 
     if args.get_all_ops:
         print(as_instance.get_all_entries("ops"))
@@ -293,7 +305,5 @@ if __name__ == "__main__":
         confirm = input("Deleting all notes. Are you sure? (y/n): ")
         if confirm.lower() == 'y':
             as_instance.delete_all_entries("notes")
-
-pp = pprint.PrettyPrinter(indent=4)
-def ppd(arg):
-    pp.pprint(arg)
+    if args.add_dummy_ops:
+        as_instance.add_dummy_ops()
