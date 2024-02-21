@@ -1,0 +1,21 @@
+certifi==2024.2.2
+charset-normalizer==3.3.2
+docutils==0.20.1
+fastkml==0.12
+geographiclib==2.0
+geopy==2.4.1
+icao-nnumber-converter-us==0.1.0
+idna==3.6
+Kivy==2.3.0
+Kivy-Garden==0.1.5
+kivymd==1.2.0
+numpy @ file:///private/tmp/numpy-20240206-5707-t7tyyl/numpy-1.26.4
+pillow==10.2.0
+pygeoif==0.7
+Pygments==2.17.2
+python-dateutil==2.8.2
+PyYAML==6.0.1
+requests==2.31.0
+Shapely==1.8.4
+six==1.16.0
+urllib3 @ file:///private/tmp/python-urllib3-20240130-5163-24xa6m/urllib3-2.2.0
