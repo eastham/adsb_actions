@@ -12,12 +12,12 @@
 
     ui_remove:
       conditions:
-        regions: []
+        regions: []  # not in any KML-defined region
       actions:
         callback: aircraft_remove_cb
 
     ui_expire:
-      conditions: []
+      conditions: {} # always run
       actions:
         expire_callback: aircraft_remove_cb
 
