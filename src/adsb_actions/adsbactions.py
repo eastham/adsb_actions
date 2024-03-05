@@ -1,8 +1,8 @@
-"""This is the main API For the AdsbActions library.
+"""This is the main API For the  library.
 
 The following code will instantiate the library, attempt to connect to a network
 socket, and process the ADS-B data coming in:
-    adsb_actions = AdsbActions(yaml_config, ip=args.ipaddr, port=args.port)
+    adsb_actions = (yaml_config, ip=args.ipaddr, port=args.port, mport args.mport)
     adsb_actions.loop()
 
 Also useful, to support rules that want to call code:
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 class AdsbActions:
     """Main API for the library."""
 
-    def __init__(self, yaml_data=None, yaml_file=None, ip=None, port=None, 
+    def __init__(self, yaml_data=None, yaml_file=None, ip=None, port=None, mport=None,
                  bboxes=None):
         """Main API for the library.  You can provide connection info in the
         constructor here, or specify data sources in the subsequent call to
@@ -43,6 +43,7 @@ class AdsbActions:
             yaml_file: optional path to a yaml file to load
             ip: optional ip address to connect to
             port: optional port to conect to
+            mport: optional metrics port
             exit_cb: optional callback to fire when socket closes or EOF is
                 reached.
             bboxes: optional - forces what bounding boxes the system uses,
