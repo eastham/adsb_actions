@@ -1,26 +1,32 @@
   config:
-    kmls:
+    kmls: # these KMLs define the lat/longs of the regions mentioned below
       - ../../tests/test2.kml 
       - ../../tests/test3.kml
 
   rules:
+    # callback to update strip for aircraft inside the covered regions,
+    # for example to show a change in altitude.
     ui_update:
       conditions:
         regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
       actions:
         callback: aircraft_update_cb
 
+    # callback to hide strip for aircraft that left the covered regions
     ui_remove:
       conditions:
         regions: []  # not in any KML-defined region
       actions:
         callback: aircraft_remove_cb
 
+    # callback to hide strip for aircraft that is expired by the system
+    # due to inactivity.
     ui_expire:
-      conditions: {} # always run
+      conditions: {} # always run for each aircraft update
       actions:
         expire_callback: aircraft_remove_cb
 
+    # callback for aircraft that are in close proximity of one another
     prox:
       conditions:
         min_alt: 4000

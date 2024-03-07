@@ -55,10 +55,14 @@ class Rules:
                             'transition_regions', 'regions', 'latlongring',
                             'cooldown', 'has_attr', 'min_time', 'max_time']
 
-        for condition in conditions.keys():
-            if condition not in VALID_CONDITIONS:
-                logger.error("Unknown condition: %s", condition)
-                return False
+        try:
+            for condition in conditions.keys():
+                if condition not in VALID_CONDITIONS:
+                    logger.error("Unknown condition: %s", condition)
+                    return False
+        except AttributeError:
+            logger.error("Specify unconditional execution with '{}' in YAML")
+            raise
         return True
 
     def conditions_match(self, flight: Flight, conditions: dict,
@@ -69,6 +73,9 @@ class Rules:
 
         logger.debug("condition_match checking rules: %s", str(conditions))
         Stats.condition_match_calls += 1
+
+        # TODO the approach below prevents us from having multiple rules of 
+        # the same type.  Do we need to support that?
 
         if 'proximity' in conditions:
             return False  # handled asynchronously in handle_proximity_conditions

@@ -32,10 +32,10 @@ logger = logging.getLogger(__name__)
 class AdsbActions:
     """Main API for the library."""
 
-    def __init__(self, yaml_data=None, yaml_file=None, ip=None, port=None, 
+    def __init__(self, yaml_data=None, yaml_file=None, ip=None, port=None,
                  bboxes=None):
-        """Main API for the library.  You can provide connection info in the
-        constructor here, or specify data sources in the subsequent call to
+        """Main API for the library.  You can provide network port info in the
+        constructor here, or specify local data sources in the subsequent call to
         loop().  Either yaml_data or yaml_file must be specified.
 
         Args:
@@ -94,7 +94,7 @@ class AdsbActions:
 
             # Run a "Checkpoint".
             # Here we do periodic maintenance tasks, and expensive operations.
-            # Note: this will of course not work during gaps when no aircraft
+            # Note: this will of course not happen during gaps when no aircraft
             # are seen.
             # If timely expiration/maintenance is needed, dummy events can be
             # injected.
@@ -191,7 +191,7 @@ class AdsbActions:
         Stats.json_readlines += 1
 
         if jsondict and 'alt_baro' in jsondict:
-            # We got some valid data, process it. (points with no altitude 
+            # We got some valid data, process it. (points with no altitude
             # are ignored, they are likely to be dummy entries anyway)
             loc_update = Location.from_dict(jsondict)
             return self.flights.add_location(loc_update, self.rules)

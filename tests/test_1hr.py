@@ -1,6 +1,7 @@
 """
 Huge integration test that takes an hour of busy airspace data 
-and checks that we're detecting the right number of takeoffs/landings/local flights.
+and checks that we're detecting the right number of 
+takeoffs/landings/local flights.
 """
 
 import logging
