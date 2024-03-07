@@ -1,4 +1,4 @@
-"""This is the main API For the AdsbActions library.
+"""This is the main API For the  library.
 
 The following code will instantiate the library, attempt to connect to a network
 socket, and process the ADS-B data coming in:
@@ -33,7 +33,7 @@ class AdsbActions:
     """Main API for the library."""
 
     def __init__(self, yaml_data=None, yaml_file=None, ip=None, port=None,
-                 bboxes=None):
+                 mport=None, bboxes=None):
         """Main API for the library.  You can provide network port info in the
         constructor here, or specify local data sources in the subsequent call to
         loop().  Either yaml_data or yaml_file must be specified.
@@ -43,6 +43,7 @@ class AdsbActions:
             yaml_file: optional path to a yaml file to load
             ip: optional ip address to connect to
             port: optional port to conect to
+            mport: optional metrics port
             exit_cb: optional callback to fire when socket closes or EOF is
                 reached.
             bboxes: optional - forces what bounding boxes the system uses,
