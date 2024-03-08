@@ -37,7 +37,7 @@ class Flights:
     def add_location(self, loc: Location, rules: Rules) -> float:
         """
         Track an aircraft location update, update what bounding boxes it's in,
-        and process rules to update the gui or do user-defined tasks.
+        and process rules.
 
         Args:
             loc: aircraft location point to store / act on
@@ -53,20 +53,17 @@ class Flights:
         if not loc.tail:
             return loc.now
 
-        self.lock.acquire() # lock needed since testing can race
+        with self.lock: # lock needed since testing can race
+            flight = self.flight_dict.get(loc.tail)
+            if flight is None:
+                flight = Flight(loc.tail, loc.flight, loc, loc, self.bboxes)
+                self.flight_dict[loc.tail] = flight
+            else:
+                flight.update_loc(loc)
 
-        if loc.tail in self.flight_dict:
-            flight = self.flight_dict[loc.tail]
-            flight.update_loc(loc)
-        else:
-            flight = self.flight_dict[loc.tail] = Flight(loc.tail, loc.flight, loc,
-                                                         loc, self.bboxes)
+            flight.update_inside_bboxes(self.bboxes, loc)
+            rules.process_flight(flight)
 
-        flight.update_inside_bboxes(self.bboxes, loc)
-        #print(flight.to_str())
-        rules.process_flight(flight)
-
-        self.lock.release()
         return flight.lastloc.now
 
     def expire_old(self, rules, last_read_time):

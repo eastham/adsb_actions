@@ -12,6 +12,7 @@ SEND_PAGE = True
 
 # TODO need to clean up the webhook actions in rules.py to
 # use these.
+
 def send_slack(text):
     print(f"Slack msg: {text}")
     if SEND_SLACK:
@@ -23,7 +24,7 @@ def send_slack(text):
         print("Skipping slack send")
 
 def send_page(recipient: str, msg: str):
-    """Send a page with a JSON payload.
+    """Send a page using a JSON payload over HTTPS.
 
     Args:
         recipient (str): The recipient of the page.
