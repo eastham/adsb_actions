@@ -17,7 +17,7 @@
         transition_regions: [ ~, "Generic Gate Air" ]
       actions:
         print: True
-        callback: "takeoff"
+        callback: "popup_takeoff"
         note: "saw_takeoff"
 
     landing:

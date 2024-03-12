@@ -11,6 +11,7 @@ class Stats:
 
     flight_annotates: int = 0
     takeoffs: int = 0
+    popup_takeoffs: int = 0
     landings: int = 0
     local_landings: int = 0
 
@@ -23,6 +24,7 @@ class Stats:
         cl.json_readlines = cl.condition_match_calls = 0
         cl.condition_matches_true = cl.callbacks_fired = 0
         cl.last_callback_flight = None
-        cl.flight_annotates = cl.takeoffs = cl.landings = cl.local_landings = 0
+        cl.flight_annotates = cl.takeoffs = cl.popup_takeoffs = 0
+        cl.landings = cl.local_landings = 0
         cl.abe_add = cl.abe_update = cl.abe_finalize = 0
         cl.webhooks_fired = 0

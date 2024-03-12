@@ -13,6 +13,7 @@ ABE_YAML_FILE = "src/op_pusher/rules.yaml"
 
 JSON_STRING_PLANE1_NEAR = '{"now": 1661692178, "alt_baro": 5000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}\n'
 JSON_STRING_PLANE2_NEAR = '{"now": 1661692178, "alt_baro": 5000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d2"}\n'
+JSON_STRING_PLANE2_LAND = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d2"}\n'
 JSON_STRING_PLANE3_DELAY = '{"now": 1661692185, "alt_baro": 0, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d3"}\n'
 
 JSON_STRING_PLANE4_GROUND = '{"now": 1661692185, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
@@ -31,7 +32,7 @@ def test_pusher():
 
     adsb_actions = AdsbActions(yaml_data)
     op_pusher.register_callbacks(adsb_actions)
-    op_pusher.enter_db_fake_mode()
+    op_pusher.enter_db_fake_mode()              # Caution, don't disable
 
     # put two airplanes in close proximity to test ABE processing
     adsb_actions.loop(JSON_STRING_PLANE1_NEAR)
@@ -43,15 +44,25 @@ def test_pusher():
     time.sleep(5) # delay for gc loop
     assert Stats.abe_finalize == 1
 
-    # simulate aircraft appearing out of nowhere in the air (treated as takeoff)
+    # test non-local landing
+    Stats.reset()
+    adsb_actions.loop(JSON_STRING_PLANE2_NEAR)
+    adsb_actions.loop(JSON_STRING_PLANE2_LAND)
+    assert Stats.local_landings == 1
+
+    # simulate aircraft appearing out of nowhere in the air
+    # (these are treated as a takeoff according to the ABE_YAML_FILE rules)
     Stats.reset()
     adsb_actions.loop(JSON_STRING_PLANE4_AIR)
     assert Stats.takeoffs == 1
+    assert Stats.popup_takeoffs == 1
 
     # simulate landing + takeoff
     adsb_actions.loop(JSON_STRING_PLANE4_GROUND)
     assert Stats.landings == 1
+    assert Stats.local_landings == 1
     adsb_actions.loop(JSON_STRING_PLANE4_AIR)
     assert Stats.takeoffs == 2
+    assert Stats.popup_takeoffs == 1  # no change
 
     op_pusher.exit_workers()

@@ -21,6 +21,10 @@ def landing_cb(flight):
 
     db_ops.add_op(flight, "Landing", 'note' in flight.flags)
 
+def popup_takeoff_cb(flight):
+    Stats.popup_takeoffs += 1
+    takeoff_cb(flight)
+
 def takeoff_cb(flight):
     logging.info("Takeoff detected! %s", flight.flight_id)
     Stats.takeoffs += 1
@@ -35,6 +39,7 @@ def abe_cb(flight1, flight2):
 def register_callbacks(adsb_actions):
     adsb_actions.register_callback("landing", landing_cb)
     adsb_actions.register_callback("takeoff", takeoff_cb)
+    adsb_actions.register_callback("popup_takeoff", popup_takeoff_cb)
     adsb_actions.register_callback("abe_update_cb", abe_cb)
 
 def enter_db_fake_mode():
