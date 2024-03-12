@@ -47,16 +47,20 @@ class ABE:
             self.min_latdist = latdist
             self.min_altdist = altdist
 
-    def key(self):
+    def get_key(self):
         key = "%s %s" % (self.flight1.flight_id.strip(),
             self.flight2.flight_id.strip())
         return key
 
 def process_abe_launch(flight1, flight2):
+    """Saw an ABE, start a thread to process (so as not to block the caller)"""
     t = threading.Thread(target=process_abe, args=[flight1, flight2])
     t.start()
 
 def process_abe(flight1, flight2):
+    """Handle a single ABE.  Could be new, or just an update to one that's 
+    already underway.  Push to external database if new."""
+
     if not ABE.gc_thread:
         ABE.gc_thread = threading.Thread(target=gc_loop)
         ABE.gc_thread.start()
@@ -69,24 +73,23 @@ def process_abe(flight1, flight2):
     # always create a new ABE at least to get flight1/flight2 ordering right
     abe = ABE(flight1, flight2, lateral_distance, alt_distance, now)
 
-    ABE.current_abe_lock.acquire()
-    key = abe.key()
-    if key in ABE.current_abes:
-        logger.debug("ABE update " + key)
-        ABE.current_abes[key].update(lateral_distance, alt_distance, now)
-        Stats.abe_update += 1
-        ABE.current_abe_lock.release()
-    else:
-        logger.debug("ABE add " + key)
-        ABE.current_abes[key] = abe
-        Stats.abe_add += 1
-        ABE.current_abe_lock.release()
+    with ABE.current_abe_lock:
+        key = abe.get_key()
+        if key in ABE.current_abes:
+            logger.debug("ABE update " + key)
+            ABE.current_abes[key].update(lateral_distance, alt_distance, now)
+            Stats.abe_update += 1
+        else:
+            logger.debug("ABE add " + key)
+            ABE.current_abes[key] = abe
+            Stats.abe_add += 1
 
-        abe.id = db_ops.add_abe(flight1, flight2, lateral_distance, alt_distance)
+            abe.id = db_ops.add_abe(flight1, flight2, lateral_distance,
+                                    alt_distance)
 
 def gc_loop():
     while True:
-        time.sleep(10)
+        time.sleep(5)
         abe_gc()
         if ABE.quit: return
 
@@ -96,10 +99,11 @@ def abe_gc():
         abe_list = list(ABE.current_abes.values())
 
     for abe in abe_list:
-        logger.debug(f"ABE_GC {abe.key()} {time.time()} {abe.last_time}")
+        logger.debug(f"ABE_GC {abe.get_key()} {time.time()} {abe.last_time}")
 
-        # NOTE: time.time() doesn't behave correctly here in replay mode.
+        # NOTE: time.time() doesn't behave correctly here when replaying recorded data.
         if time.time() - abe.last_time > ABE.ABE_GC_TIME:
+            # No updates to this ABE for a while, finalize to database and remove.
             logger.info("ABE final update: %s %s - minimum separation: %f nm %d MSL",
                         abe.flight1.flight_id, abe.flight2.flight_id,
                         abe.min_latdist, abe.min_altdist)
@@ -108,7 +112,6 @@ def abe_gc():
             db_ops.update_abe(abe.flight1, abe.flight2,
                 abe.min_latdist, abe.min_altdist, abe.create_time, abe.id)
             try:
-                del ABE.current_abes[abe.key()]
-            except Exception:
+                del ABE.current_abes[abe.get_key()]
+            except KeyError:
                 logger.error("Didn't find key in current_abes")
-                pass
