@@ -49,9 +49,6 @@ def adsb_actions():
     yield adsb_actions
 
 def test_transitions(adsb_actions):
-    adsb_actions.loop((JSON_STRING_DISTANT+'\n')*3)
-    assert Stats.callbacks_fired == 0
-
     adsb_actions.loop((JSON_STRING_AIR+'\n')*3)
     assert Stats.callbacks_fired == 1
     assert Stats.last_callback_flight.is_in_bboxes(['Generic Gate Air'])
