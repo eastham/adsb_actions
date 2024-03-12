@@ -12,7 +12,7 @@
         note: "saw_takeoff"
 
     # aircraft appeared suddenly in the air nearby, we treat this as a takeoff
-    takeoff_popup: # XXX test needed
+    takeoff_popup:
       conditions:
         transition_regions: [ ~, "Generic Gate Air" ]
       actions:
