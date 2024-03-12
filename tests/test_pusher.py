@@ -41,7 +41,7 @@ def test_pusher():
 
     time.sleep(1) # delay for async handling
     assert Stats.abe_add == 1
-    time.sleep(5) # delay for gc loop
+    time.sleep(1) # delay for gc loop
     assert Stats.abe_finalize == 1
 
     # test non-local landing

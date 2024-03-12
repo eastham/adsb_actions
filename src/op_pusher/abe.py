@@ -21,7 +21,8 @@ class ABE:
     """
     current_abes = {}
     current_abe_lock: threading.Lock = threading.Lock()
-    ABE_GC_TIME = 60
+    ABE_GC_TIME = 60        # seconds to wait before finalizing ABE
+    ABE_GC_LOOP_DELAY = 1   # seconds between GC checks
     gc_thread = None
     quit = False
 
@@ -89,12 +90,11 @@ def process_abe(flight1, flight2):
 
 def gc_loop():
     while True:
-        time.sleep(5)
+        time.sleep(ABE.ABE_GC_LOOP_DELAY)
         abe_gc()
         if ABE.quit: return
 
 def abe_gc():
-    logger.debug("ABE_GC")
     with ABE.current_abe_lock:
         abe_list = list(ABE.current_abes.values())
 
