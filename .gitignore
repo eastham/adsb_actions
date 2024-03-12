@@ -1,4 +1,5 @@
 .venv
+.env
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -21,4 +22,4 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
-
+.DS_Store
