@@ -83,9 +83,10 @@ class Flight:
         return False
 
     def was_in_bboxes(self, bb_list: list):
-        """Was the flight in all the same bboxes as specified, at last update?"""
+        """Was the flight in all the same bboxes as specified, at previous update?
+        if no boxes are specified, the flight must have been in no boxes to match."""
         if not self.prev_inside_bboxes_valid:
-            return False
+            return bb_list == [None]
 
         for prev_bb in self.prev_inside_bboxes:
             if prev_bb in bb_list:
