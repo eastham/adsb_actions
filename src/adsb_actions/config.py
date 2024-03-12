@@ -5,9 +5,11 @@ preferences, not rules.  Rule yamls are usually specific on the
 command line or an explicit API variable."""
 
 import yaml
+import util
 
-CONFIGPATH = "../../config.yaml"
-PRIVPATH = "../../private.yaml"
+# don't rely on the cwd to find the config files
+CONFIGPATH = util.safe_path("../../config.yaml")
+PRIVPATH = util.safe_path("../../private.yaml")
 
 class Config:
     def __init__(self):

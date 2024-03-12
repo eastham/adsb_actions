@@ -1,24 +1,44 @@
-"""Module to call out to external database for potential on-screen updates."""
+"""Module to call out to external database."""
 import logging
 import sys
 import datetime
+import util
+
 logger = logging.getLogger(__name__)
 
 TZ_CONVERT = 0 # -7  # UTC conversion
+sys.path.insert(0, util.safe_path('../db'))
 
 USE_APPSHEET = True
-if USE_APPSHEET:
-    sys.path.insert(0, '../db')
-    import appsheet_api
-    APPSHEET = appsheet_api.Appsheet()
-    LOOKUP_DB_CALL = APPSHEET.aircraft_lookup
-    ADD_OP_DB_CALL = APPSHEET.add_op
-    ADD_AIRCRAFT_DB_CALL = APPSHEET.add_aircraft
-    ADD_ABE_CALL = APPSHEET.add_cpe
-    UPDATE_ABE_CALL = APPSHEET.update_cpe
-else:
-    # add other dbs here
-    pass
+class Database:
+    """Abstraction layer for different database backends."""
+
+    def __init__(self):
+        self.lookup_db_call = None
+        self.add_op_db_call = None
+        self.add_aircraft_db_call = None
+        self.add_abe_call = None
+        self.update_abe_call = None
+        self.enter_fake_mode = None
+
+        if USE_APPSHEET:
+            self.appsheet_setup()
+        else:
+            # add other dbs here
+            pass
+
+    def appsheet_setup(self):
+        import appsheet_api
+
+        APPSHEET = appsheet_api.Appsheet()
+        self.lookup_db_call = APPSHEET.aircraft_lookup
+        self.add_op_db_call = APPSHEET.add_op
+        self.add_aircraft_db_call = APPSHEET.add_aircraft
+        self.add_abe_call = APPSHEET.add_cpe
+        self.update_abe_call = APPSHEET.update_cpe
+        self.enter_fake_mode = APPSHEET.enter_fake_mode
+
+DATABASE = Database()
 
 def add_op(flight, op, flags):
     flight_name = flight.flight_id.strip()
@@ -28,7 +48,7 @@ def add_op(flight, op, flags):
 
     aircraft_internal_id = lookup_or_create_aircraft(flight)
 
-    ADD_OP_DB_CALL(aircraft_internal_id, flight.lastloc.now + TZ_CONVERT*60*60,
+    DATABASE.add_op_db_call(aircraft_internal_id, flight.lastloc.now + TZ_CONVERT*60*60,
         flags, op, flight_name)
 
 def lookup_or_create_aircraft(flight):
@@ -45,10 +65,10 @@ def lookup_or_create_aircraft(flight):
     with flight.threadlock:
         if flight.external_id:  # recheck in case we were preempted
             return flight.external_id
-        aircraft_external_id = LOOKUP_DB_CALL(flight.flight_id)
+        aircraft_external_id = DATABASE.lookup_db_call(flight.flight_id)
 
         if not aircraft_external_id:
-            aircraft_external_id = ADD_AIRCRAFT_DB_CALL(flight.flight_id)
+            aircraft_external_id = DATABASE.add_aircraft_db_call(flight.flight_id)
             logger.debug("LOOKUP added aircraft and now has aircraft_external_id %s", 
                          aircraft_external_id)
         else:
@@ -62,13 +82,12 @@ def add_abe(flight1, flight2, latdist, altdist):
     flight1_internal_id = lookup_or_create_aircraft(flight1)
     flight2_internal_id = lookup_or_create_aircraft(flight2)
 
-    return ADD_ABE_CALL(flight1_internal_id, flight2_internal_id,
+    return DATABASE.add_abe_call(flight1_internal_id, flight2_internal_id,
         latdist, altdist, flight1.lastloc.now, flight1.lastloc.lat, 
         flight1.lastloc.lon)
 
 def update_abe(flight1, flight2, latdist, altdist, create_time, id):
     flight1_internal_id = lookup_or_create_aircraft(flight1)
     flight2_internal_id = lookup_or_create_aircraft(flight2)
-
-    UPDATE_ABE_CALL(flight1_internal_id, flight2_internal_id,
-                    latdist, altdist, create_time, id)
+    DATABASE.update_abe_call(flight1_internal_id, flight2_internal_id,
+                            latdist, altdist, create_time, id)
