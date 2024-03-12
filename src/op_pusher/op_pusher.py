@@ -3,7 +3,6 @@
 import argparse
 import sys
 import logging
-import yaml
 import abe
 
 sys.path.insert(0, '../db')
@@ -29,12 +28,25 @@ def takeoff_cb(flight):
     db_ops.add_op(flight, "Takeoff", False)
 
 def abe_cb(flight1, flight2):
-    """ABE = Ads-B Event -- for example two airplanes getting in close proximity"""
+    """ABE = Ads-B Event -- two airplanes in close proximity"""
     logging.info("ABE detected! %s", flight1.flight_id)
     abe.process_abe_launch(flight1, flight2)
 
-def run(focus_q, admin_q):
-    logging.basicConfig(format='%(levelname)-8s %(module)s:%(lineno)d: %(message)s', level=logging.INFO)
+def register_callbacks(adsb_actions):
+    adsb_actions.register_callback("landing", landing_cb)
+    adsb_actions.register_callback("takeoff", takeoff_cb)
+    adsb_actions.register_callback("abe_update_cb", abe_cb)
+
+def enter_db_fake_mode():
+    db_ops.DATABASE.enter_fake_mode()
+
+def exit_workers():
+    abe.ABE.quit = True
+    logging.info("Please wait for final ABE GC...")
+
+def run():
+    logging.basicConfig(format='%(levelname)-8s %(module)s:%(lineno)d: %(message)s',
+                        level=logging.INFO)
     logging.info('System started.')
 
     parser = argparse.ArgumentParser(description="match flights against kml bounding boxes")
@@ -58,19 +70,17 @@ def run(focus_q, admin_q):
 
     json_data = None
     if not args.testdata:
-        adsb_actions = AdsbActions(yaml_file=args.rules, ip=args.ipaddr, port=args.port)
+        adsb_actions = AdsbActions(yaml_file=args.rules, ip=args.ipaddr,
+                                   port=args.port)
     else:
         with open(args.testdata, 'rt', encoding="utf-8") as myfile:
             json_data = myfile.read()
         adsb_actions = AdsbActions(yaml_file=args.rules)
 
-    adsb_actions.register_callback("landing", landing_cb)
-    adsb_actions.register_callback("takeoff", takeoff_cb)
-    adsb_actions.register_callback("abe_update_cb", abe_cb)
+    register_callbacks(adsb_actions)
 
     adsb_actions.loop(delay=float(args.delay), string_data=json_data)
-    abe.ABE.quit = True # signal worker thread to exit
-    logging.info("Please wait for final ABE GC...")
+    exit_workers()
 
 if __name__ == '__main__':
-    run(None, None)
+    run()
