@@ -13,8 +13,7 @@ import logging
 import requests
 import pprint
 
-sys.path.insert(0, '../adsb_actions')
-from config import Config
+from adsb_actions.config import Config
 logger = logging.getLogger(__name__)
 logger.level = logging.INFO
 

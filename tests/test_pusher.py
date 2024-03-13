@@ -5,9 +5,9 @@ import logging
 import time
 import yaml
 
-import op_pusher
-from stats import Stats
-from adsbactions import AdsbActions
+from op_pusher.op_pusher_helpers import register_callbacks, enter_db_fake_mode, exit_workers
+from adsb_actions.stats import Stats
+from adsb_actions.adsbactions import AdsbActions
 
 ABE_YAML_FILE = "src/op_pusher/rules.yaml"
 
@@ -31,8 +31,8 @@ def test_pusher():
     yaml_data = yaml.safe_load(raw_yaml)
 
     adsb_actions = AdsbActions(yaml_data)
-    op_pusher.register_callbacks(adsb_actions)
-    op_pusher.enter_db_fake_mode()              # Caution, don't disable
+    register_callbacks(adsb_actions)
+    enter_db_fake_mode()              # Caution, don't disable
 
     # put two airplanes in close proximity to test ABE processing
     adsb_actions.loop(JSON_STRING_PLANE1_NEAR)
@@ -65,4 +65,4 @@ def test_pusher():
     assert Stats.takeoffs == 2
     assert Stats.popup_takeoffs == 1  # no change
 
-    op_pusher.exit_workers()
+    exit_workers()

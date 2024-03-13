@@ -24,6 +24,6 @@
         callback: aircraft_remove_cb
 
     ui_expire:
-      conditions: []
+      conditions: {}
       actions:
         expire_callback: aircraft_remove_cb

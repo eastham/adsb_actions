@@ -3,13 +3,8 @@
 directory structure with readsb data dumps in it."""
 
 import logging
-import sys
-
-import yaml
-
-sys.path.insert(0, '../adsb_actions')
-from adsbactions import AdsbActions
 import replay
+from adsb_actions.adsbactions import AdsbActions
 
 YAML_FILE = "./analyze_from_files.yaml"
 

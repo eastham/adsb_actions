@@ -7,7 +7,6 @@ import logging
 import threading
 import yaml
 import sys
-import kivy
 from kivy.app import App
 from kivy.uix.textinput import TextInput
 from kivy.clock import Clock, mainthread
@@ -15,10 +14,9 @@ from kivy.utils import escape_markup
 from kivy.core.window import Window
 Window.size = (800, 600)
 
-sys.path.insert(0, '../adsb_actions')
-from bboxes import Bboxes
-from flight import Flight
-from adsbactions import AdsbActions
+from adsb_actions.bboxes import Bboxes
+from adsb_actions.flight import Flight
+from adsb_actions.adsbactions import AdsbActions
 from flightmonitor import FlightMonitor
 
 logger = logging.getLogger(__name__)

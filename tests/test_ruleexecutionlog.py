@@ -1,8 +1,8 @@
 """class test for the cooldown math."""
 
 from time import time
-from rules import RuleExecutionLog
-from stats import Stats
+from adsb_actions.rules import RuleExecutionLog
+from adsb_actions.stats import Stats
 
 def test_rule_execution_log():
     Stats.reset()

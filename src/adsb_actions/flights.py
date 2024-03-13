@@ -3,10 +3,9 @@ for flight updates."""
 import threading
 import logging
 from typing import Dict
-from flight import Flight
-from location import Location
-from rules import Rules
-import bboxes
+from .flight import Flight
+from .location import Location
+from .rules import Rules
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +16,7 @@ class Flights:
     def __init__(self, bboxes):
         self.flight_dict: Dict[str, Flight] = {}        # all flights in the system.
         self.lock: threading.Lock = threading.Lock()    # XXX may not be needed anymore...
-        self.bboxes : list[bboxes.BBoxes] = bboxes      # all bboxes in the system.
+        self.bboxes : list[BBoxes] = bboxes             # all bboxes in the system.
         self.last_checkpoint = 0                        # timestamp of last maintenance
         self.iterator_index = 0                         # support for __next__()
 

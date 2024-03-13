@@ -51,7 +51,7 @@
             "name": "Parse and print data from port",
             "type": "python",
             "request": "launch",
-            "cwd": "${workspaceFolder}/src/adsb_actions",
+            "cwd": "${workspaceFolder}/src/simple",
             "program": "main.py",
             "args": "--ipaddr 127.0.0.1 --port 6666 basic_rules.yaml",
             "console": "integratedTerminal",

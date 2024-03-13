@@ -2,8 +2,8 @@
 import logging
 import yaml
 
-from stats import Stats
-from adsbactions import AdsbActions
+from adsb_actions.stats import Stats
+from adsb_actions.adsbactions import AdsbActions
 
 YAML_STRING = """
   config:

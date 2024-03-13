@@ -6,9 +6,8 @@ import statistics
 import logging
 from dataclasses import dataclass, field
 from threading import Lock
-from location import Location
-from stats import Stats
-import bboxes
+from .location import Location
+from .bboxes import Bboxes
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +125,7 @@ class Flight:
     def update_loc(self, loc):
         self.lastloc = loc
 
-    def update_inside_bboxes(self, bbox_list : list[bboxes.Bboxes], loc : Location):
+    def update_inside_bboxes(self, bbox_list : list[Bboxes], loc : Location):
         """
         Based on the most recent position data, update what bounding boxes we're in.
         Note: all array indices [i] in this function are selecting between kml files.

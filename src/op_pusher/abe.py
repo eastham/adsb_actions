@@ -2,14 +2,12 @@
 These are pushed once upon first detection and again once
 expired, so that the minimum distance is logged."""
 
-import sys
 import logging
 import threading
 import time
 
-sys.path.insert(0, '../db')
-import db_ops
-from stats import Stats
+from db_ops import add_abe, update_abe
+from adsb_actions.stats import Stats
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +83,8 @@ def process_abe(flight1, flight2):
             ABE.current_abes[key] = abe
             Stats.abe_add += 1
 
-            abe.id = db_ops.add_abe(flight1, flight2, lateral_distance,
-                                    alt_distance)
+            abe.id = add_abe(flight1, flight2, lateral_distance,
+                               alt_distance)
 
 def gc_loop():
     while True:
@@ -109,7 +107,7 @@ def abe_gc():
                         abe.min_latdist, abe.min_altdist)
             Stats.abe_finalize += 1
 
-            db_ops.update_abe(abe.flight1, abe.flight2,
+            update_abe(abe.flight1, abe.flight2,
                 abe.min_latdist, abe.min_altdist, abe.create_time, abe.id)
             try:
                 del ABE.current_abes[abe.get_key()]

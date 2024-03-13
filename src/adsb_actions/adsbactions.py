@@ -21,11 +21,11 @@ import yaml
 from io import StringIO
 from typing import Callable
 
-from rules import Rules
-from flights import Flights
-from bboxes import Bboxes
-from stats import Stats
-from location import Location
+from .rules import Rules
+from .flights import Flights
+from .bboxes import Bboxes
+from .stats import Stats
+from .location import Location
 
 logger = logging.getLogger(__name__)
 

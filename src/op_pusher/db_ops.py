@@ -1,15 +1,12 @@
 """Module to call out to external database."""
 import logging
-import sys
 import datetime
-import util
+
+USE_APPSHEET = True
+TZ_CONVERT = 0  # -7  # UTC conversion for outgoing ops
 
 logger = logging.getLogger(__name__)
 
-TZ_CONVERT = 0 # -7  # UTC conversion
-sys.path.insert(0, util.safe_path('../db'))
-
-USE_APPSHEET = True
 class Database:
     """Abstraction layer for different database backends."""
 
@@ -28,7 +25,7 @@ class Database:
             pass
 
     def appsheet_setup(self):
-        import appsheet_api
+        from db import appsheet_api
 
         APPSHEET = appsheet_api.Appsheet()
         self.lookup_db_call = APPSHEET.aircraft_lookup
