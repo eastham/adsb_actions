@@ -21,7 +21,7 @@ from kivy.uix.button import Button
 logger = logging.getLogger(__name__)
 logger.level = logging.DEBUG
 
-USE_DATABASE = False
+USE_DATABASE = FALSE
 SERVER_REFRESH_RATE = 60 # seconds
 
 class FlightStrip:
@@ -139,7 +139,7 @@ class FlightStrip:
             extratail)
 
         if location and bboxes_list:
-            bbox_2nd_level = flight.get_bbox_at_level(1)
+            bbox_2nd_level = flight.get_bbox_at_level(0)
 
             # XXX hack to keep string from wrapping...not sure how to get kivy
             # to do this

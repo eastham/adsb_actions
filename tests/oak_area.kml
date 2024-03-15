@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
 <Document>
-	<name>test_north_berkeley.kml</name>
+	<name>OAK_Area.kml</name>
 	<StyleMap id="m_ylw-pushpin">
 		<Pair>
 			<key>normal</key>
@@ -163,25 +163,10 @@
 		</PolyStyle>
 	</Style>
 	<Folder>
-		<name>My Places</name>
+		<name>Temporary Places</name>
 		<open>1</open>
-		<Style>
-			<ListStyle>
-				<listItemType>check</listItemType>
-				<ItemIcon>
-					<state>open</state>
-					<href>:/mysavedplaces_open.png</href>
-				</ItemIcon>
-				<ItemIcon>
-					<state>closed</state>
-					<href>:/mysavedplaces_closed.png</href>
-				</ItemIcon>
-				<bgColor>00ffffff</bgColor>
-				<maxSnippetLines>2</maxSnippetLines>
-			</ListStyle>
-		</Style>
 		<Placemark>
-			<name>OAK East: 0-41000 0-360</name>
+			<name>OAK East: 0-50000 0-360</name>
 			<styleUrl>#msn_ylw-pushpin</styleUrl>
 			<Polygon>
 				<tessellate>1</tessellate>
@@ -195,7 +180,7 @@
 			</Polygon>
 		</Placemark>
 		<Placemark>
-			<name>OAK West: 0-41000 0-360</name>
+			<name>OAK West: 0-50000 0-360</name>
 			<styleUrl>#msn_ylw-pushpin1</styleUrl>
 			<Polygon>
 				<tessellate>1</tessellate>
@@ -209,7 +194,7 @@
 			</Polygon>
 		</Placemark>
 		<Placemark>
-			<name>OAK Approach: 0-41000 0-360</name>
+			<name>OAK Approach: 0-50000 0-360</name>
 			<styleUrl>#m_ylw-pushpin</styleUrl>
 			<Polygon>
 				<tessellate>1</tessellate>
@@ -223,7 +208,7 @@
 			</Polygon>
 		</Placemark>
 		<Placemark>
-			<name>OAK Tower: 0-41000 0-360</name>
+			<name>OAK Tower: 0-50000 0-360</name>
 			<styleUrl>#msn_ylw-pushpin0</styleUrl>
 			<Polygon>
 				<tessellate>1</tessellate>
