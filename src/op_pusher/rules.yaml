@@ -1,6 +1,6 @@
   config:
     kmls:
-      - ../../tests/test1.kml 
+      - tests/test1.kml 
 
   rules:
     takeoff:
@@ -9,15 +9,16 @@
       actions:
         print: True
         callback: "takeoff"
-        note: "saw_takeoff"
+        note: "saw_takeoff"     # keep track that it was a takeoff from our airport, useful for tracking local flights
 
-    takeoff_popup: # XXX test needed
+    # aircraft appeared suddenly in the air nearby, we treat this as a takeoff
+    takeoff_popup:
       conditions:
         transition_regions: [ ~, "Generic Gate Air" ]
       actions:
         print: True
-        callback: "takeoff"
-        note: "saw_takeoff"
+        callback: "popup_takeoff"
+        note: "saw_takeoff"     # keep track that it was a takeoff from our airport, useful for tracking local flights
 
     landing:
       conditions:
@@ -26,6 +27,7 @@
         print: True
         callback: "landing"
 
+    # handle ABE's (close-proximity events)
     prox:
       conditions:
         min_alt: 4000

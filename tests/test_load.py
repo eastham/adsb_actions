@@ -10,9 +10,9 @@ import cProfile
 
 import yaml
 
-from stats import Stats
-from adsbactions import AdsbActions
 import testinfra
+from adsb_actions.stats import Stats
+from adsb_actions.adsbactions import AdsbActions
 
 YAML_STRING = """
   config:

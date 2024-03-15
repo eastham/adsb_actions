@@ -1,17 +1,12 @@
 #!/usr/bin/python3
 """Sample implementation for the library.  
 
-Takes ip address/port/yaml from command line and processes the data."""
+Takes ip address/port/yaml from command line and processes the data.
+Use with basic_rules.yaml to print out all traffic."""
 
 import logging
-import sys
-from pathlib import Path
+from adsb_actions.adsbactions import AdsbActions
 
-import yaml
-from adsbactions import AdsbActions
-
-path_root = Path(__file__).parents[0]
-sys.path.append(str(path_root))
 logger = None
 
 def setup_logger():

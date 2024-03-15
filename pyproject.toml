@@ -27,9 +27,10 @@ dependencies = [
     "Shapely ==  1.8.4",
     "lxml >= 4.9.4",
     "fastkml >= 0.12",
-    "requests >= 2.31.0"
-#    "Kivy == 2.3.0"
-#    "kivymd == 1.1.1"
+    "requests >= 2.31.0",
+    "Kivy == 2.3.0",
+    "kivymd == 1.1.1",
+    "pytest >= 8.1.1"
 ]
 
 [project.urls]

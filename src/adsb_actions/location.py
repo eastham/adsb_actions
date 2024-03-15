@@ -3,7 +3,7 @@
 from dataclasses import dataclass, fields
 from typing import Optional
 import logging
-import icao_convert
+from .icao_convert import icao_to_n_or_c
 
 from geopy import distance
 
@@ -41,7 +41,7 @@ class Location:
 
         # XXX should this be in flight?
         if "hex" in d:
-            tail = icao_convert.icao_to_n_or_c(d["hex"])
+            tail = icao_to_n_or_c(d["hex"])
             if tail:
                 nd["tail"] = tail
         return Location(**nd)

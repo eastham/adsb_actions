@@ -1,8 +1,7 @@
 import logging
 
-import adsbactions
-from stats import Stats
-from adsbactions import AdsbActions
+from adsb_actions.stats import Stats
+from adsb_actions.adsbactions import AdsbActions
 
 def set_all_loggers(level):
     # turn down loggers systemwide for noise/perf reasons
@@ -14,7 +13,7 @@ def test_callback(_):
     """null callback for testing purposes."""
     pass
 
-def setup_test_callback(aa: adsbactions.AdsbActions):
+def setup_test_callback(aa: AdsbActions):
     aa.register_callback("test_callback", test_callback)
 
 def load_json(fn):

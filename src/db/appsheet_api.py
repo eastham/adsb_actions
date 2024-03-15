@@ -10,25 +10,12 @@ import time
 import random
 import sys
 import logging
-import requests
 import pprint
+import requests
 
-sys.path.insert(0, '../adsb_actions')
-from config import Config
-
-# NOTE: real-life server calls can be enabled/disabled here
-FAKE_AIRCRAFT_CREATE = False
-FAKE_AIRCRAFT_LOOKUP = False
-FAKE_CPE_CREATE = False
-INHIBIT_ADD_OPS = False
-
+from adsb_actions.config import Config
 logger = logging.getLogger(__name__)
 logger.level = logging.INFO
-
-pp = pprint.PrettyPrinter(indent=4)
-def pprint_format(arg):
-    """return the complex arg as a pretty-printed string"""
-    return pp.pformat(arg)
 
 REQUEST_BODY = {
 "Properties": {
@@ -40,6 +27,7 @@ REQUEST_BODY = {
 }
 
 # Testing flags/constants
+USE_FAKE_CALLS = False       # don't actually send anything to server
 DELAYTEST = False            # add random delay for threading testing
 FAKE_KEY = "XXXfake keyXXX"  # fake db key to use if real db calls disabled
 DUMMY_AIRCRAFT = "N1911"     # aircraft to use for dummy ops
@@ -49,6 +37,18 @@ class Appsheet:
         self.config = Config()
         self.headers = {"ApplicationAccessKey":
             self.config.private_vars["appsheet"]["accesskey"]}
+        self.use_fake_calls = USE_FAKE_CALLS
+        if self.use_fake_calls:
+            logger.warning("NOTE: using fake database calls, "
+                           "no actions will be taken")
+        self.pp = pprint.PrettyPrinter(indent=4)
+
+    def pprint_format(self, arg):
+        """return the complex arg as a pretty-printed string"""
+        return self.pp.pformat(arg)
+
+    def enter_fake_mode(self):
+        self.use_fake_calls = True
 
     def aircraft_lookup(self, tail, wholeobj=False):
         """return database internal ID for this tail number """
@@ -57,19 +57,19 @@ class Appsheet:
         body["Action"] = "Find"
         body["Properties"]["Selector"] = "Select(Aircraft[Row ID], [Regno] = \"%s\")" % tail
         try:
-            if not FAKE_AIRCRAFT_LOOKUP:
+            if not self.use_fake_calls:
                 ret = self.sendop(self.config.private_vars["appsheet"]["aircraft_url"], body)
                 if ret:
                     logger.debug("lookup for tail " + tail + " lookup returning "+ ret[0]["Row ID"])
-                    if wholeobj: return ret[0]
-                    else: return ret[0]["Row ID"]
-                else:
-                    logger.debug("lookup for tail " + tail + " failed")
+                    if wholeobj:
+                        return ret[0]
+                    return ret[0]["Row ID"]
+
+                logger.debug("lookup for tail " + tail + " failed")
                 return ret
-            else:
-                return FAKE_KEY
+            return FAKE_KEY
         except Exception:
-            logger.info("aircraft_lookup op raised exception")
+            logger.warning("aircraft_lookup op raised exception")
 
         return None
 
@@ -84,13 +84,13 @@ class Appsheet:
             "description": description
         }]
         try:
-            if not FAKE_AIRCRAFT_CREATE:
+            if not self.use_fake_calls:
                 ret = self.sendop(self.config.private_vars["appsheet"]["aircraft_url"], body)
                 return ret["Rows"][0]["Row ID"]
             else:
                 return FAKE_KEY
         except Exception as e:
-            logger.info("add_aircraft op raised exception: " + str(e))
+            logger.warning("add_aircraft op raised exception: " + str(e))
         return None
 
     def get_all_entries(self, table):
@@ -102,14 +102,21 @@ class Appsheet:
             if ret:
                 return ret
         except Exception as e:
-            logger.info("get_all_entries raised exception: " + str(e))
+            logger.warning("get_all_entries raised exception: " + str(e))
         return None
 
     def delete_all_entries(self, table):
+        if self.use_fake_calls:
+            return
+
         allentries = self.get_all_entries(table)
         deleterows = []
         for op in allentries:
             deleterows.append({"Row ID": op["Row ID"]})
+
+        logger.warning("Deleting %d rows from table '%s', starting in 5 seconds.",
+                    len(deleterows), table)
+        time.sleep(5)
 
         logger.debug("delete rows are " + str(deleterows))
 
@@ -120,6 +127,9 @@ class Appsheet:
         self.sendop(self.config.private_vars["appsheet"][url], body, timeout=None)
 
     def delete_aircraft(self, regno):
+        if self.use_fake_calls:
+            return
+
         allentries = self.get_all_entries("aircraft")
         deleterows = []
         for op in allentries:
@@ -135,6 +145,8 @@ class Appsheet:
         self.sendop(self.config.private_vars["appsheet"][url], body, timeout=None)
 
     def add_aircraft_from_file(self, fn):
+        if self.use_fake_calls:
+            return
         with open(fn, 'r') as file:
             for line in file:
                 line = line.strip().upper()
@@ -143,6 +155,8 @@ class Appsheet:
                     self.add_aircraft(line)
 
     def add_op(self, aircraft, time, scenic, optype, flight_name):
+        if self.use_fake_calls:
+            return
         optime = datetime.datetime.fromtimestamp(time)
 
         body = copy.deepcopy(REQUEST_BODY)
@@ -157,15 +171,17 @@ class Appsheet:
             "Flight Name": flight_name
         }]
         try:
-            if not INHIBIT_ADD_OPS:
+            if not self.use_fake_calls:
                 self.sendop(self.config.private_vars["appsheet"]["ops_url"], body)
             return True
         except Exception as e:
-            logger.info("add_op raised exception: " + str(e))
+            logger.warning("add_op raised exception: " + str(e))
 
         return None
 
     def add_dummy_ops(self):
+        if self.use_fake_calls:
+            return
         # add a bunch of ops for testing
         ac_ref = self.aircraft_lookup(DUMMY_AIRCRAFT)
         assert ac_ref, "Could not find aircraft for dummy entry"
@@ -190,12 +206,12 @@ class Appsheet:
         }]
 
         try:
-            if not FAKE_CPE_CREATE:
+            if not self.use_fake_calls:
                 ret = self.sendop(self.config.private_vars["appsheet"]["cpe_url"], body)
                 return ret["Rows"][0]["Row ID"]
             return FAKE_KEY
         except Exception:
-            logger.info("add_cpe op raised exception")
+            logger.warning("add_cpe op raised exception")
         return None
 
     def update_cpe(self, flight1, flight2, latdist, altdist, time, rowid):
@@ -213,12 +229,12 @@ class Appsheet:
         }]
 
         try:
-            if not FAKE_CPE_CREATE:
+            if not self.use_fake_calls:
                 ret = self.sendop(self.config.private_vars["appsheet"]["cpe_url"], body)
                 return ret
             return FAKE_KEY
         except Exception:
-            logger.info("update_cpe op raised exception")
+            logger.warning("update_cpe op raised exception")
         return None
 
     def sendop(self, url, body, timeout=30):
@@ -239,7 +255,8 @@ class Appsheet:
             url,
             headers=self.headers, json=body, timeout=timeout)
         if response.status_code != 200:
-            logger.debug("non-200 return: %s", pprint_format(response))
+            logger.debug("non-200 return: %s", 
+                         self.pprint_format(response))
             raise requests.HTTPError("op returned non-200 code: " +
                                      str(response))
 
@@ -249,7 +266,7 @@ class Appsheet:
         if not response_dict:
             return None
         logger.debug("sendop response_dict for op %s: %s",
-                     caller, pprint_format(response_dict))
+                     caller, self.pprint_format(response_dict))
 
         return response_dict
 

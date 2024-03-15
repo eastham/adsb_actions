@@ -31,9 +31,9 @@
             "name": "Push ops to appsheet",
             "type": "python",
             "request": "launch",
-            "cwd": "${workspaceFolder}/src/op_pusher",
-            "program": "op_pusher.py",
-            "args": "--testdata ../../tests/20minutes.json --delay .01 --rules rules.yaml ../../tests/test1.kml",
+            "cwd": "${workspaceFolder}",
+            "program": "src/op_pusher/op_pusher.py",
+            "args": "--testdata tests/20minutes.json --delay .01 --rules src/op_pusher/rules.yaml tests/test1.kml",
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -48,10 +48,10 @@
             "justMyCode": true
         },
         {
-            "name": "Parse data from port",
+            "name": "Parse and print data from port",
             "type": "python",
             "request": "launch",
-            "cwd": "${workspaceFolder}/src/adsb_actions",
+            "cwd": "${workspaceFolder}/src/simple",
             "program": "main.py",
             "args": "--ipaddr 127.0.0.1 --port 6666 basic_rules.yaml",
             "console": "integratedTerminal",

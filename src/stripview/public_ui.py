@@ -1,10 +1,7 @@
 """A variant of the stripview UI for public consumption.
 Hides traffic alerts, adds aliases for aircraft."""
 
-import sys
-import adsb_actions
-sys.path.insert(0, '../adsb_actions')
-from flight import Flight
+from adsb_actions.flight import Flight
 import controller
 
 ALIASES = {

@@ -9,10 +9,8 @@ import sys
 import logging
 import yaml
 
-sys.path.insert(0, '../adsb_actions')
-from bboxes import Bboxes
-from flight import Flight
-from adsbactions import AdsbActions
+from adsb_actions.bboxes import Bboxes
+from adsb_actions.adsbactions import AdsbActions
 from flightstrip import FlightStrip
 
 import kivy

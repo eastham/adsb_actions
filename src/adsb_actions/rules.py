@@ -3,9 +3,9 @@
 import datetime
 import logging
 from typing import Callable
-from flight import Flight
-from stats import Stats
-from ruleexecutionlog import RuleExecutionLog, ExecutionCounter
+from .flight import Flight
+from .stats import Stats
+from .ruleexecutionlog import RuleExecutionLog, ExecutionCounter
 
 logger = logging.getLogger(__name__)
 logger.level = logging.WARNING
