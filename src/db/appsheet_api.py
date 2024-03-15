@@ -69,7 +69,7 @@ class Appsheet:
                 return ret
             return FAKE_KEY
         except Exception:
-            logger.info("aircraft_lookup op raised exception")
+            logger.warning("aircraft_lookup op raised exception")
 
         return None
 
@@ -90,7 +90,7 @@ class Appsheet:
             else:
                 return FAKE_KEY
         except Exception as e:
-            logger.info("add_aircraft op raised exception: " + str(e))
+            logger.warning("add_aircraft op raised exception: " + str(e))
         return None
 
     def get_all_entries(self, table):
@@ -102,7 +102,7 @@ class Appsheet:
             if ret:
                 return ret
         except Exception as e:
-            logger.info("get_all_entries raised exception: " + str(e))
+            logger.warning("get_all_entries raised exception: " + str(e))
         return None
 
     def delete_all_entries(self, table):
@@ -175,7 +175,7 @@ class Appsheet:
                 self.sendop(self.config.private_vars["appsheet"]["ops_url"], body)
             return True
         except Exception as e:
-            logger.info("add_op raised exception: " + str(e))
+            logger.warning("add_op raised exception: " + str(e))
 
         return None
 
@@ -211,7 +211,7 @@ class Appsheet:
                 return ret["Rows"][0]["Row ID"]
             return FAKE_KEY
         except Exception:
-            logger.info("add_cpe op raised exception")
+            logger.warning("add_cpe op raised exception")
         return None
 
     def update_cpe(self, flight1, flight2, latdist, altdist, time, rowid):
@@ -234,7 +234,7 @@ class Appsheet:
                 return ret
             return FAKE_KEY
         except Exception:
-            logger.info("update_cpe op raised exception")
+            logger.warning("update_cpe op raised exception")
         return None
 
     def sendop(self, url, body, timeout=30):

@@ -9,7 +9,7 @@
       actions:
         print: True
         callback: "takeoff"
-        note: "saw_takeoff"
+        note: "saw_takeoff"     # keep track that it was a takeoff from our airport, useful for tracking local flights
 
     # aircraft appeared suddenly in the air nearby, we treat this as a takeoff
     takeoff_popup:
@@ -18,7 +18,7 @@
       actions:
         print: True
         callback: "popup_takeoff"
-        note: "saw_takeoff"
+        note: "saw_takeoff"     # keep track that it was a takeoff from our airport, useful for tracking local flights
 
     landing:
       conditions:
