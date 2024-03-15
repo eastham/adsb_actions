@@ -10,8 +10,8 @@ import time
 import random
 import sys
 import logging
-import requests
 import pprint
+import requests
 
 from adsb_actions.config import Config
 logger = logging.getLogger(__name__)
@@ -27,6 +27,7 @@ REQUEST_BODY = {
 }
 
 # Testing flags/constants
+USE_FAKE_CALLS = False       # don't actually send anything to server
 DELAYTEST = False            # add random delay for threading testing
 FAKE_KEY = "XXXfake keyXXX"  # fake db key to use if real db calls disabled
 DUMMY_AIRCRAFT = "N1911"     # aircraft to use for dummy ops
@@ -36,7 +37,10 @@ class Appsheet:
         self.config = Config()
         self.headers = {"ApplicationAccessKey":
             self.config.private_vars["appsheet"]["accesskey"]}
-        self.use_fake_calls = True
+        self.use_fake_calls = USE_FAKE_CALLS
+        if self.use_fake_calls:
+            logger.warning("NOTE: using fake database calls, "
+                           "no actions will be taken")
         self.pp = pprint.PrettyPrinter(indent=4)
 
     def pprint_format(self, arg):
@@ -109,6 +113,10 @@ class Appsheet:
         deleterows = []
         for op in allentries:
             deleterows.append({"Row ID": op["Row ID"]})
+
+        logger.warning("Deleting %d rows from table '%s', starting in 5 seconds.",
+                    len(deleterows), table)
+        time.sleep(5)
 
         logger.debug("delete rows are " + str(deleterows))
 
