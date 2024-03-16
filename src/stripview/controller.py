@@ -181,6 +181,13 @@ def setup(focus_q, admin_q):
         with open(args.testdata, 'rt', encoding="utf-8") as myfile:
             json_data = myfile.read()
 
+    assert len(adsb_actions.rules.yaml_data['config']['kmls']) == 2, \
+        "2 kmls expected in yaml"
+    assert adsb_actions.rules.yaml_data['config']['kmls'][0] == args.file[0], \
+        "first kml file on comamnd line must also be specified first in yaml"
+    assert len(bboxes_list[0].boxes) == 4, \
+        "4 racks expected in first kml"
+
     adsb_actions.register_callback(
         "aircraft_update_cb", controllerapp.update_strip)
     adsb_actions.register_callback(
