@@ -161,7 +161,9 @@ def setup(focus_q, admin_q):
     if args.ipaddr and args.delay:
         logger.warning("--delay has no effect when ipaddr is given")
 
-    # Load state needed to define and label the 4 strip racks.
+    # Load state from kml needed to define and label the 4 strip racks.
+    # XXX Currently this same kml must also be specified in the yaml... 
+    # I think we could rely on the yaml only?
     bboxes_list = [] 
     for f in args.file:
         bboxes_list.append(Bboxes(f)) # describes the 4 racks
@@ -181,6 +183,13 @@ def setup(focus_q, admin_q):
 
         with open(args.testdata, 'rt', encoding="utf-8") as myfile:
             json_data = myfile.read()
+
+    assert len(adsb_actions.rules.yaml_data['config']['kmls']) == 2, \
+        "2 kmls expected in yaml"
+    assert adsb_actions.rules.yaml_data['config']['kmls'][0] == args.file[0], \
+        "first kml file on comamnd line must also be specified first in yaml"
+    assert len(bboxes_list[0].boxes) == 4, \
+        "4 racks expected in first kml"  # TODO: Obviously could be generalized
 
     adsb_actions.register_callback(
         "aircraft_update_cb", controllerapp.update_strip)
