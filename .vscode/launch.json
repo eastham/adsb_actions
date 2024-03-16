@@ -12,7 +12,7 @@
         {"name":"Python: Current File","type":"python","request":"launch","program":"${file}","console":"integratedTerminal","justMyCode":true},
         {
             "name": "Harpers Stripview UI demo",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "controller.py",
             "cwd": "${workspaceFolder}/src/stripview",
@@ -52,7 +52,7 @@
         },
         {
             "name": "Harpers Push ops to appsheet",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "cwd": "${workspaceFolder}",
             "program": "src/op_pusher/op_pusher.py",
