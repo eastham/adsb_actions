@@ -52,6 +52,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}",
             "program": "src/op_pusher/op_pusher.py",
+            "args": "--ipaddr rpi4 --port 30006 --rules ./src/op_pusher/nberk_rules.yaml ../../tests/test_north_berkeley.kml",
             "console": "integratedTerminal",
             "justMyCode": true
         },
