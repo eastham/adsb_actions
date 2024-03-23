@@ -28,11 +28,11 @@ from .bboxes import Bboxes
 from .stats import Stats
 from .location import Location
 
-# Experimental Prometheus exporter
-from prometheus_client import start_http_server, Summary, Gauge, Info
+# Prometheus exporter
+from prometheus_client import start_http_server, Gauge
 
-# Define some prometheus metrics
-test_gauge = Gauge('adsb_actions_appsheet_error', 'Appsheet errors', [ 'message' ])
+# Metrics defined
+op_pusher_gauge = Gauge('op_pusher', 'op_pusher count', [ 'message' ])
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,11 @@ class AdsbActions:
 
         if mport:
             start_http_server(mport)
-            test_gauge.labels('Set from Adsb_actions').set(42)
+
+        op_pusher_gauge.labels('local landings').set(0)
+        op_pusher_gauge.labels('landings').set(0)
+        op_pusher_gauge.labels('popup takeoffs').set(0)
+        op_pusher_gauge.labels('takeoffs').set(0)
 
     def loop(self, string_data = None, iterator_data = None, delay: float = 0.) -> None:
         """Process ADS-B json data in a loop on the previously-opened socket.
@@ -201,6 +205,7 @@ class AdsbActions:
 
         logger.debug("Read json: %s ", str(jsondict))
         Stats.json_readlines += 1
+        op_pusher_gauge.labels('json readlines').set(Stats.json_readlines)
 
         if jsondict and 'alt_baro' in jsondict:
             # We got some valid data, process it. (points with no altitude

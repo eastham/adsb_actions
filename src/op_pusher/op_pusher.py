@@ -5,6 +5,7 @@ import sys
 import logging
 from adsb_actions.adsbactions import AdsbActions
 import op_pusher_helpers
+from prometheus_client import Gauge
 
 logger = logging.getLogger(__name__)
 
