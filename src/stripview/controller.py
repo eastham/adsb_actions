@@ -69,7 +69,7 @@ class ControllerApp(MDApp):
         id = flight.flight_id
 
         if id in self.strips:
-            # updating exsiting strip
+            # updating existing strip
             strip = self.strips[id]
             strip.update(flight, flight.lastloc, flight.inside_bboxes)
             if new_scrollview_index is None and strip.scrollview_index >= 0:
