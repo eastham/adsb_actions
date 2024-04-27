@@ -22,7 +22,7 @@ from kivy.metrics import dp
 logger = logging.getLogger(__name__)
 logger.level = logging.DEBUG
 
-USE_DATABASE = False
+USE_DATABASE = True
 SERVER_REFRESH_RATE = 60 # seconds
 
 class FlightStrip:
@@ -46,18 +46,20 @@ class FlightStrip:
         self.layout = GridLayout(cols=2, row_default_height=dp(70),
                                  height=dp(70), size_hint_y=None)
         self.main_button = Button(size_hint_x=None, padding=(dp(5),dp(5)),
-            text_size=(dp(250),dp(75)), width=dp(250), height=dp(110),
+            text_size=(dp(235),dp(75)), width=dp(235), height=dp(110),
             halign="left", valign="top", markup=True,
             on_release=self.main_button_click)
 
-        self.right_layout = GridLayout(rows=3, row_default_height=dp(25))
+        self.right_layout = GridLayout(rows=3, row_default_height=dp(22))
 
-        self.admin_button = Button(text='Open', size_hint_x=None, width=dp(50),
-            on_release=self.admin_click)
-        self.focus_button = Button(text='Focus', size_hint_x=None, width=dp(50),
-            on_release=self.focus_click)
-        self.web_button = Button(text='Web', size_hint_x=None, width=dp(50),
-            on_release=self.web_click)
+        BUTTON_WIDTH = dp(65)
+        self.admin_button = Button(text='?', size_hint_x=None,
+                                   width=BUTTON_WIDTH)
+        self.focus_button = Button(text='?', size_hint_x=None,
+                                   width=BUTTON_WIDTH)
+        self.web_button = Button(text='Open FA', size_hint_x=None,
+                                 width=BUTTON_WIDTH, color="#7070E0",
+                                 on_release=self.web_click)
 
         self.layout.add_widget(self.main_button)
         self.layout.add_widget(self.right_layout)
@@ -97,6 +99,8 @@ class FlightStrip:
         pass
 
     def admin_click(self, arg):
+        # Dead code.  Back when we had a browser context, this would work, but that
+        # added a great deal of complexity and bugs to the overall environment.
         if 'Row ID' not in self.flight.flags:
             self.db_interface.call_database()  # hopefully sets row id
 
@@ -108,6 +112,7 @@ class FlightStrip:
         webbrowser.open("https://flightaware.com/live/flight/" + self.flight.flight_id)
 
     def focus_click(self, arg):
+        # Dead code, see admin_click() comment above.
         logging.debug("focus " + self.flight.flight_id)
         if self.focus_q: self.focus_q.put(self.flight.flight_id)
 
@@ -124,12 +129,22 @@ class FlightStrip:
         logging.debug("stop_server_loop, thread " + str(self.update_thread))
         self.stop_event.set()
 
-    def handle_db_update(self, note, color):
+    def handle_db_update(self, note, color, label1, label2, label3):
         """callback from database module to update strip."""
+
+        # update main (left hand side) strip text and color
         self.note_string = note
         self.bg_color_warn = color
         self.set_normal()
         self.update(self.flight, None, None)
+
+        # update each RHS button text if specified
+        if label1:
+            self.admin_button.text = label1
+        if label2:
+            self.focus_button.text = label2
+        if label3:
+            self.web_button.text = label3
 
     def update(self, flight, location, bboxes_list):
         """ Re-build strip strings, changes show up on-screen automatically """
@@ -151,7 +166,8 @@ class FlightStrip:
             self.loc_string = bbox_2nd_level[0:cliplen] if bbox_2nd_level else ""
 
             altchangestr = flight.get_alt_change_str(location.alt_baro)
-            self.alt_string = altchangestr + " " + str(location.alt_baro) + " " + str(int(location.gs))
+            self.alt_string = (altchangestr + " " + str(location.alt_baro) +
+                               " " + str(int(location.gs)))
 
         self.update_strip_text()
 
