@@ -22,7 +22,7 @@ from kivy.metrics import dp
 logger = logging.getLogger(__name__)
 logger.level = logging.DEBUG
 
-USE_DATABASE = True
+USE_DATABASE = False
 SERVER_REFRESH_RATE = 60 # seconds
 
 class FlightStrip:
