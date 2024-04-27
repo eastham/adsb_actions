@@ -17,6 +17,7 @@ Config.set('graphics', 'height', '800')
 from kivy.clock import Clock
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.button import Button
+from kivy.metrics import dp
 
 logger = logging.getLogger(__name__)
 logger.level = logging.DEBUG
@@ -42,18 +43,20 @@ class FlightStrip:
         self.loc_string = ""
         self.deanno_event = None
 
-        self.layout = GridLayout(cols=2, row_default_height=150, height=150, size_hint_y=None)
-        self.main_button = Button(size_hint_x=None, padding=(10,10),
-            text_size=(500,150), width=500, height=225, halign="left",
-            valign="top", markup=True, on_release=self.main_button_click)
+        self.layout = GridLayout(cols=2, row_default_height=dp(70),
+                                 height=dp(70), size_hint_y=None)
+        self.main_button = Button(size_hint_x=None, padding=(dp(5),dp(5)),
+            text_size=(dp(250),dp(75)), width=dp(250), height=dp(110),
+            halign="left", valign="top", markup=True,
+            on_release=self.main_button_click)
 
-        self.right_layout = GridLayout(rows=3, row_default_height=50)
+        self.right_layout = GridLayout(rows=3, row_default_height=dp(25))
 
-        self.admin_button = Button(text='Open', size_hint_x=None, width=100,
+        self.admin_button = Button(text='Open', size_hint_x=None, width=dp(50),
             on_release=self.admin_click)
-        self.focus_button = Button(text='Focus', size_hint_x=None, width=100,
+        self.focus_button = Button(text='Focus', size_hint_x=None, width=dp(50),
             on_release=self.focus_click)
-        self.web_button = Button(text='Web', size_hint_x=None, width=100,
+        self.web_button = Button(text='Web', size_hint_x=None, width=dp(50),
             on_release=self.web_click)
 
         self.layout.add_widget(self.main_button)
@@ -135,7 +138,7 @@ class FlightStrip:
             extratail = flight.other_id
         else:
             extratail = ""
-        self.top_string = "[b][size=34]%s %s[/size][/b]" % (flight.flight_id.strip(),
+        self.top_string = "[b][size=17dp]%s %s[/size][/b]" % (flight.flight_id.strip(),
             extratail)
 
         if location and bboxes_list:
