@@ -75,7 +75,7 @@ class Appsheet:
 
 
     def pilot_lookup(self, rowid):
-        """return pilot info by database id"""
+        """Return pilot database row, selected by database id"""
 
         body = copy.deepcopy(REQUEST_BODY)
         body["Action"] = "Find"
@@ -84,16 +84,17 @@ class Appsheet:
             if not self.use_fake_calls:
                 ret = self.sendop(
                     self.config.private_vars["appsheet"]["pilot_url"], body)
-                if ret:
-                    logger.debug("lookup for pilot id " + rowid +
-                                " lookup returning " + str(ret[0]))
+                if ret and ret[0]:
+                    logger.debug("lookup for pilot id %s returning %s", rowid,
+                                 str(ret[0]))
+
                     return ret[0]
 
-                logger.debug("lookup for pilot id " + rowid + " failed")
+                logger.debug("lookup for pilot id %s failed", rowid)
                 return None
-            return FAKE_KEY
+            return None
         except Exception as e: # pylint: disable=broad-except
-            logger.warning("pilot_lookup op raised exception: " + str(e))
+            logger.warning("pilot_lookup op raised exception: %s", str(e))
 
         return None
 
