@@ -5,8 +5,16 @@
 
     # no-surround settings
     # surround_image: ""
-    # window_size: [400, 300]
+    # window_size: [400, 340]
     # text_position: [20, -20]
+
+  pilot_names:
+    - tail: "C-GUYE"
+      pilot: "John Doe"
+    - tail: "N5818B"
+      pilot: "Jane Doe"
+
+  default_pilot_name: "(anonymous)"
 
   config:
     kmls:

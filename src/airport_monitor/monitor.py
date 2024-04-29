@@ -27,12 +27,15 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 
 class Monitor(App):
-    def __init__(self, surround_image_fn, text_position, **kwargs):
-        super(Monitor, self).__init__(**kwargs)
+    def __init__(self, surround_image_fn, text_position, default_pilot_name,
+                 pilot_names, **kwargs):
+        super().__init__(**kwargs)
         self.text_input = None
         self.image = None
         self.surround_image_fn = surround_image_fn
         self.text_position = (dp(text_position[0]), dp(text_position[1]))
+        self.default_pilot_name = default_pilot_name
+        self.pilot_names = pilot_names
 
     def build(self):
         self.text_input = TextInput(multiline=True, pos=self.text_position)
@@ -65,8 +68,19 @@ class Monitor(App):
     def format_row(self, arg1, arg2, arg3):
         return f'{arg1: <15} {arg2: <12} {arg3: <15}\n'
 
+    def search_for_pilot(self, flight_id):
+        """Search for the pilot name associated with a flight, specified in
+        the YAML file."""
+        for pilot in self.pilot_names:
+            if flight_id == pilot.get('tail'):
+                return pilot['pilot']
+        return self.default_pilot_name
+
     def get_text_for_flight(self, flight):
-        return self.format_row('BRC1', flight.flight_id, flight.inside_bboxes[1].strip())
+        pilot_name = self.default_pilot_name
+        if self.pilot_names:
+            pilot_name = self.search_for_pilot(flight.flight_id)
+        return self.format_row(pilot_name, flight.flight_id, flight.inside_bboxes[1].strip())
 
     def get_text_for_index(self, title, index):
         text = '            ' + title + '\n\n'
@@ -140,7 +154,9 @@ def setup():
     Window.size = dp_window_size
 
     monitorapp = Monitor(yaml_data['monitor_config']['surround_image'],
-                         yaml_data['monitor_config']['text_position'])
+                         yaml_data['monitor_config']['text_position'],
+                         yaml_data['default_pilot_name'],
+                         yaml_data['pilot_names'])
 
     adsb_actions.register_callback(
         "aircraft_update_cb", monitorapp.handle_change)
