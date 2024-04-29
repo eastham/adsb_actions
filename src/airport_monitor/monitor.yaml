@@ -1,3 +1,13 @@
+  monitor_config:
+    surround_image: "./tv2.png"
+    window_size: [650, 500]
+    text_position: [130, -200]
+
+    # no-surround settings
+    # surround_image: ""
+    # window_size: [400, 300]
+    # text_position: [20, -20]
+
   config:
     kmls:
       - ../../tests/test2.kml 
