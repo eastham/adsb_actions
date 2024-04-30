@@ -25,7 +25,6 @@ if __name__ == "__main__":
     parser.add_argument('--test', help="add some test flights", action="store_true")
     parser.add_argument('--ipaddr', help="IP address to connect to", required=True)
     parser.add_argument('--port', help="port to connect to", required=True)
-    parser.add_argument('-m', '--mport', type=int, help="metrics port to listen on", default='9107')
     parser.add_argument('yaml', help='Path to the YAML file')
     args = parser.parse_args()
 
