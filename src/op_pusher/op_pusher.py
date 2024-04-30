@@ -5,7 +5,6 @@ import sys
 import logging
 from adsb_actions.adsbactions import AdsbActions
 import op_pusher_helpers
-from prometheus_client import Gauge
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,6 @@ def run():
     parser.add_argument('file', nargs='+', help="kml files to use")
     parser.add_argument('--ipaddr', help="IP address to connect to")
     parser.add_argument('--port', help="port to connect to")
-    parser.add_argument('-m', '--mport', type=int, help="metrics port to listen on", default='9118')
     parser.add_argument('--rules', help="YAML file that describes UI behavior", required=True)
     parser.add_argument('--testdata', help="JSON flight tracks, for testing")
     parser.add_argument('--delay', help="Seconds of delay between reads, for testing", default=0)
@@ -37,7 +35,7 @@ def run():
     json_data = None
     if not args.testdata:
         adsb_actions = AdsbActions(yaml_file=args.rules, ip=args.ipaddr,
-                                   port=args.port, mport=args.mport)
+                                   port=args.port)
     else:
         with open(args.testdata, 'rt', encoding="utf-8") as myfile:
             json_data = myfile.read()

@@ -2,11 +2,8 @@ import logging
 from abe import process_abe_launch, ABE
 from db_ops import DATABASE, add_op
 from adsb_actions.stats import Stats
-from prometheus_client import Gauge
 
 logger = logging.getLogger(__name__)
-
-op_pusher_helpers_gauge = Gauge('op_pusher_helpers', 'op_pusher_helpers', [ 'message' ])
 
 def landing_cb(flight):
     logging.info("Landing detected! %s", flight.flight_id)

@@ -28,12 +28,6 @@ from .bboxes import Bboxes
 from .stats import Stats
 from .location import Location
 
-# Prometheus exporter
-from prometheus_client import start_http_server, Gauge
-
-# Metrics defined
-op_pusher_gauge = Gauge('op_pusher', 'op_pusher count', [ 'message' ])
-
 logger = logging.getLogger(__name__)
 
 class AdsbActions:
