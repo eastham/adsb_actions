@@ -18,7 +18,7 @@ kivy.require('1.0.5')
 from kivy.config import Config
 Config.set('graphics', 'width', '600')
 Config.set('graphics', 'height', '800')
-
+from kivy.core.window import Window
 from kivymd.app import MDApp
 from dialog import Dialog
 
@@ -50,6 +50,10 @@ class ControllerApp(MDApp):
         logging.debug("controller build done")
         return self.controller
 
+    def register_close_callback(self, close_callback):
+        """Callback for when the user tries to close the window."""
+        Window.bind(on_request_close=close_callback)
+
     def get_title_button_by_index(self, index):
         title_id = "title_%d" % index
         return self.controller.ids[title_id]
@@ -59,7 +63,8 @@ class ControllerApp(MDApp):
         for i, bbox in enumerate(self.bboxes.boxes):
             title_button = self.get_title_button_by_index(i)
             title_button.text = bbox.name
-            if i >= self.MAX_SCROLLVIEWS-1: return
+            if i >= self.MAX_SCROLLVIEWS - 1:
+                return
 
     @mainthread
     def update_strip(self, flight):
@@ -69,7 +74,7 @@ class ControllerApp(MDApp):
         id = flight.flight_id
 
         if id in self.strips:
-            # updating exsiting strip
+            # updating existing strip
             strip = self.strips[id]
             strip.update(flight, flight.lastloc, flight.inside_bboxes)
             if new_scrollview_index is None and strip.scrollview_index >= 0:
@@ -139,6 +144,15 @@ class Controller(FloatLayout):
 def sigint_handler(signum, frame):
     exit(1)
 
+def shutdown_adsb_actions(_, adsb_actions, read_thread):
+    logging.warning("Shutting down adsb_actions")
+
+    adsb_actions.exit_loop_flag = True
+    read_thread.join()
+
+    logging.warning("adsb_actions shutdown complete")
+    sys.exit(0)
+
 def setup(focus_q, admin_q):
     logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
     logging.info('System started.')
@@ -162,14 +176,17 @@ def setup(focus_q, admin_q):
         logger.warning("--delay has no effect when ipaddr is given")
 
     # Load state from kml needed to define and label the 4 strip racks.
-    # XXX Currently this same kml must also be specified in the yaml... 
+    # XXX Currently this same kml must also be specified in the yaml...
     # I think we could rely on the yaml only?
-    bboxes_list = [] 
+    bboxes_list = []
     for f in args.file:
         bboxes_list.append(Bboxes(f)) # describes the 4 racks
 
     # UI setup
     signal.signal(signal.SIGINT, sigint_handler)
+    signal.signal(signal.SIGTERM, sigint_handler)
+    signal.signal(signal.SIGQUIT, sigint_handler)
+
     global controllerapp
     controllerapp = ControllerApp(bboxes_list[0], focus_q, admin_q)
 
@@ -200,6 +217,11 @@ def setup(focus_q, admin_q):
 
     read_thread = threading.Thread(target=adsb_actions.loop,
         kwargs={'string_data': json_data, 'delay': float(args.delay)})
+
+    # handling for orderly exit when the user closes the window manually
+    close_callback = lambda controller, actions=adsb_actions, thread=read_thread: \
+        shutdown_adsb_actions(controller, actions, thread) # pylint: disable=unnecessary-lambda-assignment
+    controllerapp.register_close_callback(close_callback)
 
     # Don't update the UI before it's drawn...
     Clock.schedule_once(lambda x: read_thread.start(), 2)

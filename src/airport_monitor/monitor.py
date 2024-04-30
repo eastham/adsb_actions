@@ -11,7 +11,7 @@ from kivy.uix.textinput import TextInput
 from kivy.clock import Clock, mainthread
 from kivy.utils import escape_markup
 from kivy.core.window import Window
-Window.size = (1000, 800)
+from kivy.metrics import dp
 
 from adsb_actions.bboxes import Bboxes
 from adsb_actions.flight import Flight
@@ -26,29 +26,41 @@ from kivy.uix.boxlayout import BoxLayout
 
 from kivy.uix.floatlayout import FloatLayout
 
-from kivy.core.window import Window
-
 class Monitor(App):
+    def __init__(self, surround_image_fn, text_position, default_pilot_name,
+                 pilot_names, **kwargs):
+        super().__init__(**kwargs)
+        self.text_input = None
+        self.image = None
+        self.surround_image_fn = surround_image_fn
+        self.text_position = (dp(text_position[0]), dp(text_position[1]))
+        self.default_pilot_name = default_pilot_name
+        self.pilot_names = pilot_names
+
     def build(self):
-        self.text_input = TextInput(multiline=True, pos=(200, -300))
-        self.image = Image(source='tv2.png', fit_mode='fill')
+        self.text_input = TextInput(multiline=True, pos=self.text_position)
 
         layout = FloatLayout()
         layout.add_widget(self.text_input)
-        layout.add_widget(self.image)
 
-        # setup sizes and positions once the window is renderedq
+        if self.surround_image_fn:
+            self.image = Image(source=self.surround_image_fn, fit_mode='fill')
+            layout.add_widget(self.image)
+
+        # setup sizes and positions once the window is rendered
         layout.bind(size=self.on_size, pos=self.on_pos)
 
         return layout
 
     def on_size(self, instance, value):
         self.text_input.size = value
-        self.image.size = value
+        if self.image:
+            self.image.size = value
 
     def on_pos(self, instance, value):
         self.text_input.pos = value
-        self.image.pos = value
+        if self.image:
+            self.image.pos = value
 
     def update_text(self, text):
         self.text_input.text = text
@@ -56,12 +68,23 @@ class Monitor(App):
     def format_row(self, arg1, arg2, arg3):
         return f'{arg1: <15} {arg2: <12} {arg3: <15}\n'
 
+    def search_for_pilot(self, flight_id):
+        """Search for the pilot name associated with a flight, specified in
+        the YAML file."""
+        for pilot in self.pilot_names:
+            if flight_id == pilot.get('tail'):
+                return pilot['pilot']
+        return self.default_pilot_name
+
     def get_text_for_flight(self, flight):
-        return self.format_row('BRC1', flight.flight_id, flight.inside_bboxes[1].strip())
+        pilot_name = self.default_pilot_name
+        if self.pilot_names:
+            pilot_name = self.search_for_pilot(flight.flight_id)
+        return self.format_row(pilot_name, flight.flight_id, flight.inside_bboxes[1].strip())
 
     def get_text_for_index(self, title, index):
         text = '            ' + title + '\n\n'
-        text += self.format_row("FLIGHT", "TAIL #", "LOCATION")
+        text += self.format_row("PILOT", "TAIL #", "LOCATION")
         text += '\n'
 
         for flight in adsb_actions.flights:
@@ -127,7 +150,13 @@ def setup():
             json_data = myfile.read()
 
     # Actually build and start the app
-    monitorapp = Monitor()
+    dp_window_size = [dp(i) for i in yaml_data['monitor_config']['window_size']]
+    Window.size = dp_window_size
+
+    monitorapp = Monitor(yaml_data['monitor_config']['surround_image'],
+                         yaml_data['monitor_config']['text_position'],
+                         yaml_data['default_pilot_name'],
+                         yaml_data['pilot_names'])
 
     adsb_actions.register_callback(
         "aircraft_update_cb", monitorapp.handle_change)
