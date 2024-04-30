@@ -30,6 +30,6 @@ if __name__ == "__main__":
 
     setup_logger()
 
-    adsb_actions = AdsbActions(yaml_file=args.yaml, ip=args.ipaddr, port=args.port, mport=args.mport)
+    adsb_actions = AdsbActions(yaml_file=args.yaml, ip=args.ipaddr, port=args.port)
     adsb_actions.loop()
  

@@ -163,7 +163,6 @@ def setup(focus_q, admin_q):
     parser.add_argument('file', nargs='+', help="kml files to use")
     parser.add_argument('--ipaddr', help="IP address to connect to")
     parser.add_argument('--port', help="port to connect to")
-    parser.add_argument('-m', '--mport', type=int, help="metrics port to listen on", default='9108')
     parser.add_argument('--rules', help="YAML file that describes UI behavior", required=True)
     parser.add_argument('--testdata', help="JSON flight tracks, for testing")
     parser.add_argument('--delay', help="Seconds of delay between reads, for testing", default=0)
@@ -194,7 +193,7 @@ def setup(focus_q, admin_q):
     json_data = None
     if not args.testdata:
         adsb_actions = AdsbActions(
-            yaml_file=args.rules, ip=args.ipaddr, port=args.port, mport=args.mport)
+            yaml_file=args.rules, ip=args.ipaddr, port=args.port)
     else:
         adsb_actions = AdsbActions(yaml_file=args.rules)
 
