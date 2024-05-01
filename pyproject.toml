@@ -30,8 +30,7 @@ dependencies = [
     "requests >= 2.31.0",
     "Kivy == 2.3.0",
     "kivymd == 1.1.1",
-    "pytest >= 8.1.1",
-    "prometheus_client >= 0.20.0"
+    "pytest >= 8.1.1"
 ]
 
 [project.urls]
