@@ -3,16 +3,24 @@
 import argparse
 import sys
 import logging
+import logging.handlers
 from adsb_actions.adsbactions import AdsbActions
 import op_pusher_helpers
 from prometheus_client import Gauge
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s adsb_actions %(module)s:%(lineno)d: %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.handlers.SysLogHandler(),
+#        logging.FileHandler("log/op_pusher.log"),
+    ]
+)
 
 def run():
-    logging.basicConfig(format='%(levelname)-8s %(module)s:%(lineno)d: %(message)s',
-                        level=logging.INFO)
-    logging.info('System started.')
+    logger.info('System started.')
 
     parser = argparse.ArgumentParser(description="match flights against kml bounding boxes")
     parser.add_argument("-v", "--verbose", action="store_true")
