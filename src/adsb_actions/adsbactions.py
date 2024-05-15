@@ -2,8 +2,7 @@
 
 The following code will instantiate the library, attempt to connect to a network
 socket, and process the ADS-B data coming in:
-    adsb_actions = (yaml_config, ip=args.ipaddr, port=args.port, mport=args.mport)
-    adsb_actions = AdsbActions(yaml_config, ip=args.ipaddr, port=args.port)
+    adsb_actions = AdsbActions(yaml_config, ip=args.ipaddr, port=args.port, mport=args.mport)
     adsb_actions.loop()
 
 Also useful, to support rules that want to call code:
@@ -72,11 +71,6 @@ class AdsbActions:
 
         if mport:
             start_http_server(mport)
-
-        op_pusher_gauge.labels('local landings').set(0)
-        op_pusher_gauge.labels('landings').set(0)
-        op_pusher_gauge.labels('popup takeoffs').set(0)
-        op_pusher_gauge.labels('takeoffs').set(0)
 
     def loop(self, string_data = None, iterator_data = None, delay: float = 0.) -> None:
         """Process ADS-B json data in a loop on the previously-opened socket.

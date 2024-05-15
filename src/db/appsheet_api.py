@@ -39,9 +39,6 @@ DUMMY_AIRCRAFT = "N1911"     # aircraft to use for dummy ops
 
 class Appsheet:
     def __init__(self):
-        appsheet_error_gauge.labels('appsheet add_aircraft error', "").set(0)
-        appsheet_error_gauge.labels('appsheet add_op error', "").set(0)
-
         self.config = Config()
         self.headers = {"ApplicationAccessKey":
             self.config.private_vars["appsheet"]["accesskey"]}
@@ -119,12 +116,10 @@ class Appsheet:
         try:
             if not self.use_fake_calls:
                 ret = self.sendop(self.config.private_vars["appsheet"]["aircraft_url"], body)
-                appsheet_error_gauge.labels('appsheet add_aircraft error', "").set(0)
                 return ret["Rows"][0]["Row ID"]
             else:
                 return FAKE_KEY
         except Exception as e:
-            appsheet_error_gauge.labels("appsheet add_aircraft error", str(e)).set(1)
             logger.warning("add_aircraft op raised exception: " + str(e))
         return None
 
@@ -208,12 +203,10 @@ class Appsheet:
         try:
             if not self.use_fake_calls:
                 self.sendop(self.config.private_vars["appsheet"]["ops_url"], body)
-                appsheet_error_gauge.labels("appsheet add_op error", "").set(0)
 
             return True
         except Exception as e:
             logger.warning("add_op raised exception: " + str(e))
-            appsheet_error_gauge.labels("appsheet add_op error", str(e)).inc()
 
         return None
 
