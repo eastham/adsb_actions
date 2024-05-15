@@ -15,6 +15,7 @@ def landing_cb(flight):
     add_op(flight, "Landing", 'note' in flight.flags)
 
 def popup_takeoff_cb(flight):
+    logging.info("Popup takeoff detected! %s", flight.flight_id)
     Stats.popup_takeoffs += 1
     takeoff_cb(flight)
 

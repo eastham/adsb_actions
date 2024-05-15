@@ -13,7 +13,7 @@
             "request": "launch",
             "program": "controller.py",
             "cwd": "${workspaceFolder}/src/stripview",
-            "args": " -- --testdata ../../tests/20minutes.json --delay .01 --rules ui.yaml ../../tests/test2.kml",
+            "args": " -- --testdata ../../tests/20minutes.json --delay .2 --rules ui.yaml ../../tests/test2.kml",
             "console": "integratedTerminal",
             "justMyCode": true
         },
