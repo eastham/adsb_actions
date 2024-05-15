@@ -30,9 +30,6 @@ from .location import Location
 # Prometheus exporter
 from prometheus_client import start_http_server, Gauge
 
-# Metrics defined
-op_pusher_gauge = Gauge('op_pusher', 'op_pusher count', [ 'message' ])
-
 logger = logging.getLogger(__name__)
 
 class AdsbActions:
@@ -204,7 +201,6 @@ class AdsbActions:
 
         logger.debug("Read json: %s ", str(jsondict))
         Stats.json_readlines += 1
-        op_pusher_gauge.labels('json readlines').set(Stats.json_readlines)
 
         if jsondict and 'alt_baro' in jsondict:
             # We got some valid data, process it. (points with no altitude
