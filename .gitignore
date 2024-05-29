@@ -20,6 +20,7 @@ dist/
 eggs/
 lib/
 lib64/
+logs/
 parts/
 sdist/
 var/
@@ -27,4 +28,3 @@ var/
 .installed.cfg
 *.egg
 .DS_Store
-*.log
