@@ -5,7 +5,7 @@ preferences, not rules.  Rule yamls are usually specific on the
 command line or an explicit API variable."""
 
 import yaml
-from .util import safe_path
+from util import safe_path
 
 # don't rely on the cwd to find the config files
 CONFIGPATH = safe_path("../../config.yaml")

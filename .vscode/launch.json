@@ -6,7 +6,16 @@
     "configurations": [
 
         {"name":"Python: Current File","type":"python","request":"launch","program":"${file}","console":"integratedTerminal","justMyCode":true},
-
+        {
+            "name": "Harpers Stripview UI demo",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "controller.py",
+            "cwd": "${workspaceFolder}/src/stripview",
+            "args": " -- --ipaddr rpi4 --port 30006 --rules nberk_ui.yaml ../../tests/test_north_berkeley.kml",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
         {
             "name": "Stripview UI demo",
             "type": "python",
@@ -44,6 +53,16 @@
             "cwd": "${workspaceFolder}",
             "program": "src/op_pusher/op_pusher.py",
             "args": "--ipaddr 127.0.0.1 --port 30006 --rules src/op_pusher/rules.yaml tests/test1.kml",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Harpers Push ops to appsheet",
+            "type": "debugpy",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "program": "src/op_pusher/op_pusher.py",
+            "args": "--ipaddr rpi4 --port 30006 --rules ./src/op_pusher/nberk_rules.yaml ../../tests/test_north_berkeley.kml",
             "console": "integratedTerminal",
             "justMyCode": true
         },
