@@ -52,7 +52,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}",
             "program": "src/op_pusher/op_pusher.py",
-            "args": "--ipaddr 127.0.0.1 --port 30006 --rules src/op_pusher/rules.yaml tests/test1.kml",
+            "args": "--ipaddr 127.0.0.1 --port 30006 --rules src/op_pusher/rules.yaml",
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -62,7 +62,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}",
             "program": "src/op_pusher/op_pusher.py",
-            "args": "--ipaddr rpi4 --port 30006 --rules ./src/op_pusher/nberk_rules.yaml ../../tests/test_north_berkeley.kml",
+            "args": "--ipaddr rpi4 --port 30006 --rules ./src/op_pusher/nberk_rules.yaml",
             "console": "integratedTerminal",
             "justMyCode": true
         },
