@@ -14,8 +14,13 @@ import pprint
 import requests
 
 from adsb_actions.config import Config
+from prometheus_client import start_http_server, Gauge, Counter
+
 logger = logging.getLogger(__name__)
 logger.level = logging.INFO
+
+# define metrics for Prometheus
+appsheet_error_gauge = Gauge('appsheet_error', 'Appsheet errors', [ 'type', 'error'])
 
 REQUEST_BODY = {
 "Properties": {
@@ -198,6 +203,7 @@ class Appsheet:
         try:
             if not self.use_fake_calls:
                 self.sendop(self.config.private_vars["appsheet"]["ops_url"], body)
+
             return True
         except Exception as e:
             logger.warning("add_op raised exception: " + str(e))

@@ -2,7 +2,7 @@
 
 The following code will instantiate the library, attempt to connect to a network
 socket, and process the ADS-B data coming in:
-    adsb_actions = AdsbActions(yaml_config, ip=args.ipaddr, port=args.port)
+    adsb_actions = AdsbActions(yaml_config, ip=args.ipaddr, port=args.port, mport=args.mport)
     adsb_actions.loop()
 
 Also useful, to support rules that want to call code:
@@ -26,6 +26,9 @@ from .flights import Flights
 from .bboxes import Bboxes
 from .stats import Stats
 from .location import Location
+
+# Prometheus exporter
+from prometheus_client import start_http_server, Gauge
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +65,9 @@ class AdsbActions:
 
         if ip and port:
             self.listen = self._setup_network(ip, port)
+
+        if mport:
+            start_http_server(mport)
 
     def loop(self, string_data = None, iterator_data = None, delay: float = 0.) -> None:
         """Process ADS-B json data in a loop on the previously-opened socket.

@@ -1,3 +1,4 @@
+#!/usr/bin/python
 """Paging/webhook support."""
 
 import logging
