@@ -33,7 +33,17 @@
             "request": "launch",
             "cwd": "${workspaceFolder}",
             "program": "src/op_pusher/op_pusher.py",
-            "args": "--testdata tests/20minutes.json --delay .01 --rules src/op_pusher/rules.yaml tests/test1.kml",
+            "args": "--testdata tests/20minutes.json --delay .01 --rules src/op_pusher/rules.yaml",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Push from live feed",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "program": "src/op_pusher/op_pusher.py",
+            "args": "--ipaddr 127.0.0.1 --port 30006 --rules src/op_pusher/rules.yaml tests/test1.kml",
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -84,6 +94,16 @@
             "cwd": "${workspaceFolder}/src/airport_monitor2",
             "program": "monitorapp.py",
             "args": " -- --testdata ../../tests/20minutes.json --delay .2 --rules monitor.yaml ../../tests/test2.kml",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Inject ADS-B data to readsb",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/src/analyzer",
+            "program": "replay_to_adsb.py",
+            "args": "--inject_addr 192.168.87.56:30001 ../../tests/1hr.json --speed_x ",
             "console": "integratedTerminal",
             "justMyCode": true
         }

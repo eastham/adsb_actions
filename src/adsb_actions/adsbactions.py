@@ -139,7 +139,7 @@ class AdsbActions:
             for f in yaml['config']['kmls']:
                 bboxes_list.append(Bboxes(f))
         except FileNotFoundError:
-            logger.critical("File not found: %s", f)
+            logger.critical("File mentioned in yaml not found: %s", f)
             sys.exit(-1)
         except KeyError:
             pass
