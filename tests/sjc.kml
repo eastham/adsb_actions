@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
 <Document>
-	<name>sjctest2024.kml</name>
-	<StyleMap id="m_ylw-pushpin">
+	<name>sjc.kml</name>
+	<StyleMap id="m_ylw-pushpin0">
 		<Pair>
 			<key>normal</key>
 			<styleUrl>#s_ylw-pushpin</styleUrl>
 		</Pair>
 		<Pair>
 			<key>highlight</key>
-			<styleUrl>#s_ylw-pushpin_hl</styleUrl>
+			<styleUrl>#s_ylw-pushpin_hl1</styleUrl>
 		</Pair>
 	</StyleMap>
 	<Style id="s_ylw-pushpin">
@@ -20,14 +20,8 @@
 			</Icon>
 			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
 		</IconStyle>
-		<LineStyle>
-			<color>80ffffff</color>
-		</LineStyle>
-		<PolyStyle>
-			<color>80ffffff</color>
-		</PolyStyle>
 	</Style>
-	<Style id="s_ylw-pushpin_hl">
+	<Style id="s_ylw-pushpin_hl1">
 		<IconStyle>
 			<scale>1.3</scale>
 			<Icon>
@@ -35,53 +29,63 @@
 			</Icon>
 			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
 		</IconStyle>
-		<LineStyle>
-			<color>80ffffff</color>
-		</LineStyle>
-		<PolyStyle>
-			<color>80ffffff</color>
-		</PolyStyle>
 	</Style>
 	<Folder>
-		<name>sjctest2024</name>
+		<name>sjc</name>
 		<open>1</open>
 		<Placemark>
-			<name>Generic Gate Air: 1500-3000 0-360</name>
-			<styleUrl>#m_ylw-pushpin</styleUrl>
+			<name>SJC Takeoff 30:0-2000 250-070</name>
+			<styleUrl>#m_ylw-pushpin0</styleUrl>
 			<Polygon>
 				<tessellate>1</tessellate>
 				<outerBoundaryIs>
 					<LinearRing>
 						<coordinates>
-							-122.0374807302795,37.44731546545053,0 -122.062116932509,37.38146979353406,0 -122.032448220755,37.29678201816503,0 -121.9477838642023,37.24465774413658,0 -121.8396461600682,37.23318650294062,0 -121.7935575319592,37.26520922571137,0 -121.7402280162306,37.30523713584176,0 -121.7461279035267,37.36175994385341,0 -121.8164636399062,37.40947722306485,0 -121.8773748354475,37.45111512586089,0 -121.9850945596275,37.48063637612054,0 -122.0374807302795,37.44731546545053,0 
+							-121.9791520432872,37.40715334228651,0 -121.9476072539369,37.37144882698782,0 -121.9322452055119,37.37786489990594,0 -121.9322453473614,37.37817016784227,0 -121.9487938530943,37.41785502285455,0 -121.9791520432872,37.40715334228651,0 
 						</coordinates>
 					</LinearRing>
 				</outerBoundaryIs>
 			</Polygon>
 		</Placemark>
 		<Placemark>
-			<name>Generic Gate Ground: 0-1500 0-360</name>
-			<styleUrl>#m_ylw-pushpin</styleUrl>
+			<name>SJC Landing 30:0-3000 250-070</name>
+			<styleUrl>#m_ylw-pushpin0</styleUrl>
 			<Polygon>
 				<tessellate>1</tessellate>
 				<outerBoundaryIs>
 					<LinearRing>
 						<coordinates>
-							-122.0076254840587,37.38743918180099,0 -121.9999004173388,37.3420673161329,0 -121.9514894818211,37.29272154687654,0 -121.8704269989152,37.27544006143687,0 -121.8330404716242,37.29213553780885,0 -121.8233348701931,37.31947301720191,0 -121.8366710937294,37.34178401013018,0 -121.8496687464416,37.3691293320115,0 -121.8887229126115,37.40231794932441,0 -121.9341527963426,37.4216955291845,0 -121.9805939868763,37.4174399687063,0 -122.0076254840587,37.38743918180099,0 
+							-121.8783408401303,37.27662922096472,0 -121.8435384284296,37.29744527495566,0 -121.908424001035,37.35543193392493,0 -121.923206568058,37.34596589887884,0 -121.8783408401303,37.27662922096472,0 
 						</coordinates>
 					</LinearRing>
 				</outerBoundaryIs>
 			</Polygon>
 		</Placemark>
 		<Placemark>
-			<name>Vicinity: 0-10000 0-360</name>
-			<styleUrl>#m_ylw-pushpin</styleUrl>
+			<name>PAO Pattern:0-2000 0-360</name>
+			<visibility>0</visibility>
+			<styleUrl>#m_ylw-pushpin0</styleUrl>
 			<Polygon>
 				<tessellate>1</tessellate>
 				<outerBoundaryIs>
 					<LinearRing>
 						<coordinates>
-							-122.2549588791079,37.48769976618903,0 -122.2578314353888,37.38281992837725,0 -122.163604009346,37.19932801283518,0 -121.8756108928532,37.11264046954847,0 -121.6461902955277,37.11939170821356,0 -121.5050975679069,37.19425090459628,0 -121.5092526081147,37.28129620673999,0 -121.5256855836897,37.38715579444762,0 -121.6188900802674,37.51738152493839,0 -121.8120137655717,37.60549725148586,0 -122.0620059058581,37.6099522453532,0 -122.2549588791079,37.48769976618903,0 
+							-122.1264132141985,37.48938529648724,0 -122.15034153342,37.48339065118813,0 -122.1524060026259,37.46625105096,0 -122.1467340359969,37.45136052475661,0 -122.1258274017962,37.43984587269593,0 -122.1046987833493,37.42981853999584,0 -122.0817257207507,37.43450050090829,0 -122.0711942159603,37.44866355461256,0 -122.0759136468689,37.46653628234806,0 -122.101990908957,37.48382800676471,0 -122.1264132141985,37.48938529648724,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark>
+			<name>Other nearby:0-10000 0-360</name>
+			<visibility>0</visibility>
+			<styleUrl>#m_ylw-pushpin0</styleUrl>
+			<Polygon>
+				<tessellate>1</tessellate>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-122.3147170239714,37.45124177513883,0 -122.0367197986671,37.23817402964215,0 -121.9507053398136,37.12333799419466,0 -121.652028664314,37.19844544143591,0 -121.6780280700044,37.33606652916344,0 -121.7348330355236,37.45053136515636,0 -121.8634623891596,37.53825747131575,0 -122.0819219555845,37.57879534338447,0 -122.3147170239714,37.45124177513883,0 
 						</coordinates>
 					</LinearRing>
 				</outerBoundaryIs>
