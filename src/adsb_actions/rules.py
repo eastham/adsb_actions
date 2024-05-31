@@ -207,7 +207,7 @@ class Rules:
                     self.callbacks[action_value](flight)
 
             elif 'note' == action_name:
-                # Attach a note to this flight for later use, typically in 
+                # Attach a note to this flight for later use, typically in
                 # another rule's callback.
                 logger.debug("Setting note for %s to %s", flight.flight_id, action_value)
                 flight.flags['note'] = action_value

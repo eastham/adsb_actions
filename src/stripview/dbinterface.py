@@ -23,7 +23,7 @@ class DbInterface:
 
     def call_database(self):
         """Call the remote database to see if we should update the
-        on-screen information for the given flight.  Reeturned information
+        on-screen information for the given flight.  Returned information
         is then passed to the UI via callback.
         May block, should be run in own thread. """
 

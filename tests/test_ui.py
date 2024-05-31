@@ -91,4 +91,4 @@ def test_ui():
         rendered_flight_ctr = 0
         for f in adsb_actions.flights.flight_dict.values():
             rendered_flight_ctr += 1 if f.in_any_bbox() else 0
-        assert rendered_flight_ctr == 4 
+        assert rendered_flight_ctr == 4

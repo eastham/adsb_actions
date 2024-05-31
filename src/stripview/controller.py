@@ -218,7 +218,8 @@ def setup(focus_q, admin_q):
     read_thread = threading.Thread(target=adsb_actions.loop,
         kwargs={'string_data': json_data, 'delay': float(args.delay)})
 
-    # handling for orderly exit when the user closes the window manually
+    # Handling for orderly exit when the user closes the window manually.
+    # Default args bind the local variables to the lambda.
     close_callback = lambda controller, actions=adsb_actions, thread=read_thread: \
         shutdown_adsb_actions(controller, actions, thread) # pylint: disable=unnecessary-lambda-assignment
     controllerapp.register_close_callback(close_callback)
