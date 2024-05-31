@@ -17,7 +17,6 @@ def run():
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument('--test', help="add some test flights", action="store_true")
-    parser.add_argument('file', nargs='+', help="kml files to use")
     parser.add_argument('--ipaddr', help="IP address to connect to")
     parser.add_argument('--port', help="port to connect to")
     parser.add_argument('--rules', help="YAML file that describes UI behavior", required=True)
