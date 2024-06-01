@@ -71,11 +71,9 @@ class Monitor(App):
         flight_id = flight.flight_id
         name = None
         if flight_id in self.flight_name_cache:
-            logging.debug("Using cached name %s for %s",
-                          self.flight_name_cache[flight_id], flight_id)
-
             return self.flight_name_cache[flight_id]
         try:
+            logging.debug("Looking up pilot for %s", flight_id)
             aircraft_obj = self.appsheet_api.aircraft_lookup(flight_id, True)
             pilot = self.appsheet_api.pilot_lookup(aircraft_obj['lead pilot'])
             name = pilot.get('Public name')
@@ -94,7 +92,7 @@ class Monitor(App):
         pilot_name = self.search_for_pilot(flight)
         try:
             location = flight.inside_bboxes[1].strip()
-        except IndexError:
+        except:
             location = "--"
         return self.format_row(pilot_name, flight.flight_id, location)
 
@@ -106,6 +104,7 @@ class Monitor(App):
         for flight in adsb_actions.flights:
             if flight.inside_bboxes_indices[0] == index:
                 text += self.get_text_for_flight(flight)
+
         text += '\n\n'
         return text
 
@@ -116,7 +115,7 @@ class Monitor(App):
         timestr = "..."
         if flight:
             time_secs = flight.lastloc.now
-            timestr = time.strftime('%a %I:%M %p', time.gmtime(time_secs))
+            timestr = time.strftime('%a %H:%M', time.gmtime(time_secs))
         text = f"       88NV active flights as of {timestr}\n\n\n"
         text += self.get_text_for_index("=== Scenic Flights ===", 0) + '\n\n'
         text += self.get_text_for_index("=== Arrivals ===", 2) + '\n\n'
@@ -124,8 +123,8 @@ class Monitor(App):
 
         self.update_text(text)
 
-    def handle_change(self, flight):
-        logger.debug("handle_change")
+    def inside_bbox(self, flight):
+        logger.debug("inside_bbox for flight %s", flight.flight_id if flight else "None")
         """This is the callback fired on change"""
         self.update_display(flight)
 
@@ -180,14 +179,14 @@ def setup():
     monitorapp = Monitor(yaml_data['monitor_config']['text_position'])
 
     adsb_actions.register_callback(
-        "aircraft_update_cb", monitorapp.handle_change)
+        "aircraft_update_cb", monitorapp.inside_bbox)
 
     read_thread = threading.Thread(target=adsb_actions.loop,
         kwargs={'string_data': json_data, 'delay': float(args.delay)})
 
     # Don't update the UI before it's drawn...
     Clock.schedule_once(lambda x: read_thread.start(), 2)
-    Clock.schedule_once(lambda x: monitorapp.handle_change(None), 2)
+    Clock.schedule_once(lambda x: monitorapp.inside_bbox(None), 2)
 
     monitorapp.run()
 
