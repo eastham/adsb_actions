@@ -199,7 +199,7 @@ class AdsbActions:
             else:
                 return -1
 
-        logger.debug("Read json: %s ", str(jsondict))
+        # logger.debug("Read json: %s ", str(jsondict))
         Stats.json_readlines += 1
 
         if jsondict and 'alt_baro' in jsondict:
