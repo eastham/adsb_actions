@@ -7,16 +7,12 @@
 
   config:
     kmls:
-#      - ../../tests/test2.kml 
-#      - ../../tests/test3.kml
-
       - ../../tests/sjc.kml 
       - ../../tests/sjc.kml
  
   rules:
     ui_update:
       conditions:
-#         regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
         regions: [ "SJC Takeoff 30", "SJC Landing 30", "PAO Pattern", "Other Nearby" ]
         cooldown: .1  # mins
       actions:

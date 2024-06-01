@@ -87,9 +87,9 @@ class Monitor(App):
                 self.flight_name_cache[flight_id] = None
 
         # pretty ugly...N/A is coming from the flight constructor I think
-        if not name or name is "N/A":
+        if not name or name == "N/A":
             name = flight.other_id
-            if not name or name is "N/A":
+            if not name or name == "N/A":
                 name = flight.flight_id
 
         logging.debug("Using name %s for %s", name, flight_id)
