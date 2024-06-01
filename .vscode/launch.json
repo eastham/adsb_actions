@@ -97,10 +97,10 @@
             "justMyCode": true
         },
         {
-            "name": "Airport monitor",
+            "name": "Airport monitor 3",
             "type": "python",
             "request": "launch",
-            "cwd": "${workspaceFolder}/src/airport_monitor",
+            "cwd": "${workspaceFolder}/src/airport_monitor3",
             "program": "monitor.py",
             "args": " -- --testdata ../../tests/20minutes.json --delay .2 --rules monitor.yaml ../../tests/test2.kml",
             "console": "integratedTerminal",

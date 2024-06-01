@@ -1,0 +1,15 @@
+  monitor_config:
+    window_size: [400, 340]
+    text_position: [20, -20]
+
+  config:
+    kmls:
+      - ../../tests/test2.kml 
+      - ../../tests/test3.kml
+
+  rules:
+    ui_update:
+      conditions:
+        regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
+      actions:
+        callback: aircraft_update_cb
