@@ -102,7 +102,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}/src/airport_monitor3",
             "program": "monitor.py",
-            "args": " -- --testdata ../../tests/20minutes.json --delay .2 --rules monitor.yaml ../../tests/test2.kml",
+            "args": " -- --testdata ../../tests/20minutes.json --delay .2 --rules monitor.yaml",
             "console": "integratedTerminal",
             "justMyCode": true
         }
