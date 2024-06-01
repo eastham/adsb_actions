@@ -70,22 +70,29 @@ class Monitor(App):
 
         flight_id = flight.flight_id
         name = None
-        if flight_id in self.flight_name_cache:
-            return self.flight_name_cache[flight_id]
-        try:
-            logging.debug("Looking up pilot for %s", flight_id)
-            aircraft_obj = self.appsheet_api.aircraft_lookup(flight_id, True)
-            pilot = self.appsheet_api.pilot_lookup(aircraft_obj['lead pilot'])
-            name = pilot.get('Public name')
-        except Exception:      #   pylint: disable=broad-except
-            logging.debug("No lead pilot for %s", flight_id)
+        pilot_name = self.flight_name_cache.get(flight_id)
+        if pilot_name:
+            return pilot_name
 
-        if not name:
+        if pilot_name is False:
+            # not yet attempted db lookup -- None means no record found
+            try:
+                logging.debug("Looking up pilot for %s", flight_id)
+                aircraft_obj = self.appsheet_api.aircraft_lookup(flight_id, True)
+                pilot = self.appsheet_api.pilot_lookup(aircraft_obj['lead pilot'])
+                name = pilot.get('Public name')
+                self.flight_name_cache[flight_id] = name
+            except Exception:      #   pylint: disable=broad-except
+                logging.debug("No lead pilot for %s", flight_id)
+                self.flight_name_cache[flight_id] = None
+
+        # pretty ugly...N/A is coming from the flight constructor I think
+        if not name or name is "N/A":
             name = flight.other_id
-            if not name:
+            if not name or name is "N/A":
                 name = flight.flight_id
+
         logging.debug("Using name %s for %s", name, flight_id)
-        self.flight_name_cache[flight_id] = name
         return name
         
     def get_text_for_flight(self, flight):
@@ -110,7 +117,8 @@ class Monitor(App):
 
     @mainthread
     def update_display(self, flight):
-        """ Called on bbox change. """
+        """ Called on bbox change.  Not very smart, it just regenerates the whole
+        display.  Could be optimized."""
 
         timestr = "..."
         if flight:
@@ -127,6 +135,10 @@ class Monitor(App):
         logger.debug("inside_bbox for flight %s", flight.flight_id if flight else "None")
         """This is the callback fired on change"""
         self.update_display(flight)
+
+    def expire(self, flight):
+        logger.debug("expire for flight %s", flight.flight_id)
+        self.update_display(None)
 
 def parseargs():
     parser = argparse.ArgumentParser(
@@ -180,6 +192,8 @@ def setup():
 
     adsb_actions.register_callback(
         "aircraft_update_cb", monitorapp.inside_bbox)
+    adsb_actions.register_callback(
+        "aircraft_expire_cb", monitorapp.expire)
 
     read_thread = threading.Thread(target=adsb_actions.loop,
         kwargs={'string_data': json_data, 'delay': float(args.delay)})
