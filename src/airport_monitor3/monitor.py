@@ -109,8 +109,10 @@ class Monitor(App):
     def update_display(self, flight):
         """ Called on bbox change. """
 
-        time_secs = flight.lastloc.now
-        timestr = time.strftime('%a %I:%M %p', time.gmtime(time_secs))
+        timestr = "..."
+        if flight:
+            time_secs = flight.lastloc.now
+            timestr = time.strftime('%a %I:%M %p', time.gmtime(time_secs))
         text = f"       88NV active flights as of {timestr}\n\n\n"
         text += self.get_text_for_index("=== Scenic Flights ===", 0) + '\n\n'
         text += self.get_text_for_index("=== Arrivals ===", 2) + '\n\n'
@@ -125,7 +127,6 @@ class Monitor(App):
 def parseargs():
     parser = argparse.ArgumentParser(
         description="render a simple flight status board.")
-    parser.add_argument('file', nargs='+', help="kml files to use")
     parser.add_argument('--ipaddr', help="IP address to connect to")
     parser.add_argument('--port', help="port to connect to")
     parser.add_argument(
@@ -179,6 +180,8 @@ def setup():
 
     # Don't update the UI before it's drawn...
     Clock.schedule_once(lambda x: read_thread.start(), 2)
+    Clock.schedule_once(lambda x: monitorapp.handle_change(None), 2)
+
     monitorapp.run()
 
 if __name__ == '__main__':
