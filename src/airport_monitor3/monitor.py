@@ -92,7 +92,11 @@ class Monitor(App):
         
     def get_text_for_flight(self, flight):
         pilot_name = self.search_for_pilot(flight)
-        return self.format_row(pilot_name, flight.flight_id, flight.inside_bboxes[1].strip())
+        try:
+            location = flight.inside_bboxes[1].strip()
+        except IndexError:
+            location = "--"
+        return self.format_row(pilot_name, flight.flight_id, location)
 
     def get_text_for_index(self, title, index):
         text = '            ' + title + '\n\n\n'
@@ -121,6 +125,7 @@ class Monitor(App):
         self.update_text(text)
 
     def handle_change(self, flight):
+        logger.debug("handle_change")
         """This is the callback fired on change"""
         self.update_display(flight)
 
