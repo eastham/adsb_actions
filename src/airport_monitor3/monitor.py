@@ -169,6 +169,8 @@ def setup():
     # Actually build and start the app
     dp_window_size = [dp(i) for i in yaml_data['monitor_config']['window_size']]
     Window.size = dp_window_size
+    Window.top = dp(yaml_data['monitor_config']['window_top'])
+    Window.left = dp(yaml_data['monitor_config']['window_left'])
 
     monitorapp = Monitor(yaml_data['monitor_config']['text_position'])
 
