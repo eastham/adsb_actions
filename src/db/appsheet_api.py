@@ -56,7 +56,8 @@ class Appsheet:
         self.use_fake_calls = True
 
     def aircraft_lookup(self, tail, wholeobj=False):
-        """return database internal ID for this tail number """
+        """return database internal ID (or whole object, if requested in wholeobj)
+        for this tail number.  If not found, return None."""
 
         body = copy.deepcopy(REQUEST_BODY)
         body["Action"] = "Find"

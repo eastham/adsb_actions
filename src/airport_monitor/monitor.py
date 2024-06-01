@@ -105,6 +105,7 @@ class Monitor(App):
         self.update_text(text)
 
     def handle_change(self, _):
+        """This is the callback fired on change"""
         self.update_display()
 
 def parseargs():
