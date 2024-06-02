@@ -94,7 +94,7 @@ class AdsbActions:
 
         while True:
             last_read_time = self._flight_update_read()
-
+         #   logger.debug("last_read_time: %s", last_read_time)
             if last_read_time == 0: continue
             if last_read_time < 0: break
             if not self.flights.last_checkpoint:
@@ -169,7 +169,7 @@ class AdsbActions:
 
         Returns:
             a timestamp of the parsed location update if successful, 
-            zero if not successful, -1 on EOF (in non-network cases)"""
+            zero if not successful, -1 on EOF"""
 
         # TODO this function is a bit of a mess with all the
         # returns...needs cleanup and retest when/if we improve
@@ -179,7 +179,7 @@ class AdsbActions:
             if self.listen:
                 line = self.listen.readline()
                 if not line:
-                    return -1   # file EOF
+                    raise IOError  # File EOF or socket closed
                 jsondict = json.loads(line)
             else:
                 jsondict = next(self.data_iterator)
@@ -188,7 +188,7 @@ class AdsbActions:
             logger.error("JSON Parse fail: %s", line)
         except StopIteration:
             return -1       # iterator EOF
-        except Exception:
+        except Exception:   # pylint: disable=broad-except
             logger.error("Socket input error")
             if self.listen.retry:
                 # TODO needs testing/improvement.  This didn't always work in the past...
