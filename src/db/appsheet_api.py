@@ -287,15 +287,17 @@ class Appsheet:
             url,
             headers=self.headers, json=body, timeout=timeout)
         if response.status_code != 200:
-            logger.debug("non-200 return: %s", 
+            logger.debug("non-200 return: %s",
                          self.pprint_format(response))
             raise requests.HTTPError("op returned non-200 code: " +
                                      str(response))
 
         if not response.text:
+            logger.debug("Empty response from appsheet")
             return None
         response_dict = json.loads(response.text)
         if not response_dict:
+            logger.debug("Empty dict response from appsheet")
             return None
         logger.debug("sendop response_dict for op %s: %s",
                      caller, self.pprint_format(response_dict))
