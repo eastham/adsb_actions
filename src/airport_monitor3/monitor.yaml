@@ -21,4 +21,17 @@
         cooldown: .1  # mins
       actions:
         callback: aircraft_update_cb
-        expire_callback: aircraft_exprire_cb
+
+    # callback to hide strip for aircraft that left the covered regions
+    ui_remove:
+      conditions:
+        regions: []  # not in any KML-defined region
+      actions:
+        callback: aircraft_expire_cb
+
+    # callback to hide strip for aircraft that is expired by the system
+    # due to inactivity.
+    ui_expire:
+      conditions: {} # always run for each aircraft update
+      actions:
+        expire_callback: aircraft_expire_cb

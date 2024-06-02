@@ -36,6 +36,7 @@ class Monitor(App):
         self.text_position = (dp(text_position[0]), dp(text_position[1]))
         self.flight_name_cache = {}
         self.appsheet_api = appsheet_api.Appsheet()
+        self.last_update_time = 0
 
     def build(self):
         self.text_input = TextInput(multiline=True, pos=self.text_position)
@@ -74,8 +75,8 @@ class Monitor(App):
         if pilot_name:
             return pilot_name
 
-        if pilot_name is False:
-            # not yet attempted db lookup -- None means no record found
+        if pilot_name is None:
+            # haven't yet attempted db lookup -- False means prior lookup failed
             try:
                 logging.debug("Looking up pilot for %s", flight_id)
                 aircraft_obj = self.appsheet_api.aircraft_lookup(flight_id, True)
@@ -84,7 +85,7 @@ class Monitor(App):
                 self.flight_name_cache[flight_id] = name
             except Exception:      #   pylint: disable=broad-except
                 logging.debug("No lead pilot for %s", flight_id)
-                self.flight_name_cache[flight_id] = None
+                self.flight_name_cache[flight_id] = False
 
         # pretty ugly...N/A is coming from the flight constructor I think
         if not name or name == "N/A":
@@ -120,6 +121,12 @@ class Monitor(App):
         """ Called on bbox change.  Not very smart, it just regenerates the whole
         display.  Could be optimized."""
 
+        # don't run so much, to avoid spamming the system
+        cur_time = time.time()
+        if cur_time - self.last_update_time < 1:
+            return
+        self.last_update_time = cur_time
+
         timestr = "..."
         if flight:
             time_secs = flight.lastloc.now
@@ -137,7 +144,6 @@ class Monitor(App):
         self.update_display(flight)
 
     def expire(self, flight):
-        logger.debug("expire for flight %s", flight.flight_id)
         self.update_display(None)
 
 def parseargs():
