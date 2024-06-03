@@ -103,9 +103,10 @@
             "cwd": "${workspaceFolder}/src/airport_monitor3",
             "program": "monitor.py",
             "args": " -- --testdata ../../tests/20minutes.json --delay .2 --rules monitor.yaml",
+//            "args": " -- --ipaddr 192.168.87.56 --port 30006 --rules monitor.yaml",
             "console": "integratedTerminal",
             "justMyCode": true
-        }
+        },
         {
             "name": "Airport monitor2",
             "type": "python",
@@ -122,7 +123,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}/src/analyzer",
             "program": "replay_to_adsb.py",
-            "args": "--inject_addr 192.168.87.56:30001 ../../tests/1hr.json --speed_x ",
+            "args": "--inject_addr 192.168.87.56:30001 ../../tests/1hr.json --speed_x 1",
             "console": "integratedTerminal",
             "justMyCode": true
         }
