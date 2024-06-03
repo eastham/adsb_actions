@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import logging.handlers
 import threading
 import sys
 import yaml
@@ -18,9 +19,15 @@ from adsb_actions.flight import Flight
 from adsb_actions.adsbactions import AdsbActions
 from db import appsheet_api
 
+# Move logging setup to a common place once ready
 logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
-adsb_actions = None
+logger.setLevel(logging.DEBUG)
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s monitor ',
+                                              '%(module)s:%(lineno)d: %(message)s'))
+logger.addHandler(stream_handler)
+logger.addHandler(logging.FileHandler("/var/log/adsb_monitor.log"))
+logger.addHandler(logging.handlers.SysLogHandler())
 
 from kivy.uix.image import Image
 from kivy.uix.boxlayout import BoxLayout
@@ -29,14 +36,15 @@ from kivy.uix.floatlayout import FloatLayout
 import time
 
 class Monitor(App):
-    def __init__(self, text_position, **kwargs):
+    def __init__(self, text_position, adsb_actions, **kwargs):
         super().__init__(**kwargs)
+        self.text_position = (dp(text_position[0]), dp(text_position[1]))
+        self.adsb_actions = adsb_actions
         self.text_input = None
         self.image = None
-        self.text_position = (dp(text_position[0]), dp(text_position[1]))
         self.flight_name_cache = {}
         self.appsheet_api = appsheet_api.Appsheet()
-        self.last_update_time = 0
+        self.last_read = 0
 
     def build(self):
         self.text_input = TextInput(multiline=True, pos=self.text_position)
@@ -59,11 +67,32 @@ class Monitor(App):
         if self.image:
             self.image.pos = value
 
+    @mainthread
     def update_text(self, text):
         self.text_input.text = text
 
-    def format_row(self, arg1, arg2, arg3):
-        return f'{arg1: <15} {arg2: <12} {arg3: <15}\n'
+    def format_row(self, flt, tail, loc, alt):
+        return f'{flt: <15} {tail: <10} {loc: <15} {alt: <7}\n'
+
+    def flight_db_lookup(self, flight_id):
+        logging.debug("Looking up pilot for flight %s", flight_id)
+        try:
+            aircraft_obj = self.appsheet_api.aircraft_lookup(flight_id, True)
+            pilot = self.appsheet_api.pilot_lookup(aircraft_obj['lead pilot'])
+            name = pilot.get('Playa name')
+            if not name or name == "":
+                return False
+            name = name[:12]
+
+            if pilot.get('Scenics'):
+                flightnum = int(pilot.get('Scenics')) + 1
+            else:
+                flightnum = 1
+            name +=  " " + str(flightnum)
+        except Exception as e:      #   pylint: disable=broad-except
+            logging.error("Error looking up pilot for flight %s: %s", flight_id, e)
+            return False
+        return name
 
     def search_for_pilot(self, flight):
         """Search for the pilot name associated with a flight, specified in
@@ -71,79 +100,77 @@ class Monitor(App):
 
         flight_id = flight.flight_id
         name = None
-        pilot_name = self.flight_name_cache.get(flight_id)
-        if pilot_name:
-            return pilot_name
 
-        if pilot_name is None:
+        # check for cached db info
+        pilot_flight = flight.flags.get('pilot_flight')
+        if pilot_flight:
+            return pilot_flight
+
+        if pilot_flight is None:
             # haven't yet attempted db lookup -- False means prior lookup failed
-            try:
-                logging.debug("Looking up pilot for %s", flight_id)
-                aircraft_obj = self.appsheet_api.aircraft_lookup(flight_id, True)
-                pilot = self.appsheet_api.pilot_lookup(aircraft_obj['lead pilot'])
-                name = pilot.get('Public name')
-                self.flight_name_cache[flight_id] = name
-            except Exception:      #   pylint: disable=broad-except
-                logging.debug("No lead pilot for %s", flight_id)
-                self.flight_name_cache[flight_id] = False
+            name = self.flight_db_lookup(flight_id)
+            flight.flags['pilot_flight'] = name
 
         # pretty ugly...N/A is coming from the flight constructor I think
-        if not name or name == "N/A":
+        if not name or name.startswith("N/A"):
             name = flight.other_id
             if not name or name == "N/A":
                 name = flight.flight_id
 
         logging.debug("Using name %s for %s", name, flight_id)
         return name
-        
+
     def get_text_for_flight(self, flight):
         pilot_name = self.search_for_pilot(flight)
         try:
             location = flight.inside_bboxes[1].strip()
-        except:
+        except:         # pylint: disable=bare-except
             location = "--"
-        return self.format_row(pilot_name, flight.flight_id, location)
+
+        alt_str = (str(flight.lastloc.alt_baro) + " " +
+            flight.get_alt_change_str(flight.lastloc.alt_baro))
+
+        return self.format_row(pilot_name, flight.flight_id, location,
+                               alt_str)
 
     def get_text_for_index(self, title, index):
         text = '            ' + title + '\n\n\n'
-        text += self.format_row("PILOT/FLIGHT", "TAIL #", "LOCATION")
+        text += self.format_row("FLIGHT", "TAIL #", "LOCATION", "ALT")
         text += '\n\n'
 
-        for flight in adsb_actions.flights:
+        for flight in self.adsb_actions.flights:
             if flight.inside_bboxes_indices[0] == index:
                 text += self.get_text_for_flight(flight)
 
         text += '\n\n'
         return text
 
-    @mainthread
     def update_display(self, flight):
         """ Called on bbox change.  Not very smart, it just regenerates the whole
         display.  Could be optimized."""
 
-        # don't run so much, to avoid spamming the system
-        cur_time = time.time()
-        if cur_time - self.last_update_time < 1:
-            return
-        self.last_update_time = cur_time
-
-        timestr = "..."
         if flight:
-            time_secs = flight.lastloc.now
-            timestr = time.strftime('%a %H:%M', time.gmtime(time_secs))
+            self.last_read = flight.lastloc.now
+        if self.last_read:
+            timestr = time.strftime('%a %H:%M', time.gmtime(self.last_read))
+        else:
+            timestr = "..."
         text = f"       88NV active flights as of {timestr}\n\n\n"
-        text += self.get_text_for_index("=== Scenic Flights ===", 0) + '\n\n'
-        text += self.get_text_for_index("=== Arrivals ===", 2) + '\n\n'
-        text += self.get_text_for_index("=== Departures ===", 1) + '\n\n'
+        text += self.get_text_for_index("  === Departing ===", 1) + '\n\n'
+        text += self.get_text_for_index("=== Scenic Pattern ===", 0) + '\n\n'
+        text += self.get_text_for_index("  === Arriving ===", 2) + '\n\n'
 
         self.update_text(text)
 
     def inside_bbox(self, flight):
-        logger.debug("inside_bbox for flight %s", flight.flight_id if flight else "None")
         """This is the callback fired on change"""
+
+        logger.debug("inside_bbox for flight %s", flight.flight_id if flight else "None")
         self.update_display(flight)
 
     def expire(self, flight):
+        """Callback fired when an aircraft is removed from the system."""
+        logger.debug("expire for flight %s", flight.flight_id)
         self.update_display(None)
 
 def parseargs():
@@ -178,7 +205,6 @@ def setup():
 
     # Setup flight data handling.
     json_data = None
-    global adsb_actions
 
     if not args.testdata:
         adsb_actions = AdsbActions(yaml_data, ip=args.ipaddr, port=args.port)
@@ -194,7 +220,8 @@ def setup():
     Window.top = dp(yaml_data['monitor_config']['window_top'])
     Window.left = dp(yaml_data['monitor_config']['window_left'])
 
-    monitorapp = Monitor(yaml_data['monitor_config']['text_position'])
+    monitorapp = Monitor(yaml_data['monitor_config']['text_position'], 
+                         adsb_actions)
 
     adsb_actions.register_callback(
         "aircraft_update_cb", monitorapp.inside_bbox)

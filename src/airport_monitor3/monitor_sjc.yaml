@@ -1,8 +1,8 @@
   monitor_config:
-#    window_size: [940, 1200]   # larger display
+#    window_size: [970, 1200]   # larger display
     window_size: [400, 340]
     window_top: 0
-    window_left: 1000
+    window_left: 950
     text_position: [20, -20]
 
   config:
@@ -13,21 +13,22 @@
   rules:
     ui_update:
       conditions:
-        regions: [ "SJC Takeoff 30", "SJC Landing 30", "PAO Pattern", "Other Nearby" ]
-        cooldown: .1  # mins
+        regions: [ "SJC Takeoff 30", "SJC Landing 30", "PAO Pattern", "Other nearby" ]
+        rule_cooldown: .02  # mins
       actions:
         callback: aircraft_update_cb
 
-    # callback to clear line for aircraft that left the covered regions
-    ui_remove:
+    ui_update2:   # clears departed ac, but run less often to not spam the system
       conditions:
-        regions: []  # not in any KML-defined region
+        regions: [ "Other nearby" ]
+        rule_cooldown: 1  # mins
       actions:
-        callback: aircraft_expire_cb
+        callback: aircraft_update_cb
 
-    # callback to clear line for aircraft that is expired by the system
+    # callback to hide strip for aircraft that is expired by the system
     # due to inactivity.
     ui_expire:
-      conditions: {} # always run for each aircraft update
+      conditions: 
+          regions: [ "SJC Takeoff 30", "SJC Landing 30", "PAO Pattern", "Other nearby" ]
       actions:
         expire_callback: aircraft_expire_cb

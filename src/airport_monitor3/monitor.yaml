@@ -7,31 +7,28 @@
 
   config:
     kmls:
-#      - ../../tests/test2.kml 
-#      - ../../tests/test3.kml
+      - ../../tests/test2.kml 
+      - ../../tests/test3.kml
 
-      - ../../tests/sjc.kml 
-      - ../../tests/sjc.kml
- 
   rules:
     ui_update:
       conditions:
-#         regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
-        regions: [ "SJC Takeoff 30", "SJC Landing 30", "PAO Pattern", "Other Nearby" ]
-        cooldown: .1  # mins
+        regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern" ]
+        rule_cooldown: .02  # mins
       actions:
         callback: aircraft_update_cb
 
-    # callback to hide strip for aircraft that left the covered regions
-    ui_remove:
+    ui_update2:   # clears departed ac, but run less often to not spam the system
       conditions:
-        regions: []  # not in any KML-defined region
+        regions: [ "Other" ]
+        rule_cooldown: 1  # mins
       actions:
-        callback: aircraft_expire_cb
+        callback: aircraft_update_cb
 
     # callback to hide strip for aircraft that is expired by the system
     # due to inactivity.
     ui_expire:
-      conditions: {} # always run for each aircraft update
+      conditions: 
+         regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
       actions:
         expire_callback: aircraft_expire_cb
