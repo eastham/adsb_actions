@@ -23,8 +23,7 @@ from db import appsheet_api
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 stream_handler = logging.StreamHandler()
-stream_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s monitor ',
-                                              '%(module)s:%(lineno)d: %(message)s'))
+stream_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s monitor %(module)s:%(lineno)d: %(message)s'))
 logger.addHandler(stream_handler)
 logger.addHandler(logging.FileHandler("/var/log/adsb_monitor.log"))
 logger.addHandler(logging.handlers.SysLogHandler())
