@@ -50,8 +50,13 @@ class RuleExecutionLog:
         counter = self.rule_execution_counters[rulename]
         counter.increment(note)
 
+        # log entry for this rule + flight
         entry_key = self._generate_entry_key(rulename, flight_id)
         self.last_execution_time[entry_key] = now
+
+        # log entry for this rule only, used for rule_cooldown
+        rule_key = self._generate_entry_key(rulename, "")
+        self.last_execution_time[rule_key] = now
 
     def within_cooldown(self, rulename: str, flight_id: str, cooldown_secs: int, 
                         now: int) -> bool:

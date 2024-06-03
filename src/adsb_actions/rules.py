@@ -53,7 +53,8 @@ class Rules:
         """Check for invalid or unknown conditions, return True if valid."""
         VALID_CONDITIONS = ['proximity', 'aircraft_list', 'min_alt', 'max_alt',
                             'transition_regions', 'regions', 'latlongring',
-                            'cooldown', 'has_attr', 'min_time', 'max_time']
+                            'cooldown', 'rule_cooldown', 'has_attr', 'min_time',
+                            'max_time']
 
         try:
             for condition in conditions.keys():
@@ -121,6 +122,16 @@ class Rules:
                 flight.flight_id, cooldown_secs, flight.lastloc.now)
             if not result:
                 return False
+
+        if 'rule_cooldown' in conditions:
+            # reduce firing rate of this rule, regardless of aircraft
+            cooldown_secs = int(conditions['rule_cooldown'] * 60)
+            result = not self.rule_execution_log.within_cooldown(rule_name,
+                                                                 "", cooldown_secs, 
+                                                                 flight.lastloc.now)
+            if not result:
+                return False
+
 
         if 'latlongring' in conditions:
             condition_value = conditions['latlongring']
