@@ -46,7 +46,8 @@ class Monitor(App):
         self.last_read = 0
 
     def build(self):
-        self.text_input = TextInput(multiline=True, pos=self.text_position)
+        self.text_input = TextInput(multiline=True, font_size=dp(20), 
+                                    pos=self.text_position)
 
         layout = FloatLayout()
         layout.add_widget(self.text_input)
@@ -215,10 +216,10 @@ def setup():
 
     # Actually build and start the app
     dp_window_size = [dp(i) for i in yaml_data['monitor_config']['window_size']]
-    Window.size = dp_window_size
-    Window.top = dp(yaml_data['monitor_config']['window_top'])
-    Window.left = dp(yaml_data['monitor_config']['window_left'])
-
+    # Window.size = dp_window_size
+    # Window.top = dp(yaml_data['monitor_config']['window_top'])
+    # Window.left = dp(yaml_data['monitor_config']['window_left'])
+    Window.clearcolor = (0, 0, 1, 1)
     monitorapp = Monitor(yaml_data['monitor_config']['text_position'], 
                          adsb_actions)
 
