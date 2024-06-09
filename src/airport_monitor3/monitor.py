@@ -141,7 +141,7 @@ class Monitor(App):
             if flight.inside_bboxes_indices[0] == index:
                 text += self.get_text_for_flight(flight)
 
-        text += '\n\n'
+        #text += '\n\n'
         return text
 
     def update_display(self, flight):
