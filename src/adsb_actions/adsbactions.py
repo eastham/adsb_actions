@@ -31,6 +31,7 @@ from .location import Location
 from prometheus_client import start_http_server, Gauge
 
 logger = logging.getLogger(__name__)
+FORCE_CHECKPOINT = False     # run periodic tasks after every blob of data
 
 class AdsbActions:
     """Main API for the library."""
@@ -92,11 +93,13 @@ class AdsbActions:
         else:
             self.data_iterator = iterator_data
 
+        last_read_time = 0
         while True:
-            last_read_time = self._flight_update_read()
-         #   logger.debug("last_read_time: %s", last_read_time)
-            if last_read_time == 0: continue
-            if last_read_time < 0: break
+            last_read_return = self._flight_update_read()
+            if last_read_return > 0:
+                last_read_time = last_read_return
+            logger.debug("last_read_time: %s", last_read_time)
+
             if not self.flights.last_checkpoint:
                 self.flights.last_checkpoint = last_read_time
 
@@ -106,15 +109,24 @@ class AdsbActions:
             # are seen.
             # If timely expiration/maintenance is needed, dummy events can be
             # injected.
-            if (last_read_time and
-                last_read_time - self.flights.last_checkpoint >= CHECKPOINT_INTERVAL):
+            time_for_forced_checkpoint = FORCE_CHECKPOINT and last_read_return < 0
+            time_for_checkpoint = not FORCE_CHECKPOINT and last_read_return > 0 and \
+                last_read_time - self.flights.last_checkpoint >= CHECKPOINT_INTERVAL
+            
+            if (time_for_forced_checkpoint or time_for_checkpoint):
                 datestr = datetime.datetime.utcfromtimestamp(
                     last_read_time).strftime('%Y-%m-%d %H:%M:%S')
-                logger.debug("%ds Checkpoint: %d %s", CHECKPOINT_INTERVAL, last_read_time, datestr)
+                logger.info("%ds Checkpoint: %d %s", CHECKPOINT_INTERVAL,
+                             last_read_time, datestr)
 
                 self.flights.expire_old(self.rules, last_read_time)
                 self.rules.handle_proximity_conditions(self.flights, last_read_time)
                 self.flights.last_checkpoint = last_read_time
+
+            if last_read_return == 0:
+                continue
+            if last_read_return < 0:
+                break
 
             if self.exit_loop_flag:
                 logger.warning("Exiting AdsbActions loop")
@@ -147,7 +159,7 @@ class AdsbActions:
         except FileNotFoundError:
             logger.critical("File mentioned in yaml not found: %s", f)
             sys.exit(-1)
-        except KeyError:
+        except:
             pass
         return bboxes_list
 
@@ -189,8 +201,7 @@ class AdsbActions:
         except StopIteration:
             return -1       # iterator EOF
         except Exception:   # pylint: disable=broad-except
-            logger.error("Socket input error")
-            if self.listen.retry:
+            if self.listen and self.listen.retry:
                 # TODO needs testing/improvement.  This didn't always work in the past...
                 logger.error("Attempting reconnect...")
                 time.sleep(2)
