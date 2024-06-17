@@ -8,6 +8,7 @@ from .location import Location
 from .rules import Rules
 
 logger = logging.getLogger(__name__)
+BBOX_PERF_OPTIMIZE = True  # require to be in some bbox to match nearby checks
 
 class Flights:
     """all Flight objects in the system, indexed by flight_id"""
@@ -87,7 +88,7 @@ class Flights:
         for flight1 in self.flight_dict.values():
             if flight1 is flight2:
                 continue
-            if not flight2.in_any_bbox():
+            if BBOX_PERF_OPTIMIZE and not flight2.in_any_bbox():
                 continue # NOTE optimization, maybe not desired behavior
             if last_read_time - flight2.lastloc.now > MIN_FRESH:
                 continue

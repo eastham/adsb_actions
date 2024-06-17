@@ -9,6 +9,7 @@ from .ruleexecutionlog import RuleExecutionLog, ExecutionCounter
 
 logger = logging.getLogger(__name__)
 logger.level = logging.WARNING
+BBOX_PERF_OPTIMIZE = True      # require matching prox rules to be in some bbox
 
 class Rules:
     """
@@ -286,7 +287,7 @@ class Rules:
             return
 
         for flight1 in flights.flight_dict.values():
-            if not flight1.in_any_bbox():
+            if BBOX_PERF_OPTIMIZE and not flight1.in_any_bbox():
                 continue
 
             for rule_name, rule_body in prox_rules_list:
