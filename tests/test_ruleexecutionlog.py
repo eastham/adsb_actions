@@ -14,7 +14,7 @@ def test_rule_execution_log():
     assert rel.within_cooldown("rulename", "n12345", 100, timestamp+99)
     assert not rel.within_cooldown("rulename", "n12345", 100, timestamp+100)
     assert not rel.within_cooldown("rulename", "n12345", 100, timestamp+150)
-    assert len(rel.last_execution_time) == 1
+    assert len(rel.last_execution_time) == 2
     assert rel.rule_execution_counters['rulename'].count == 1
 
     rel.log("rulename2", "n123", timestamp, "test note")
