@@ -2,25 +2,20 @@
 """Run the rules in analyze_from_files.yaml against a nested
 directory structure with readsb data dumps in it."""
 
-import logging
 import replay
 from adsb_actions.adsbactions import AdsbActions
 
+import adsb_logger
+from adsb_logger import Logger
+
+logger = adsb_logger.logging.getLogger(__name__)
+#logger.level = adsb_logger.logging.DEBUG
+LOGGER = Logger()
+
 YAML_FILE = "./analyze_from_files.yaml"
-
-logger = None
-
-def setup_logger():
-    global logger
-
-    logging.basicConfig(level=logging.INFO)
-    logging.info('System started.')
-    logger = logging.getLogger(__name__)
-    logger.level = logging.DEBUG
 
 if __name__ == "__main__":
     import argparse
-    setup_logger()
 
     parser = argparse.ArgumentParser(description=
         "Detect landings/takeoffs/etc from directory of readsb output files.")

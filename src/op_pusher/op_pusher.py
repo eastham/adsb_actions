@@ -2,22 +2,15 @@
 
 import argparse
 import sys
-import logging
-import logging.handlers
 from adsb_actions.adsbactions import AdsbActions
 import op_pusher_helpers
 from prometheus_client import Gauge
+import adsb_logger
+from adsb_logger import Logger
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s %(levelname)s adsb_actions %(module)s:%(lineno)d: %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.handlers.SysLogHandler(),
-#        logging.FileHandler("log/op_pusher.log"),
-    ]
-)
+logger = adsb_logger.logging.getLogger(__name__)
+#logger.level = adsb_logger.logging.DEBUG
+LOGGER = Logger()
 
 def run():
     logger.info('System started.')

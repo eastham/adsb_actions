@@ -1,13 +1,18 @@
 """Storage for all Flight objects in the system, and handling
 for flight updates."""
 import threading
-import logging
 from typing import Dict
-from .flight import Flight
-from .location import Location
-from .rules import Rules
+from flight import Flight
+from location import Location
+from rules import Rules
 
-logger = logging.getLogger(__name__)
+import adsb_logger
+from adsb_logger import Logger
+
+logger = adsb_logger.logging.getLogger(__name__)
+#logger.level = adsb_logger.logging.DEBUG
+LOGGER = Logger()
+
 BBOX_PERF_OPTIMIZE = True  # require to be in some bbox to match nearby checks
 
 class Flights:

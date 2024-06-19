@@ -6,8 +6,14 @@ import signal
 import threading
 import argparse
 import sys
-import logging
 import yaml
+
+import adsb_logger
+from adsb_logger import Logger
+
+logger = adsb_logger.logging.getLogger(__name__)
+#logger.level = adsb_logger.logging.DEBUG
+LOGGER = Logger()
 
 from adsb_actions.bboxes import Bboxes
 from adsb_actions.adsbactions import AdsbActions
@@ -22,14 +28,11 @@ from kivy.core.window import Window
 from kivymd.app import MDApp
 from dialog import Dialog
 
-logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
-
 controllerapp = None
 
 class ControllerApp(MDApp):
     def __init__(self, bboxes, focus_q, admin_q):
-        logging.debug("controller init")
+        logger.debug("controller init")
 
         self.strips = {}    # dict of FlightStrips by id
         self.dialog = None
@@ -41,13 +44,13 @@ class ControllerApp(MDApp):
         super().__init__()
 
     def build(self):
-        logging.debug("controller build")
+        logger.debug("controller build")
 
         self.controller = Controller()
         self.dialog = Dialog()
         self.theme_cls.theme_style="Dark"
         self.setup_titles()
-        logging.debug("controller build done")
+        logger.debug("controller build done")
         return self.controller
 
     def register_close_callback(self, close_callback):
@@ -108,7 +111,7 @@ class ControllerApp(MDApp):
             strip = self.strips[flight.flight_id]
         except KeyError:
             return
-        logging.debug("removing flight %s" % flight.flight_id)
+        logger.debug("removing flight %s" % flight.flight_id)
         strip.unrender()
         strip.stop_server_loop()
         del self.strips[flight.flight_id]
@@ -116,12 +119,12 @@ class ControllerApp(MDApp):
     @mainthread
     def annotate_strip(self, flight, flight2):
         """Change the color and text of the strip for extra attention"""
-        logging.debug("annotate strip %s", flight.flight_id)
+        logger.debug("annotate strip %s", flight.flight_id)
         id = flight.flight_id
         try:
             strip = self.strips[id]
         except KeyError:
-            logging.debug("annotate not found")
+            logger.debug("annotate not found")
             return
         note = "TRAFFIC ALERT"
         strip.annotate(note)
@@ -139,23 +142,22 @@ class ControllerApp(MDApp):
 class Controller(FloatLayout):
     """Placeholder for controller.kv to be loaded into."""
     def do_add_click(self, n):
-        logging.debug("add click %d" % n)
+        logger.debug("add click %d" % n)
 
 def sigint_handler(signum, frame):
     exit(1)
 
 def shutdown_adsb_actions(_, adsb_actions, read_thread):
-    logging.warning("Shutting down adsb_actions")
+    logger.warning("Shutting down adsb_actions")
 
     adsb_actions.exit_loop_flag = True
     read_thread.join()
 
-    logging.warning("adsb_actions shutdown complete")
+    logger.warning("adsb_actions shutdown complete")
     sys.exit(0)
 
 def setup(focus_q, admin_q):
-    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
-    logging.info('System started.')
+    logger.info('System started.')
 
     parser = argparse.ArgumentParser(description="render a rack of aircraft status strips.")
     parser.add_argument("-v", "--verbose", action="store_true")
