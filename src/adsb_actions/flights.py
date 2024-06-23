@@ -12,7 +12,6 @@ BBOX_PERF_OPTIMIZE = True  # require to be in some bbox to match nearby checks
 
 class Flights:
     """all Flight objects in the system, indexed by flight_id"""
-    EXPIRE_SECS: int = 180  # 3 minutes emperically needed to debounce poor-signal airplanes
 
     def __init__(self, bboxes):
         self.flight_dict: Dict[str, Flight] = {}        # all flights in the system.
@@ -66,7 +65,7 @@ class Flights:
 
         return flight.lastloc.now
 
-    def expire_old(self, rules, last_read_time):
+    def expire_old(self, rules, last_read_time, expire_secs):
         """Delete any flights that haven't been seen in a while.
         This is important to make proximity checks efficient."""
 
@@ -75,7 +74,7 @@ class Flights:
         with self.lock:
             for f in list(self.flight_dict):
                 flight = self.flight_dict[f]
-                if last_read_time - flight.lastloc.now > self.EXPIRE_SECS:
+                if last_read_time - flight.lastloc.now > expire_secs:
                     rules.do_expire(flight)
                     del self.flight_dict[f]
 

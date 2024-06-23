@@ -37,7 +37,7 @@ class AdsbActions:
     """Main API for the library."""
 
     def __init__(self, yaml_data=None, yaml_file=None, ip=None, port=None,
-                 mport=None, bboxes=None):
+                 mport=None, bboxes=None, expire_secs=180):
         """Main API for the library.  You can provide network port info in the
         constructor here, or specify local data sources in the subsequent call to
         loop().  Either yaml_data or yaml_file must be specified.
@@ -63,6 +63,7 @@ class AdsbActions:
         self.listen = None
         self.data_iterator = None
         self.exit_loop_flag = False      # set externally if we need to exit the main loop
+        self.expire_secs = expire_secs
 
         if ip and port:
             self.listen = self._setup_network(ip, port)
@@ -119,7 +120,8 @@ class AdsbActions:
                 logger.info("%ds Checkpoint: %d %s", CHECKPOINT_INTERVAL,
                              last_read_time, datestr)
 
-                self.flights.expire_old(self.rules, last_read_time)
+                self.flights.expire_old(self.rules, last_read_time,
+                                        self.expire_secs)
                 self.rules.handle_proximity_conditions(self.flights, last_read_time)
                 self.flights.last_checkpoint = last_read_time
 
