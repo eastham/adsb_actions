@@ -51,8 +51,8 @@ class Bboxes:
         """Parses a placemark of the form:
         Name: minalt-maxalt minheading-maxheading
 
-        for example, this defines a region called "Rwy 25 Approach" from 4500-5500 feet,
-        with heading 230 to 270:
+        for example, this defines a region called "Rwy 25 Approach" from 
+        4500-5500 feet, with heading 230 to 270:
 
         Rwy 25 Approach: 4500-5500 230-270
         """
