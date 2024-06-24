@@ -1,8 +1,13 @@
 """Module to call out to external database for potential on-screen updates."""
-import logging
+
 import sys
-logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
+
+import adsb_logger
+from adsb_logger import Logger
+
+logger = adsb_logger.logging.getLogger(__name__)
+#logger.level = adsb_logger.logging.DEBUG
+LOGGER = Logger()
 
 USE_APPSHEET = True
 if USE_APPSHEET:
@@ -27,7 +32,7 @@ class DbInterface:
         is then passed to the UI via callback.
         May block, should be run in own thread. """
 
-        logging.debug("call_database: %s", self.flight.flight_id)
+        logger.debug("call_database: %s", self.flight.flight_id)
 
         note_string = ""
         ui_warning = False
@@ -83,10 +88,10 @@ class DbInterface:
                         code_label = pilot_obj.get('Pilot code')
 
         except Exception as e:
-            logging.debug("do_server_update parse failed: " + str(e))
+            logger.debug("do_server_update parse failed: " + str(e))
             pass
 
-        logging.debug("call_database complete for %s: note %s warn %d", 
+        logger.debug("call_database complete for %s: note %s warn %d", 
                       self.flight.flight_id, note_string, ui_warning)
         self.ui_update_cb(note_string, ui_warning, pilot_label, code_label,
                           None)

@@ -1,7 +1,6 @@
 """Simple flight status board.  Supports a fixed-width font"""
 
 import argparse
-import logging
 import threading
 import sys
 import yaml
@@ -17,8 +16,13 @@ from adsb_actions.bboxes import Bboxes
 from adsb_actions.flight import Flight
 from adsb_actions.adsbactions import AdsbActions
 
-logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
+import adsb_logger
+from adsb_logger import Logger
+
+logger = adsb_logger.logging.getLogger(__name__)
+#logger.level = adsb_logger.logging.DEBUG
+LOGGER = Logger()
+
 adsb_actions = None
 
 from kivy.uix.image import Image
@@ -129,9 +133,7 @@ def parseargs():
     return args
 
 def setup():
-    logging.basicConfig(
-        format='%(levelname)s: %(message)s', level=logging.INFO)
-    logging.info('System started.')
+    logger.info('System started.')
 
     args = parseargs()
 

@@ -3,13 +3,17 @@ Location last seen, tail number, etc."""
 
 import datetime
 import statistics
-import logging
 from dataclasses import dataclass, field
 from threading import Lock
-from .location import Location
-from .bboxes import Bboxes
+from location import Location
+from bboxes import Bboxes
 
-logger = logging.getLogger(__name__)
+import adsb_logger
+from adsb_logger import Logger
+
+logger = adsb_logger.logging.getLogger(__name__)
+#logger.level = adsb_logger.logging.DEBUG
+LOGGER = Logger()
 
 @dataclass
 class Flight:

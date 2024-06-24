@@ -1,8 +1,6 @@
 """Simple flight status board.  Supports a fixed-width font"""
 
 import argparse
-import logging
-import logging.handlers
 import threading
 import sys
 import yaml
@@ -19,14 +17,12 @@ from adsb_actions.flight import Flight
 from adsb_actions.adsbactions import AdsbActions
 from db import appsheet_api
 
-# Move logging setup to a common place once ready
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-stream_handler = logging.StreamHandler()
-stream_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s monitor %(module)s:%(lineno)d: %(message)s'))
-logger.addHandler(stream_handler)
-logger.addHandler(logging.FileHandler("/var/log/adsb_monitor.log"))
-logger.addHandler(logging.handlers.SysLogHandler())
+import adsb_logger
+from adsb_logger import Logger
+
+logger = adsb_logger.logging.getLogger(__name__)
+#logger.level = adsb_logger.logging.DEBUG
+LOGGER = Logger()
 
 from kivy.uix.image import Image
 from kivy.uix.boxlayout import BoxLayout
@@ -75,7 +71,7 @@ class Monitor(App):
         return f'{flt: <15} {tail: <10} {loc: <15} {alt: <7}\n'
 
     def flight_db_lookup(self, flight_id):
-        logging.debug("Looking up pilot for flight %s", flight_id)
+        logger.debug("Looking up pilot for flight %s", flight_id)
         try:
             aircraft_obj = self.appsheet_api.aircraft_lookup(flight_id, True)
             pilot = self.appsheet_api.pilot_lookup(aircraft_obj['lead pilot'])
@@ -90,7 +86,7 @@ class Monitor(App):
                 flightnum = 1
             name +=  " " + str(flightnum)
         except Exception as e:      #   pylint: disable=broad-except
-            logging.error("Error looking up pilot for flight %s: %s", flight_id, e)
+            logger.error("Error looking up pilot for flight %s: %s", flight_id, e)
             return False
         return name
 
@@ -117,7 +113,7 @@ class Monitor(App):
             if not name or name == "N/A":
                 name = flight.flight_id
 
-        logging.debug("Using name %s for %s", name, flight_id)
+        logger.debug("Using name %s for %s", name, flight_id)
         return name
 
     def get_text_for_flight(self, flight):
@@ -194,9 +190,7 @@ def parseargs():
     return args
 
 def setup():
-    logging.basicConfig(
-        format='%(levelname)s: %(message)s', level=logging.INFO)
-    logging.info('System started.')
+    logger.info('System started.')
 
     args = parseargs()
 

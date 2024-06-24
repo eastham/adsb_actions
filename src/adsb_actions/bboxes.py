@@ -6,7 +6,6 @@ Rwy 25 Approach: 4500-5500 230-270
 
 Note there is a Bbox object and a Bboxes object, the latter containing Bbox objects."""
 
-import logging
 import re
 import warnings
 
@@ -16,8 +15,12 @@ from shapely.geometry import Point, Polygon
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 from fastkml import kml
 
-logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
+import adsb_logger
+from adsb_logger import Logger
+
+logger = adsb_logger.logging.getLogger(__name__)
+#logger.level = adsb_logger.logging.DEBUG
+LOGGER = Logger()
 
 @dataclass
 class Bbox:
@@ -46,6 +49,7 @@ class Bboxes:
         k.from_string(doc.encode('utf-8'))
         features = list(k.features())
         self.parse_placemarks(features)
+        logger.info("Setup done")
 
     def parse_placemarks(self, document):
         """Parses a placemark of the form:

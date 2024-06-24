@@ -9,15 +9,18 @@ import argparse
 import time
 import random
 import sys
-import logging
 import pprint
 import requests
+import adsb_logger
+from adsb_logger import Logger
+
+logger = adsb_logger.logging.getLogger(__name__)
+#logger.level = adsb_logger.logging.DEBUG
+
+LOGGER = Logger()
 
 from adsb_actions.config import Config
 from prometheus_client import start_http_server, Gauge, Counter
-
-logger = logging.getLogger(__name__)
-logger.level = logging.INFO
 
 # define metrics for Prometheus
 appsheet_error_gauge = Gauge('appsheet_error', 'Appsheet errors', [ 'type', 'error'])
@@ -305,8 +308,7 @@ class Appsheet:
         return response_dict
 
 if __name__ == "__main__":
-    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
-    logging.info('System started.')
+    logger.info('System started.')
 
     as_instance = Appsheet()
 

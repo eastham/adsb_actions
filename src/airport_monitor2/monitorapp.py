@@ -3,7 +3,6 @@ This one has support for variable-width fonts, and per-line
 colors, which is unfortunately not straightforward in kivy."""
 
 import argparse
-import logging
 import threading
 import yaml
 import sys
@@ -19,8 +18,13 @@ from adsb_actions.flight import Flight
 from adsb_actions.adsbactions import AdsbActions
 from flightmonitor import FlightMonitor
 
-logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
+import adsb_logger
+from adsb_logger import Logger
+
+logger = adsb_logger.logging.getLogger(__name__)
+#logger.level = adsb_logger.logging.DEBUG
+LOGGER = Logger()
+
 adsb_actions = None
 flightmonitor = None
 
@@ -83,9 +87,7 @@ def parseargs():
     return args
 
 def setup():
-    logging.basicConfig(
-        format='%(levelname)s: %(message)s', level=logging.INFO)
-    logging.info('System started.')
+    logger.info('System started.')
 
     args = parseargs()
 

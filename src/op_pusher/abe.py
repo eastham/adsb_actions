@@ -2,14 +2,18 @@
 These are pushed once upon first detection and again once
 expired, so that the minimum distance is logged."""
 
-import logging
 import threading
 import time
 
 from db_ops import add_abe, update_abe
 from adsb_actions.stats import Stats
 
-logger = logging.getLogger(__name__)
+import adsb_logger
+from adsb_logger import Logger
+
+logger = adsb_logger.logging.getLogger(__name__)
+#logger.level = adsb_logger.logging.DEBUG
+LOGGER = Logger()
 
 class ABE:
     """ 

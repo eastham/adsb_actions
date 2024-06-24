@@ -2,12 +2,16 @@
 
 from dataclasses import dataclass, fields
 from typing import Optional
-import logging
-from .icao_convert import icao_to_n_or_c
+from icao_convert import icao_to_n_or_c
 
 from geopy import distance
 
-logger = logging.getLogger(__name__)
+import adsb_logger
+from adsb_logger import Logger
+
+logger = adsb_logger.logging.getLogger(__name__)
+#logger.level = adsb_logger.logging.DEBUG
+LOGGER = Logger()
 
 @dataclass
 class Location:

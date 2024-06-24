@@ -1,11 +1,15 @@
 """Module to call out to external database."""
-import logging
 import datetime
+
+import adsb_logger
+from adsb_logger import Logger
+
+logger = adsb_logger.logging.getLogger(__name__)
+#logger.level = adsb_logger.logging.DEBUG
+LOGGER = Logger()
 
 USE_APPSHEET = True
 TZ_CONVERT = 0  # -7  # UTC conversion for outgoing ops
-
-logger = logging.getLogger(__name__)
 
 class Database:
     """Abstraction layer for different database backends."""

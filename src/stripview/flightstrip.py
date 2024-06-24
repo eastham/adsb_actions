@@ -5,7 +5,12 @@ import threading
 import time
 import webbrowser
 import sys
-import logging
+import adsb_logger
+from adsb_logger import Logger
+
+logger = adsb_logger.logging.getLogger(__name__)
+#logger.level = adsb_logger.logging.DEBUG
+LOGGER = Logger()
 
 sys.path.insert(0, '../adsb_actions')
 
@@ -18,9 +23,6 @@ from kivy.clock import Clock
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.button import Button
 from kivy.metrics import dp
-
-logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
 
 USE_DATABASE = False
 SERVER_REFRESH_RATE = 60 # seconds
@@ -76,7 +78,7 @@ class FlightStrip:
             self.update_thread.start()
 
     def __del__(self):
-        logging.debug(f"Deleting strip {self.flight.flight_id}")
+        logger.debug(f"Deleting strip {self.flight.flight_id}")
 
     def render(self):
         """put the strip on the screen according to its current state"""
@@ -113,7 +115,7 @@ class FlightStrip:
 
     def focus_click(self, arg):
         # Dead code, see admin_click() comment above.
-        logging.debug("focus " + self.flight.flight_id)
+        logger.debug("focus " + self.flight.flight_id)
         if self.focus_q: self.focus_q.put(self.flight.flight_id)
 
     def server_refresh_thread(self):
@@ -123,10 +125,10 @@ class FlightStrip:
             self.db_interface.call_database()
             time.sleep(SERVER_REFRESH_RATE)
 
-        logging.debug("Exited refresh thread")
+        logger.debug("Exited refresh thread")
 
     def stop_server_loop(self):
-        logging.debug("stop_server_loop, thread " + str(self.update_thread))
+        logger.debug("stop_server_loop, thread " + str(self.update_thread))
         self.stop_event.set()
 
     def handle_db_update(self, note, color, label1, label2, label3):
@@ -148,7 +150,7 @@ class FlightStrip:
 
     def update(self, flight, location, bboxes_list):
         """ Re-build strip strings, changes show up on-screen automatically """
-        logging.debug(f"strip.update for {flight.flight_id}, {bboxes_list}")
+        logger.debug(f"strip.update for {flight.flight_id}, {bboxes_list}")
         if (flight.flight_id.strip() != flight.other_id and flight.other_id):
             extratail = flight.other_id
         else:
@@ -185,7 +187,7 @@ class FlightStrip:
 
     def annotate(self, note):
         """Highlight this strip and add a warning note to it."""
-        logging.debug("**** annotate " + note)
+        logger.debug("**** annotate " + note)
 
         self.note_string = note
         if self.deanno_event:
