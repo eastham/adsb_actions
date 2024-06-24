@@ -1,13 +1,13 @@
+import logging
 from abe import process_abe_launch, ABE
 from db_ops import DATABASE, add_op
 from adsb_actions.stats import Stats
 from prometheus_client import Gauge
 
-import adsb_logger
-from adsb_logger import Logger
+from adsb_actions.adsb_logger import Logger
 
-logger = adsb_logger.logging.getLogger(__name__)
-#logger.level = adsb_logger.logging.DEBUG
+logger = logging.getLogger(__name__)
+#logger.level = logging.DEBUG
 LOGGER = Logger()
 
 op_pusher_helpers_gauge = Gauge('op_pusher_helpers', 'op_pusher_helpers', [ 'message' ])

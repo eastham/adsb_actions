@@ -5,17 +5,17 @@ Also can be called from the command line to make certain db calls."""
 import copy
 import json
 import datetime
+import logging
 import argparse
 import time
 import random
 import sys
 import pprint
 import requests
-import adsb_logger
-from adsb_logger import Logger
+from adsb_actions.adsb_logger import Logger
 
-logger = adsb_logger.logging.getLogger(__name__)
-#logger.level = adsb_logger.logging.DEBUG
+logger = logging.getLogger(__name__)
+#logger.level = logging.DEBUG
 
 LOGGER = Logger()
 

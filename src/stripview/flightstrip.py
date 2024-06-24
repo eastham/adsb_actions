@@ -5,10 +5,10 @@ import threading
 import time
 import webbrowser
 import sys
-import adsb_logger
-from adsb_logger import Logger
+import logging
+from adsb_actions.adsb_logger import Logger
 
-logger = adsb_logger.logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 #logger.level = adsb_logger.logging.DEBUG
 LOGGER = Logger()
 

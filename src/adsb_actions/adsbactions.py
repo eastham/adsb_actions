@@ -12,6 +12,7 @@ See CONFIGURATION_INSTRUCTIONS.yaml for yaml_config specs.
 """
 import json
 import datetime
+import logging
 import time
 import signal
 import socket
@@ -20,20 +21,19 @@ import yaml
 from io import StringIO
 from typing import Callable
 
-from rules import Rules
-from flights import Flights
-from bboxes import Bboxes
-from stats import Stats
-from location import Location
+from .rules import Rules
+from .flights import Flights
+from .bboxes import Bboxes
+from .stats import Stats
+from .location import Location
 
 # Prometheus exporter
 from prometheus_client import start_http_server, Gauge
 
-import adsb_logger
-from adsb_logger import Logger
- 
-logger = adsb_logger.logging.getLogger(__name__)
-#logger.level = adsb_logger.logging.DEBUG
+from .adsb_logger import Logger
+
+logger = logging.getLogger(__name__)
+#logger.level = logging.DEBUG
 LOGGER = Logger()
 
 FORCE_CHECKPOINT = False     # run periodic tasks after every blob of data

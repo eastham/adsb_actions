@@ -1,15 +1,15 @@
 """Detect takeoffs/landings and push them to the database."""
 
 import argparse
+import logging
 import sys
 from adsb_actions.adsbactions import AdsbActions
 import op_pusher_helpers
 from prometheus_client import Gauge
-import adsb_logger
-from adsb_logger import Logger
+from adsb_actions.adsb_logger import Logger
 
-logger = adsb_logger.logging.getLogger(__name__)
-#logger.level = adsb_logger.logging.DEBUG
+logger = logging.getLogger(__name__)
+#logger.level = logging.DEBUG
 LOGGER = Logger()
 
 def run():

@@ -1,16 +1,15 @@
 #!/usr/bin/python
 """Paging/webhook support."""
 
-import requests
 import sys
-from config import Config
+import logging
+import json
+import requests
+from .config import Config
+from .adsb_logger import Logger
 
-import adsb_logger
-from adsb_logger import Logger
-
-logger = adsb_logger.logging.getLogger(__name__)
-#logger.level = adsb_logger.logging.DEBUG
-logging = adsb_logger.logging
+logger = logging.getLogger(__name__)
+#logger.level = logging.DEBUG
 LOGGER = Logger()
 
 CONFIG = Config()

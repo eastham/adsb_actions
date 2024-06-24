@@ -1,15 +1,13 @@
 """Parsing and representation for a single position update coming from ADS-B."""
 
+import logging
 from dataclasses import dataclass, fields
 from typing import Optional
-from icao_convert import icao_to_n_or_c
-
 from geopy import distance
+from .icao_convert import icao_to_n_or_c
+from .adsb_logger import Logger
 
-import adsb_logger
-from adsb_logger import Logger
-
-logger = adsb_logger.logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 #logger.level = adsb_logger.logging.DEBUG
 LOGGER = Logger()
 

@@ -8,6 +8,7 @@ Note there is a Bbox object and a Bboxes object, the latter containing Bbox obje
 
 import re
 import warnings
+import logging
 
 from dataclasses import dataclass
 from shapely.geometry import Point, Polygon
@@ -15,10 +16,9 @@ from shapely.geometry import Point, Polygon
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 from fastkml import kml
 
-import adsb_logger
-from adsb_logger import Logger
+from .adsb_logger import Logger
 
-logger = adsb_logger.logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 #logger.level = adsb_logger.logging.DEBUG
 LOGGER = Logger()
 

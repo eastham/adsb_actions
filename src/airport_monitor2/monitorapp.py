@@ -3,6 +3,7 @@ This one has support for variable-width fonts, and per-line
 colors, which is unfortunately not straightforward in kivy."""
 
 import argparse
+import logging
 import threading
 import yaml
 import sys
@@ -16,13 +17,12 @@ Window.size = (800, 600)
 from adsb_actions.bboxes import Bboxes
 from adsb_actions.flight import Flight
 from adsb_actions.adsbactions import AdsbActions
+from adsb_actions.adsb_logger import Logger
+
 from flightmonitor import FlightMonitor
 
-import adsb_logger
-from adsb_logger import Logger
-
-logger = adsb_logger.logging.getLogger(__name__)
-#logger.level = adsb_logger.logging.DEBUG
+logger = logging.getLogger(__name__)
+#logger.level = logging.DEBUG
 LOGGER = Logger()
 
 adsb_actions = None

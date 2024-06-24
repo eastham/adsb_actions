@@ -1,16 +1,17 @@
 """Storage for all Flight objects in the system, and handling
 for flight updates."""
 import threading
+import logging
 from typing import Dict
-from flight import Flight
-from location import Location
-from rules import Rules
+from .flight import Flight
+from .location import Location
+from .rules import Rules
+from .bboxes import Bboxes
 
-import adsb_logger
-from adsb_logger import Logger
+from .adsb_logger import Logger
 
-logger = adsb_logger.logging.getLogger(__name__)
-#logger.level = adsb_logger.logging.DEBUG
+logger = logging.getLogger(__name__)
+#logger.level = logging.DEBUG
 LOGGER = Logger()
 
 BBOX_PERF_OPTIMIZE = True  # require to be in some bbox to match nearby checks
@@ -21,7 +22,7 @@ class Flights:
     def __init__(self, bboxes):
         self.flight_dict: Dict[str, Flight] = {}        # all flights in the system.
         self.lock: threading.Lock = threading.Lock()    # XXX may not be needed anymore...
-        self.bboxes : list[BBoxes] = bboxes             # all bboxes in the system.
+        self.bboxes : list[Bboxes] = bboxes             # all bboxes in the system.
         self.last_checkpoint = 0                        # timestamp of last maintenance
         self.iterator_index = 0                         # support for __next__()
 
