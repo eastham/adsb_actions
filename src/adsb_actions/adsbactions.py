@@ -89,7 +89,7 @@ class AdsbActions:
                 .01-.05 is reasonable to be able to see what's going on.
         """
         # TODO this probably should be a configurable instance variable:
-        CHECKPOINT_INTERVAL = 3600 # seconds.  How often to do mainentance tasks.
+        CHECKPOINT_INTERVAL = 5 # seconds.  How often to do mainentance tasks.
 
         # Two ways to inject data for non-network cases:
         if string_data:
