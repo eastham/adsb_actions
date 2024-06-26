@@ -3,9 +3,10 @@
 import argparse
 import threading
 import sys
-import yaml
 import logging
 import os
+import signal
+import yaml
 
 os.environ['KIVY_LOG_MODE'] = 'PYTHON'  # inhibit Kivy's custom log format
 import kivy
@@ -161,19 +162,22 @@ class Monitor(App):
 
         self.update_text(text)
 
-    def inside_bbox(self, flight):
+    def update_cb(self, flight):
         """This is the callback fired on change"""
 
-        logger.info("inside_bbox for flight %s",
+        logger.info("Update callback for flight %s",
                     self.get_text_for_flight(flight).strip() if flight else "None")
         self.update_display(flight)
 
     def expire(self, flight):
         """Callback fired when an aircraft is removed from the system."""
-        logger.info("expire for flight %s",
+        logger.info("Expire callback for flight %s",
                     self.get_text_for_flight(flight).strip() if flight else "None")
 
         self.update_display(None)
+
+def sigint_handler(signum, frame):
+    exit(1)
 
 def parseargs():
     parser = argparse.ArgumentParser(
@@ -198,6 +202,10 @@ def parseargs():
 def setup():
     logger.info('System started.')
 
+    signal.signal(signal.SIGINT, sigint_handler)
+    signal.signal(signal.SIGTERM, sigint_handler)
+    signal.signal(signal.SIGQUIT, sigint_handler)
+
     args = parseargs()
 
     with open(args.rules, 'r', encoding='utf-8') as file:
@@ -216,15 +224,15 @@ def setup():
 
     # Actually build and start the app
     dp_window_size = [dp(i) for i in yaml_data['monitor_config']['window_size']]
-    # Window.size = dp_window_size
+    Window.size = dp_window_size
     # Window.top = dp(yaml_data['monitor_config']['window_top'])
     # Window.left = dp(yaml_data['monitor_config']['window_left'])
     Window.clearcolor = (0, 0, 1, 1)
-    monitorapp = Monitor(yaml_data['monitor_config']['text_position'], 
+    monitorapp = Monitor(yaml_data['monitor_config']['text_position'],
                          adsb_actions)
 
     adsb_actions.register_callback(
-        "aircraft_update_cb", monitorapp.inside_bbox)
+        "aircraft_update_cb", monitorapp.update_cb)
     adsb_actions.register_callback(
         "aircraft_expire_cb", monitorapp.expire)
 
@@ -233,7 +241,7 @@ def setup():
 
     # Don't update the UI before it's drawn...
     Clock.schedule_once(lambda x: read_thread.start(), 2)
-    Clock.schedule_once(lambda x: monitorapp.inside_bbox(None), 2)
+    Clock.schedule_once(lambda x: monitorapp.update_cb(None), 2)
 
     monitorapp.run()
 
