@@ -76,6 +76,7 @@ class FlightStrip:
             self.db_interface = DbInterface(self.flight, self.handle_db_update)
             self.update_thread = threading.Thread(target=self.server_refresh_thread)
             self.update_thread.start()
+        logger.info(f"Created strip for {self.flight.flight_id}")
 
     def __del__(self):
         logger.debug(f"Deleting strip {self.flight.flight_id}")

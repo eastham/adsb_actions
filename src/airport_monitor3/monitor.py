@@ -5,6 +5,9 @@ import threading
 import sys
 import yaml
 import logging
+import os
+
+os.environ['KIVY_LOG_MODE'] = 'PYTHON'  # inhibit Kivy's custom log format
 import kivy
 from kivy.app import App
 from kivy.uix.textinput import TextInput
@@ -161,12 +164,15 @@ class Monitor(App):
     def inside_bbox(self, flight):
         """This is the callback fired on change"""
 
-        logger.debug("inside_bbox for flight %s", flight.flight_id if flight else "None")
+        logger.info("inside_bbox for flight %s",
+                    self.get_text_for_flight(flight).strip() if flight else "None")
         self.update_display(flight)
 
     def expire(self, flight):
         """Callback fired when an aircraft is removed from the system."""
-        logger.debug("expire for flight %s", flight.flight_id)
+        logger.info("expire for flight %s",
+                    self.get_text_for_flight(flight).strip() if flight else "None")
+
         self.update_display(None)
 
 def parseargs():

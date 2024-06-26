@@ -9,7 +9,7 @@ from .ruleexecutionlog import RuleExecutionLog, ExecutionCounter
 from .adsb_logger import Logger
 
 logger = logging.getLogger(__name__)
-#logger.level = adsb_logger.logging.DEBUG
+#logger.level = logging.DEBUG
 LOGGER = Logger()
 
 BBOX_PERF_OPTIMIZE = True      # require matching prox rules to be in some bbox
@@ -47,7 +47,7 @@ class Rules:
             logger.debug("Checking rules %s", rule_name)
 
             if self.conditions_match(flight, rule_value['conditions'], rule_name):
-                logger.info("MATCH for rule '%s' for flight %s", rule_name, flight.flight_id)
+                logger.debug("MATCH for rule '%s' for flight %s", rule_name, flight.flight_id)
 
                 self.do_actions(flight, rule_value['actions'], rule_name)
             else:
@@ -79,7 +79,7 @@ class Rules:
         logger.debug("condition_match checking rules: %s", str(conditions))
         Stats.condition_match_calls += 1
 
-        # TODO the approach below prevents us from having multiple rules of 
+        # TODO the approach below prevents us from having multiple rules of
         # the same type.  Do we need to support that?
 
         if 'proximity' in conditions:

@@ -245,8 +245,8 @@ class Appsheet:
                 ret = self.sendop(self.config.private_vars["appsheet"]["cpe_url"], body)
                 return ret["Rows"][0]["Row ID"]
             return FAKE_KEY
-        except Exception:
-            logger.warning("add_cpe op raised exception")
+        except Exception as e:
+            logger.warning("add_cpe op raised exception: " + str(e))
         return None
 
     def update_cpe(self, flight1, flight2, latdist, altdist, time, rowid):
@@ -268,8 +268,8 @@ class Appsheet:
                 ret = self.sendop(self.config.private_vars["appsheet"]["cpe_url"], body)
                 return ret
             return FAKE_KEY
-        except Exception:
-            logger.warning("update_cpe op raised exception")
+        except Exception as e:
+            logger.warning("update_cpe op raised exception: " + str(e))
         return None
 
     def sendop(self, url, body, timeout=30):
@@ -283,15 +283,15 @@ class Appsheet:
 
         if DELAYTEST:
             delay = random.uniform(1, 3)
-            logger.info("debug delay of %ss", delay)
+            logger.info("debug delaying for %ss", delay)
             time.sleep(delay)
 
         response = requests.post(
             url,
             headers=self.headers, json=body, timeout=timeout)
         if response.status_code != 200:
-            logger.debug("non-200 return: %s",
-                         self.pprint_format(response))
+            logger.warning("sendop non-200 return: %s",
+                            self.pprint_format(response))
             raise requests.HTTPError("op returned non-200 code: " +
                                      str(response))
 

@@ -72,12 +72,12 @@ class Flight:
         return False
 
     def is_in_bboxes(self, bb_list: list):
-        """Is the flight in all the same bboxes as specified in list?
-        Also returns true in the all-are-None condition."""
+        """Is the flight in any of the bboxes specified in bb_list?
+        Also returns true if the flight's bboxes and bb_list are all None."""
 
-        # flight may be in [None, None], we still want to match that case
+        # special case: empty bb_list requires flight to be in no boxes
         if bb_list is None or bb_list == []:
-            bb_list = [None]
+            return not self.in_any_bbox()
 
         for in_bb in self.inside_bboxes:
             if in_bb in bb_list:
@@ -153,7 +153,7 @@ class Flight:
         if self.inside_bboxes != self.prev_inside_bboxes:
             timestamp = datetime.datetime.fromtimestamp(
                 self.lastloc.now).strftime("%m/%d/%y %H:%M")
-            logger.debug("%s BBOX CHANGE %s: was %s now %s", timestamp,
+            logger.debug("%s Bbox change for %s: was %s now %s", timestamp,
                         self.flight_id, self.prev_inside_bboxes, self.inside_bboxes)
 
     def get_bbox_at_level(self, level) -> str:

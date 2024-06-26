@@ -104,7 +104,7 @@ class AdsbActions:
             last_read_return = self._flight_update_read()
             if last_read_return > 0:
                 last_read_time = last_read_return
-            logger.debug("last_read_time: %s", last_read_time)
+                logger.debug("Main loop last_read_time: %s", last_read_time)
 
             if not self.flights.last_checkpoint:
                 self.flights.last_checkpoint = last_read_time
@@ -118,12 +118,13 @@ class AdsbActions:
             time_for_forced_checkpoint = FORCE_CHECKPOINT and last_read_return < 0
             time_for_checkpoint = not FORCE_CHECKPOINT and last_read_return > 0 and \
                 last_read_time - self.flights.last_checkpoint >= CHECKPOINT_INTERVAL
-            
+
             if (time_for_forced_checkpoint or time_for_checkpoint):
                 datestr = datetime.datetime.utcfromtimestamp(
                     last_read_time).strftime('%Y-%m-%d %H:%M:%S')
-                logger.info("%ds Checkpoint: %d %s", CHECKPOINT_INTERVAL,
-                             last_read_time, datestr)
+                logger.info("%ds Checkpoint: %d ops, last_read_time %d %s", 
+                             CHECKPOINT_INTERVAL,
+                             Stats.json_readlines, last_read_time, datestr)
 
                 self.flights.expire_old(self.rules, last_read_time,
                                         self.expire_secs)
@@ -142,7 +143,7 @@ class AdsbActions:
             if delay:
                 time.sleep(delay)
 
-        logger.info("Parsed %s points.", Stats.json_readlines)
+        logger.warning("Exiting main loop, parsed %s points.", Stats.json_readlines)
         self.rules.print_final_report()
 
     def register_callback(self, name: str, fn: Callable) -> None:
@@ -179,7 +180,7 @@ class AdsbActions:
         conn = TCPConnection(ipaddr, int(port), retry_conn)
         conn.connect()
 
-        logger.info("Setup done")
+        logger.info("Network setup done")
         return conn
 
     def _flight_update_read(self) -> float:
@@ -204,17 +205,18 @@ class AdsbActions:
                 jsondict = next(self.data_iterator)
 
         except json.JSONDecodeError:
-            logger.error("JSON Parse fail: %s", line)
+            logger.error("_flight_update_read JSON Parse fail: %s", line)
         except StopIteration:
             return -1       # iterator EOF
-        except Exception:   # pylint: disable=broad-except
+        except Exception as e:   # pylint: disable=broad-except
             if self.listen and self.listen.retry:
                 # TODO needs testing/improvement.  This didn't always work in the past...
-                logger.error("Attempting reconnect...")
+                logger.warning("_flight_update_read Attempting reconnect...")
                 time.sleep(2)
                 self.listen.connect()
                 return 0
             else:
+                logger.error("_flight_update_read Exception: %s", e)
                 return -1
 
         # logger.debug("Read json: %s ", str(jsondict))

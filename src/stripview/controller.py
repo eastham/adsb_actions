@@ -1,31 +1,32 @@
 """Main module to start and build the UI."""
 
-from kivy.clock import Clock, mainthread
-from kivy.uix.floatlayout import FloatLayout
+import os
 import signal
 import threading
 import argparse
 import sys
 import logging
-
 from adsb_actions.adsb_logger import Logger
-
-logger = logging.getLogger(__name__)
-#logger.level = adsb_logger.logging.DEBUG
-LOGGER = Logger()
-
 from adsb_actions.bboxes import Bboxes
 from adsb_actions.adsbactions import AdsbActions
-from flightstrip import FlightStrip
 
+logger = logging.getLogger(__name__)
+# logger.level = logging.DEBUG
+LOGGER = Logger()
+
+os.environ['KIVY_LOG_MODE'] = 'PYTHON'  # inhibit Kivy's custom log format
 import kivy
 kivy.require('1.0.5')
 from kivy.config import Config
 Config.set('graphics', 'width', '600')
 Config.set('graphics', 'height', '800')
 from kivy.core.window import Window
+from kivy.clock import Clock, mainthread
+from kivy.uix.floatlayout import FloatLayout
+
 from kivymd.app import MDApp
 from dialog import Dialog
+from flightstrip import FlightStrip
 
 controllerapp = None
 
@@ -110,7 +111,7 @@ class ControllerApp(MDApp):
             strip = self.strips[flight.flight_id]
         except KeyError:
             return
-        logger.debug("removing flight %s" % flight.flight_id)
+        logger.info("Removing strip for %s" % flight.flight_id)
         strip.unrender()
         strip.stop_server_loop()
         del self.strips[flight.flight_id]
@@ -160,7 +161,6 @@ def setup(focus_q, admin_q):
 
     parser = argparse.ArgumentParser(description="render a rack of aircraft status strips.")
     parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument('file', nargs='+', help="kml files to use")
     parser.add_argument('--ipaddr', help="IP address to connect to")
     parser.add_argument('--port', help="port to connect to")

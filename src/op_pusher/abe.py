@@ -68,7 +68,7 @@ def process_abe(flight1, flight2):
         ABE.gc_thread = threading.Thread(target=gc_loop)
         ABE.gc_thread.start()
 
-    logger.debug("process_abe " + flight1.flight_id + " " + flight2.flight_id)
+    logger.info("process_abe " + flight1.flight_id + " " + flight2.flight_id)
 
     lateral_distance = flight1.lastloc - flight2.lastloc
     alt_distance = abs(flight1.lastloc.alt_baro - flight2.lastloc.alt_baro)

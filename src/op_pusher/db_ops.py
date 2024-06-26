@@ -69,7 +69,7 @@ def lookup_or_create_aircraft(flight):
 
         if not aircraft_external_id:
             aircraft_external_id = DATABASE.add_aircraft_db_call(flight.flight_id)
-            logger.debug("LOOKUP added aircraft and now has aircraft_external_id %s", 
+            logger.debug("LOOKUP added aircraft and now has aircraft_external_id %s",
                          aircraft_external_id)
         else:
             logger.debug("LOOKUP got cached aircraft_external_id %s", aircraft_external_id)

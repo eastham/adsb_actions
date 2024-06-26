@@ -49,7 +49,7 @@ class Bboxes:
         k.from_string(doc.encode('utf-8'))
         features = list(k.features())
         self.parse_placemarks(features)
-        logger.info("Setup done")
+        logger.info("Setup done for bboxes in %s", fn)
 
     def parse_placemarks(self, document):
         """Parses a placemark of the form:

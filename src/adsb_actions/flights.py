@@ -75,14 +75,16 @@ class Flights:
         """Delete any flights that haven't been seen in a while.
         This is important to make proximity checks efficient."""
 
-        logger.debug("Expire_old")
-
+        count = 0
         with self.lock:
             for f in list(self.flight_dict):
                 flight = self.flight_dict[f]
                 if last_read_time - flight.lastloc.now > expire_secs:
                     rules.do_expire(flight)
                     del self.flight_dict[f]
+                    count += 1
+
+        logger.debug("Expire_old removed %d flights", count)
 
     def find_nearby_flight(self, flight2, altsep, latsep, last_read_time) -> Flight:
         """Returns maximum of one nearby flight within the given separation, 

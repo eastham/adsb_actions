@@ -28,7 +28,8 @@ class Logger:
         format='%(asctime)s %(levelname)s adsb_actions %(module)s:%(lineno)d: %(message)s',
         handlers=[
             logging.StreamHandler(),
-            logging.handlers.SysLogHandler(),
+            logging.handlers.SysLogHandler()
+#            logging.handlers.SysLogHandler(address='/dev/log')
     #        logging.FileHandler("log/op_pusher.log"),
         ]
     )
