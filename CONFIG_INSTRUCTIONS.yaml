@@ -28,11 +28,12 @@
         # what should we do when triggered?
         callback: ground_cb  # call a function as specified by AdsbActions.register_callback()
         expire_callback: expire_cb  # callback for when the flight is being evicted
-        webhook: True        # slack etc
         print: True          # print info about this aircraft to console
-        note: "text flag"    # apply this note to aircraft, for use in later callbacks
+        note: "text flag"    # apply a note to aircraft, for use in later callbacks
         note: ~              # clear note
         track: True          # track execution statistics for this rule, to be printed later
+        webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
+        webhook: ['page', 'pager1 pager2'] # send a message to two pagers
 
 # Other notes:
 # - Callbacks take one arg (the flight) unless matching on a proximity condition -- in that

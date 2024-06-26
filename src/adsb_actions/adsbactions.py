@@ -17,9 +17,9 @@ import time
 import signal
 import socket
 import sys
-import yaml
 from io import StringIO
 from typing import Callable
+import yaml
 
 from .rules import Rules
 from .flights import Flights
@@ -27,7 +27,6 @@ from .bboxes import Bboxes
 from .stats import Stats
 from .location import Location
 
-# Prometheus exporter
 from prometheus_client import start_http_server, Gauge
 
 from .adsb_logger import Logger

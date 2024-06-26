@@ -7,6 +7,7 @@ from .flight import Flight
 from .stats import Stats
 from .ruleexecutionlog import RuleExecutionLog, ExecutionCounter
 from .adsb_logger import Logger
+from .page import send_page, send_slack
 
 logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
@@ -187,15 +188,28 @@ class Rules:
                    cb_arg = None) -> None:
         """Rule matched, now execute the actions for the given flight."""
 
-        self.rule_execution_log.log(rule_name, flight.flight_id, 
-                                    flight.lastloc.now, 
+        self.rule_execution_log.log(rule_name, flight.flight_id,
+                                    flight.lastloc.now,
                                     flight.flags.get('note', ''))
 
         for action_name, action_value in action_items.items():
             if 'webhook' == action_name:
                 Stats.webhooks_fired += 1
-                # TODO not implemented - see page.py for more info
-                logger.critical("NOT IMPLEMENTED: webhook for %s", flight.flight_id)
+                try:
+                    [action_type, action_recipient] = action_value
+                except Exception: # pylint: disable=broad-except
+                    logger.error("Invalid webhook action: %s", action_value)
+                    continue
+
+                if 'slack' == action_type:
+                    text = f"Rule {rule_name} matched for: {flight.to_str()}"
+                    send_slack(action_recipient, text)
+                elif 'page' == action_type:
+                    text = (f"Rule {rule_name}: {flight.lastloc.to_short_str()} "
+                            f"{str(flight.inside_bboxes)}")
+                    send_page(action_recipient, text)
+                else:
+                    logger.error("Unknown webhook action type: %s", action_type)
 
             elif 'print' == action_name:
                 timestamp = datetime.datetime.fromtimestamp(

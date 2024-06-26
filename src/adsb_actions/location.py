@@ -54,6 +54,10 @@ class Location:
             self.track, self.gs, self.lat, self.lon)
         return s
 
+    def to_short_str(self):
+        s = "%s/%s: %d MSL" % (self.tail, self.flight, self.alt_baro)
+        return s
+
     def __sub__(self, other):
         """Return distance to the other Location in nm"""
         return self.distfrom(other.lat, other.lon)
