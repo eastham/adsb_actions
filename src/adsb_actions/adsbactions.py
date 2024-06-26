@@ -215,7 +215,7 @@ class AdsbActions:
                 self.listen.connect()
                 return 0
             else:
-                logger.error("_flight_update_read Exception: %s", e)
+                logger.warning("_flight_update_read Exception: %s", e)
                 return -1
 
         # logger.debug("Read json: %s ", str(jsondict))

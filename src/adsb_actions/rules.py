@@ -88,7 +88,11 @@ class Rules:
 
         if 'aircraft_list' in conditions:
             condition_value = conditions['aircraft_list']
-            ac_list = self.yaml_data['aircraft_lists'][condition_value]
+            try:
+                ac_list = self.yaml_data['aircraft_lists'][condition_value]
+            except KeyError:
+                logger.critical("Aircraft list not found: %s", condition_value)
+                return False
             result = flight.flight_id in ac_list
             if not result:
                 return False

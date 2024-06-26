@@ -1,0 +1,41 @@
+config:
+  kmls:
+    - ../../tests/test2.kml # fill in bbox info, just as a FYI for the user
+
+aircraft_lists:
+  # Lists of tail numbers of interest.
+  banned_aircraft: [ "N12345" ] 
+
+rules:
+  # this rule will have a side-effect of triggering the API call to pull 
+  # in data over TCP.  The API has a max range of 250 nm, so center it on 
+  # Reno to bias toward California.
+  big_query:
+    conditions:
+      latlongring: [250, 39.5580794, -120.0156502]
+      max_alt: 25000  # skip jet traffic
+
+    actions:
+      note: "query"     # a no-op for adsb_actions
+
+  # This rule will trigger a slack message when a banned aircraft is seen.
+  banned_aircraft_seen_tcp_slack:
+    conditions:
+      aircraft_list: banned_aircraft  # use aircraft_list above
+      cooldown: 30  # minutes to wait before matching a second time for this a/c
+
+    actions:
+      callback: activity_cb
+      webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
+
+  # somewhat repeated rule since YAML doesn't support duplicate keys, this time
+  # send a page.
+  banned_aircraft_seen_tcp_page:
+    conditions:
+      aircraft_list: banned_aircraft  # use aircraft_list above
+      cooldown: 30  # minutes to wait before matching a second time for this a/c
+
+    actions:
+      callback: activity_cb
+      webhook: ['page', 'deputy'] # send a message to a pager
+

@@ -126,6 +126,14 @@
             "args": "--inject_addr 192.168.87.56:30001 ../../tests/1hr.json --speed_x 1",
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+        {
+            "name": "TCP API client",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/src/tcp_client",
+            "program": "tcp_client.py",
+            "args": "tcp_rules.yaml"
         }
     ]
 }

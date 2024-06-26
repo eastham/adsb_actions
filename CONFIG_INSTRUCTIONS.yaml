@@ -25,7 +25,7 @@
         min_time: 400        # earliest time, in 24h format, but don't use leading 0's
         max_time: 1600       # latest time, in 24h format, but don't use leading 0's
       actions:
-        # what should we do when triggered?
+        # what should we do when triggered?  Note only one action per type will fire.
         callback: ground_cb  # call a function as specified by AdsbActions.register_callback()
         expire_callback: expire_cb  # callback for when the flight is being evicted
         print: True          # print info about this aircraft to console
