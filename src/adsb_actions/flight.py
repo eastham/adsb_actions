@@ -71,9 +71,17 @@ class Flight:
             if bbox is not None: return True
         return False
 
+    def was_in_any_bbox(self):
+        assert self.prev_inside_bboxes_valid
+        for bbox in self.prev_inside_bboxes:
+            if bbox is not None:
+                return True
+        return False
+    
     def is_in_bboxes(self, bb_list: list):
         """Is the flight in any of the bboxes specified in bb_list?
-        Also returns true if the flight's bboxes and bb_list are all None."""
+        If no boxes are specified on bb_list (None, [None], []), the flight 
+        must have been in no boxes to match."""
 
         # special case: empty bb_list requires flight to be in no boxes
         if bb_list is None or bb_list == []:
@@ -85,10 +93,14 @@ class Flight:
         return False
 
     def was_in_bboxes(self, bb_list: list):
-        """Was the flight in all the same bboxes as specified, at previous update?
-        if no boxes are specified, the flight must have been in no boxes to match."""
+        """Was the flight in any of the bboxes specified in bb_list?
+        if no boxes are specified on bb_list (None, [None], []), the flight 
+        must have been in no boxes to match."""
         if not self.prev_inside_bboxes_valid:
             return bb_list == [None]
+
+        if bb_list is None or bb_list == []:
+            return not self.was_in_any_bbox()
 
         for prev_bb in self.prev_inside_bboxes:
             if prev_bb in bb_list:

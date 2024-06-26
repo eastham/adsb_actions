@@ -21,13 +21,19 @@ YAML_STRING = """
       conditions:
         transition_regions: [ ~, "Generic Gate Air" ]
       actions:
-        callback: "test_callback"
+        callback: "takeoff_callback"
+
+    takeoff:
+      conditions:
+        transition_regions: [ "Generic Gate Ground", "Generic Gate Air" ]
+      actions:
+        callback: "takeoff_callback"
 
     landing:
       conditions:
         transition_regions: [ "Generic Gate Air", "Generic Gate Ground" ]
       actions:
-        callback: "test_callback"
+        callback: "landing_callback"
 """
 
 JSON_STRING_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'
@@ -44,15 +50,45 @@ def adsb_actions():
 
     yaml_data = yaml.safe_load(YAML_STRING)
     adsb_actions = AdsbActions(yaml_data)
-    testinfra.setup_test_callback(adsb_actions)
-
+    adsb_actions.register_callback("takeoff_callback", takeoff_callback)
+    adsb_actions.register_callback("landing_callback", landing_callback)
     yield adsb_actions
 
+takeoff_callback_cb_ctr = landing_callback_cb_ctr = 0
+
+def takeoff_callback(flight):
+    global takeoff_callback_cb_ctr
+    takeoff_callback_cb_ctr += 1
+
+def landing_callback(flight):
+    global landing_callback_cb_ctr
+    landing_callback_cb_ctr += 1
+
 def test_transitions(adsb_actions):
+    global takeoff_callback_cb_ctr, landing_callback_cb_ctr
+
+    # "popup" takeoff with no prior activity / bboxes
     adsb_actions.loop((JSON_STRING_AIR+'\n')*3)
     assert Stats.callbacks_fired == 1
     assert Stats.last_callback_flight.is_in_bboxes(['Generic Gate Air'])
+    assert takeoff_callback_cb_ctr == 1
 
+    # landing
     adsb_actions.loop((JSON_STRING_GROUND+'\n')*3)
     assert Stats.callbacks_fired == 2
     assert Stats.last_callback_flight.is_in_bboxes(['Generic Gate Ground'])
+    assert landing_callback_cb_ctr == 1
+
+    # takeoff again
+    adsb_actions.loop((JSON_STRING_AIR+'\n')*3)
+    assert Stats.callbacks_fired == 3
+    assert Stats.last_callback_flight.is_in_bboxes(['Generic Gate Air'])
+    assert takeoff_callback_cb_ctr == 2
+
+    # popup again, case where aircraft is seen, but in no bboxes prior.
+    # arguable if this rule is formulated correctly, but checking the logic...
+    adsb_actions.loop((JSON_STRING_DISTANT+'\n')*3)
+    assert not Stats.last_callback_flight.in_any_bbox()
+    adsb_actions.loop((JSON_STRING_AIR+'\n')*3)
+    assert Stats.callbacks_fired == 4
+    assert takeoff_callback_cb_ctr == 3
