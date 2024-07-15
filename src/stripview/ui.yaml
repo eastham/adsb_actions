@@ -1,7 +1,7 @@
   config:
     kmls: # these KMLs define the lat/longs of the regions mentioned below
-      - ../../tests/test2.kml 
-      - ../../tests/test3.kml
+      - ../../tests/brc_large_regions.kml 
+      - ../../tests/brc_small_regions.kml
 
   rules:
     # callback to update strip for aircraft inside the covered regions,
