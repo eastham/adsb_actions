@@ -1,6 +1,6 @@
   config:
     kmls:
-      - tests/test1.kml 
+      - tests/brc_pusher_gates.kml 
 
   rules:
     takeoff:
