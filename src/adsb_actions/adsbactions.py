@@ -121,9 +121,9 @@ class AdsbActions:
             if (time_for_forced_checkpoint or time_for_checkpoint):
                 datestr = datetime.datetime.utcfromtimestamp(
                     last_read_time).strftime('%Y-%m-%d %H:%M:%S')
-                logger.info("%ds Checkpoint: %d ops, last_read_time %d %s", 
-                             CHECKPOINT_INTERVAL,
-                             Stats.json_readlines, last_read_time, datestr)
+                logger.info("%ds Checkpoint: %d ops, %d callbacks, last_read_time %d %s",
+                             CHECKPOINT_INTERVAL, Stats.json_readlines,
+                             Stats.callbacks_fired, last_read_time, datestr)
 
                 self.flights.expire_old(self.rules, last_read_time,
                                         self.expire_secs)
