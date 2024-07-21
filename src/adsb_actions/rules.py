@@ -13,8 +13,6 @@ logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
 LOGGER = Logger()
 
-BBOX_PERF_OPTIMIZE = True      # require matching prox rules to be in some bbox
-
 class Rules:
     """
     This class represents the conditions, agctions, and associated state from one
@@ -308,7 +306,7 @@ class Rules:
             return
 
         for flight1 in flights.flight_dict.values():
-            if BBOX_PERF_OPTIMIZE and not flight1.in_any_bbox():
+            if flights.ignore_unboxed_flights and not flight1.in_any_bbox():
                 continue
 
             for rule_name, rule_body in prox_rules_list:

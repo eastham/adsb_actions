@@ -14,17 +14,17 @@ logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
 LOGGER = Logger()
 
-BBOX_PERF_OPTIMIZE = True  # require to be in some bbox to match nearby checks
-
 class Flights:
     """all Flight objects in the system, indexed by flight_id"""
 
-    def __init__(self, bboxes):
+    def __init__(self, bboxes, ignore_unboxed_flights=True):
         self.flight_dict: Dict[str, Flight] = {}        # all flights in the system.
         self.lock: threading.Lock = threading.Lock()    # XXX may not be needed anymore...
         self.bboxes : list[Bboxes] = bboxes             # all bboxes in the system.
         self.last_checkpoint = 0                        # timestamp of last maintenance
         self.iterator_index = 0                         # support for __next__()
+        # don't match flights that aren't in a bounding box
+        self.ignore_unboxed_flights = ignore_unboxed_flights
 
     def __iter__(self):
         return self
@@ -95,8 +95,8 @@ class Flights:
         for flight1 in self.flight_dict.values():
             if flight1 is flight2:
                 continue
-            if BBOX_PERF_OPTIMIZE and not flight2.in_any_bbox():
-                continue # NOTE optimization, maybe not desired behavior
+            if self.ignore_unboxed_flights and not flight2.in_any_bbox():
+                continue # performance optimization
             if last_read_time - flight2.lastloc.now > MIN_FRESH:
                 continue
 

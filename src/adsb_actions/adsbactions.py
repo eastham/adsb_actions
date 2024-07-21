@@ -41,7 +41,7 @@ class AdsbActions:
     """Main API for the library."""
 
     def __init__(self, yaml_data=None, yaml_file=None, ip=None, port=None,
-                 mport=None, bboxes=None, expire_secs=180):
+                 mport=None, bboxes=None, expire_secs=180, pedantic=False):
         """Main API for the library.  You can provide network port info in the
         constructor here, or specify local data sources in the subsequent call to
         loop().  Either yaml_data or yaml_file must be specified.
@@ -52,22 +52,27 @@ class AdsbActions:
             ip: optional ip address to connect to
             port: optional port to conect to
             mport: optional metrics port
-            exit_cb: optional callback to fire when socket closes or EOF is
-                reached.
             bboxes: optional - forces what bounding boxes the system uses,
-                overriding anything specified in the yaml."""
+                overriding anything specified in the yaml.
+            expire_secs: how long to keep flights around after last observed
+            pedantic: if True, enable strict behavior: checkpoints after each
+                observation, and all rule checks apply even if aircraft are 
+                not in known bounding boxes.
+        """
 
         assert yaml_data or yaml_file, "Must provide yaml or yaml_file"
         if yaml_file:
             with open(yaml_file, 'r', encoding='utf-8') as file:
                 yaml_data = yaml.safe_load(file)
 
-        self.flights = Flights(bboxes or self._load_bboxes(yaml_data))
+        self.flights = Flights(bboxes or self._load_bboxes(yaml_data),
+                               ignore_unboxed_flights=not pedantic)
         self.rules = Rules(yaml_data)
         self.listen = None
         self.data_iterator = None
         self.exit_loop_flag = False      # set externally if we need to exit the main loop
         self.expire_secs = expire_secs
+        self.pedantic = pedantic
 
         if ip and port:
             self.listen = self._setup_network(ip, port)
@@ -114,8 +119,8 @@ class AdsbActions:
             # are seen.
             # If timely expiration/maintenance is needed, dummy events can be
             # injected.
-            time_for_forced_checkpoint = FORCE_CHECKPOINT and last_read_return < 0
-            time_for_checkpoint = not FORCE_CHECKPOINT and last_read_return > 0 and \
+            time_for_forced_checkpoint = self.pedantic and last_read_return < 0
+            time_for_checkpoint = not self.pedantic and last_read_return > 0 and \
                 last_read_time - self.flights.last_checkpoint >= CHECKPOINT_INTERVAL
 
             if (time_for_forced_checkpoint or time_for_checkpoint):
