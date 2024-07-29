@@ -64,6 +64,14 @@ class Flight:
         """Return a live-map url for this flight."""
         return f"https://globe.airplanes.live/?lat={self.lastloc.lat}&lon={self.lastloc.lon}&zoom=10"
 
+    def to_recording(self):
+        """Return a recorded url for this flight."""
+
+        # format aircraft lastloc time like 2024-07-29-22:08
+        timestamp = datetime.datetime.fromtimestamp(
+            self.lastloc.now).strftime("%Y-%m-%d-%H:%M")
+        return f"https://globe.airplanes.live/?replay={timestamp}?lat={self.lastloc.lat}&lon={self.lastloc.lon}&zoom=10"
+
     def lock(self):
         self.threadlock.acquire()
 

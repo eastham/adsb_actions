@@ -204,7 +204,9 @@ class Rules:
                     continue
 
                 if 'slack' == action_type:
-                    text = f"Rule {rule_name} matched for: {flight.to_str()}"
+                    text = (f"Rule {rule_name} matched for: {flight.to_str()}\n"
+                        f"LIVE LINK: {flight.to_link()}\n"
+                        f"RECORDING: {flight.to_recording()}")
                     send_slack(action_recipient, text)
                 elif 'page' == action_type:
                     text = (f"Rule {rule_name}: {flight.lastloc.to_short_str()} "
