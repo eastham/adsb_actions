@@ -35,8 +35,6 @@ logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
 LOGGER = Logger()
 
-FORCE_CHECKPOINT = False     # run periodic tasks after every blob of data
-
 class AdsbActions:
     """Main API for the library."""
 
