@@ -60,6 +60,10 @@ class Flight:
         string += " " + str(self.inside_bboxes)
         return string
 
+    def to_link(self):
+        """Return a live-map url for this flight."""
+        return f"https://globe.airplanes.live/?lat={self.lastloc.lat}&lon={self.lastloc.lon}&zoom=10"
+
     def lock(self):
         self.threadlock.acquire()
 
