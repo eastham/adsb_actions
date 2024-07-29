@@ -4,15 +4,15 @@ config:
 
 aircraft_lists:
   # Lists of tail numbers of interest.
-  banned_aircraft: [ "N12345" ] 
+  banned_aircraft: [ "N1234" ] 
 
 rules:
-  # this rule will have a side-effect of triggering the API call to pull 
-  # in data over TCP.  The API has a max range of 250 nm, so center it on 
-  # Reno to bias toward California.
+  # this presence of this rule will have a side-effect of triggering the API 
+  # call to pull in data over TCP.  The API has a max range of 250 nm, so center 
+  # it on Reno to bias toward California.
   big_query:
     conditions:
-      latlongring: [250, 39.5580794, -120.0156502]
+      #latlongring: [250, 39.5580794, -120.0156502]   # uncomment for wide area detection
       max_alt: 25000  # skip jet traffic
 
     actions:
@@ -38,4 +38,12 @@ rules:
     actions:
       callback: activity_cb
       webhook: ['page', 'deputy'] # send a message to a pager
+
+  low_flying_aircraft:
+    conditions:
+      latlongring: [15, 40.786969, -119.204101]
+      cooldown: 30
+      max_alt: 40000
+    actions:
+      webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
 
