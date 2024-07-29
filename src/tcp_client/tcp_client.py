@@ -25,7 +25,6 @@ LOGGER = Logger()
 
 API_ENDPOINT = "https://api.airplanes.live/v2/point/"
 API_RATE_LIMIT = 1/60      # requests per second
-OUTFILE = "/tmp/output_events.txt"   # matching events are dumped here in JSON
 EXPIRE_SECS = 31  # expire aircraft from database not seen in this many seconds
 
 class QueryState:
@@ -79,14 +78,11 @@ class MonitorThread:
         self.queries = {}
         self.monitor_thread = threading.Thread(target=self.monitor_thread_loop)
         self.adsb_actions = adsb_actions
-        self.event_file = open(OUTFILE, "w")
-        self.event_file.write("log start at " + str(time.time()) + "\n")
 
     def run(self):
         self.monitor_thread.start()
 
     def handle_exit(self, *_):
-        self.event_file.close()
         sys.exit(0)
 
     def add_query(self, name, latlongring, logfile=None):
