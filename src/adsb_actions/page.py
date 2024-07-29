@@ -26,7 +26,7 @@ def send_slack(channel: str, text: str):
         text (str): The message to send.
     """
     if not SEND_SLACK:
-        logger.warning("Skipping slack send")
+        logger.warning("Skipping slack send of: " + text)
         return
 
     logger.info(f"Sending slack msg to channel {channel}: {text}")
