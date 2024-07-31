@@ -14,7 +14,7 @@ LOGGER = Logger()
 
 CONFIG = Config()
 
-SEND_SLACK = False
+SEND_SLACK = True
 SEND_PAGE = True
 
 def send_slack(channel: str, text: str):

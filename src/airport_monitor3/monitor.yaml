@@ -32,10 +32,3 @@
          regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
       actions:
         expire_callback: aircraft_expire_cb
-
-    page_omg:   # clears departed/landed ac, but run less often to not spam the system
-      conditions:
-        transition_regions: [ "23 upwind", "23 scenic ent" ]
-        rule_cooldown: 1  # mins
-      actions:
-        webhook: ['slack', 'slack_nearby_webhook']
