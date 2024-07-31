@@ -24,7 +24,7 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.button import Button
 from kivy.metrics import dp
 
-USE_DATABASE = False
+USE_DATABASE = True
 SERVER_REFRESH_RATE = 60 # seconds
 
 class FlightStrip:

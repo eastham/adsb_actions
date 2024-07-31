@@ -4,7 +4,8 @@ config:
 
 aircraft_lists:
   # Lists of tail numbers of interest.
-  banned_aircraft: [ "N1234" ] 
+  banned_aircraft: [ "N2133H","N9103W","N821CT","N503EE","N731CY",
+    "N33KF","N521H","N65DA" ] 
 
 rules:
   # this presence of this rule will have a side-effect of triggering the API 
