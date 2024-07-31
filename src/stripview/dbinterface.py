@@ -80,7 +80,10 @@ class DbInterface:
                     pilot_id = db_obj['lead pilot']
                     pilot_obj = PILOT_LOOKUP_DB_CALL(pilot_id)
                     if pilot_obj:
-                        pilot_label = pilot_obj.get('Name')
+                        if test_dict(pilot_obj, 'Playa name'):
+                            pilot_label = pilot_obj.get('Playa name')
+                        else:
+                            pilot_label = pilot_obj.get('Name')
                         if pilot_label:
                             pilot_label = pilot_label[0:7]
                         else:
