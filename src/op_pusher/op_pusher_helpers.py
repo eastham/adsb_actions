@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
 LOGGER = Logger()
 
-op_pusher_helpers_gauge = Gauge('op_pusher_helpers', 'op_pusher_helpers', [ 'message' ])
+Stats.register_prom_callbacks()
 
 def landing_cb(flight):
     logger.info("Landing detected! %s", flight.flight_id)

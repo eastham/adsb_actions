@@ -41,7 +41,7 @@ def run():
     else:
         with open(args.testdata, 'rt', encoding="utf-8") as myfile:
             json_data = myfile.read()
-        adsb_actions = AdsbActions(yaml_file=args.rules)
+        adsb_actions = AdsbActions(yaml_file=args.rules, mport=args.mport)
 
     op_pusher_helpers.register_callbacks(adsb_actions)
 
