@@ -26,6 +26,7 @@ class Logger:
     logging.basicConfig (
         level=log_level,
         format='%(asctime)s %(levelname)s adsb_actions %(module)s:%(lineno)d: %(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S',
         handlers=[
             logging.StreamHandler(),
             logging.handlers.SysLogHandler()
