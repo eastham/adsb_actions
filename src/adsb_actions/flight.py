@@ -70,7 +70,7 @@ class Flight:
         # format aircraft lastloc time like 2024-07-29-22:08
         timestamp = datetime.datetime.fromtimestamp(
             self.lastloc.now, datetime.timezone.utc).strftime("%Y-%m-%d-%H:%M")
-        return f"https://globe.airplanes.live/?replay={timestamp}?lat={self.lastloc.lat}&lon={self.lastloc.lon}&zoom=10"
+        return f"https://globe.airplanes.live/?replay={timestamp}&lat={self.lastloc.lat}&lon={self.lastloc.lon}&zoom=10"
 
     def lock(self):
         self.threadlock.acquire()
