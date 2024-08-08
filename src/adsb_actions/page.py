@@ -95,10 +95,20 @@ def send_one_page(recipient: str, msg: str):
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: page.py <recipient> <message ...>")
+        print("Usage: page.py <recipients-comma-separated> <message ...>")
         print("Example: page.py deputy The network is down!")
         sys.exit(1)
 
-    ret = send_one_page(sys.argv[1], " ".join(sys.argv[2:]))
+    retval = 0
+    for recip in sys.argv[1].split(','):
+        if recip not in CONFIG.private_vars['page_recipients']:
+            print(f"Recipient {recip} not found in config")
+        else:
+            success = send_one_page(recip, " ".join(sys.argv[2:]))
+            if success:
+                print(f"Sent page to {recip}")
+            else:
+                print(f"Failed to send page to {recip}")
+            retval += not success
 
-    sys.exit(0 if ret else 1)
+    sys.exit(1 if retval else 0)
