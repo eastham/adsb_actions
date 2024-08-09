@@ -16,6 +16,7 @@
 
 import logging
 import logging.handlers
+import socket
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +24,10 @@ log_level = logging.INFO
 
 class Logger:
   def __init__(self):
+    hostname = socket.gethostname()
     logging.basicConfig (
         level=log_level,
-        format='%(asctime)s %(levelname)s adsb_actions %(module)s:%(lineno)d: %(message)s',
-        datefmt='%Y-%m-%dT%H:%M:%S',
+        format="%(asctime)s {} %(levelname)s adsb_actions %(module)s:%(lineno)d: %(message)s".format(socket.gethostname()),
         handlers=[
             logging.StreamHandler(),
             logging.handlers.SysLogHandler()
