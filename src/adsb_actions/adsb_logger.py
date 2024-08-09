@@ -27,7 +27,7 @@ class Logger:
     hostname = socket.gethostname()
     logging.basicConfig (
         level=log_level,
-        format="%(asctime)s {} %(levelname)s adsb_actions %(module)s:%(lineno)d: %(message)s".format(socket.gethostname()),
+        format="{} %(levelname)s adsb_actions %(module)s:%(lineno)d: %(message)s".format(socket.gethostname()),
         handlers=[
             logging.StreamHandler(),
             logging.handlers.SysLogHandler()
