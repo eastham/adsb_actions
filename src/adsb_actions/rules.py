@@ -54,7 +54,8 @@ class Rules:
 
     def conditions_valid(self, conditions: dict):
         """Check for invalid or unknown conditions, return True if valid."""
-        VALID_CONDITIONS = ['proximity', 'aircraft_list', 'min_alt', 'max_alt',
+        VALID_CONDITIONS = ['proximity', 'aircraft_list', 'exclude_aircraft_list', 
+                            'min_alt', 'max_alt',
                             'transition_regions', 'regions', 'latlongring',
                             'cooldown', 'rule_cooldown', 'has_attr', 'min_time',
                             'max_time']
@@ -94,6 +95,18 @@ class Rules:
             result = flight.flight_id in ac_list
             if not result:
                 return False
+
+        if 'exclude_aircraft_list' in conditions:
+            condition_value = conditions['exclude_aircraft_list']
+            try:
+                ac_list = self.yaml_data['aircraft_lists'][condition_value]
+            except KeyError:
+                logger.critical("Aircraft list not found: %s", condition_value)
+                return False
+            result = flight.flight_id not in ac_list
+            if not result:
+                return False
+
 
         if 'min_alt' in conditions:
             condition_value = conditions['min_alt']
