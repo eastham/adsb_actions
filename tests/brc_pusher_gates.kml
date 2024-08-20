@@ -3,36 +3,6 @@
 <Document>
 	<name>88nvnewgates5.kml</name>
 	<open>1</open>
-	<StyleMap id="msn_ylw-pushpin260">
-		<Pair>
-			<key>normal</key>
-			<styleUrl>#sn_ylw-pushpin500</styleUrl>
-		</Pair>
-		<Pair>
-			<key>highlight</key>
-			<styleUrl>#sh_ylw-pushpin2110</styleUrl>
-		</Pair>
-	</StyleMap>
-	<StyleMap id="msn_ylw-pushpin261">
-		<Pair>
-			<key>normal</key>
-			<styleUrl>#sn_ylw-pushpin51</styleUrl>
-		</Pair>
-		<Pair>
-			<key>highlight</key>
-			<styleUrl>#sh_ylw-pushpin21110</styleUrl>
-		</Pair>
-	</StyleMap>
-	<StyleMap id="msn_ylw-pushpin2611">
-		<Pair>
-			<key>normal</key>
-			<styleUrl>#sn_ylw-pushpin5</styleUrl>
-		</Pair>
-		<Pair>
-			<key>highlight</key>
-			<styleUrl>#sh_ylw-pushpin2111</styleUrl>
-		</Pair>
-	</StyleMap>
 	<StyleMap id="msn_ylw-pushpin2610">
 		<Pair>
 			<key>normal</key>
@@ -46,86 +16,6 @@
 	<Style id="sh_ylw-pushpin211">
 		<IconStyle>
 			<scale>1.3</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>7d0880fd</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sh_ylw-pushpin2110">
-		<IconStyle>
-			<scale>1.3</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>7d0880fd</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sh_ylw-pushpin2111">
-		<IconStyle>
-			<scale>1.3</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>7d0880fd</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sh_ylw-pushpin21110">
-		<IconStyle>
-			<scale>1.3</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>7d0880fd</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sn_ylw-pushpin5">
-		<IconStyle>
-			<scale>1.1</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>7d0880fd</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sn_ylw-pushpin51">
-		<IconStyle>
-			<scale>1.1</scale>
 			<Icon>
 				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
 			</Icon>
@@ -155,35 +45,18 @@
 			<color>7d0880fd</color>
 		</PolyStyle>
 	</Style>
-	<Style id="sn_ylw-pushpin500">
-		<IconStyle>
-			<scale>1.1</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>7d0880fd</color>
-		</PolyStyle>
-	</Style>
 	<Folder>
 		<name>88nvnewgates4</name>
 		<open>1</open>
 		<Placemark>
 			<name>Generic Gate Ground: 0-4100 0-360</name>
-			<visibility>0</visibility>
 			<styleUrl>#msn_ylw-pushpin2610</styleUrl>
 			<Polygon>
 				<tessellate>1</tessellate>
 				<outerBoundaryIs>
 					<LinearRing>
 						<coordinates>
-							-119.208357463522,40.75919799192851,0 -119.2028779297897,40.75919543328945,0 -119.187149599314,40.76510792680396,0 -119.1928270827051,40.76693288297578,0 -119.1988091507649,40.76700931054881,0 -119.2079758690604,40.76406423492918,0 -119.2143855315842,40.76893324673301,0 -119.2394111296864,40.75997794106431,0 -119.2364904423808,40.75329773527417,0 -119.2313023198054,40.75202127682525,0 -119.208357463522,40.75919799192851,0 
+							-119.208357463522,40.75919799192851,0 -119.2028779297897,40.75919543328945,0 -119.1825555292652,40.76606762648092,0 -119.1816418987861,40.76938369794659,0 -119.1760906811831,40.77602012067567,0 -119.1826819448194,40.80300038279391,0 -119.2164369358064,40.80737373720513,0 -119.2339734742428,40.78266794732886,0 -119.211092951648,40.7662856753429,0 -119.2394111296864,40.75997794106431,0 -119.2364904423808,40.75329773527417,0 -119.2313023198054,40.75202127682525,0 -119.208357463522,40.75919799192851,0 
 						</coordinates>
 					</LinearRing>
 				</outerBoundaryIs>
@@ -192,7 +65,7 @@
 		<Placemark>
 			<name>Medevac Gate Ground: 0-4100 0-360</name>
 			<visibility>0</visibility>
-			<styleUrl>#msn_ylw-pushpin260</styleUrl>
+			<styleUrl>#msn_ylw-pushpin2610</styleUrl>
 			<Polygon>
 				<tessellate>1</tessellate>
 				<outerBoundaryIs>
@@ -207,7 +80,7 @@
 		<Placemark>
 			<name>Generic Gate Air: 0-5000 0-360</name>
 			<visibility>0</visibility>
-			<styleUrl>#msn_ylw-pushpin2611</styleUrl>
+			<styleUrl>#msn_ylw-pushpin2610</styleUrl>
 			<Polygon>
 				<tessellate>1</tessellate>
 				<outerBoundaryIs>
@@ -221,7 +94,8 @@
 		</Placemark>
 		<Placemark>
 			<name>Vicinity: 0-10000 0-360</name>
-			<styleUrl>#msn_ylw-pushpin261</styleUrl>
+			<visibility>0</visibility>
+			<styleUrl>#msn_ylw-pushpin2610</styleUrl>
 			<Polygon>
 				<tessellate>1</tessellate>
 				<outerBoundaryIs>
