@@ -13,6 +13,7 @@ from adsb_actions.adsbactions import AdsbActions
 logger = logging.getLogger(__name__)
 # logger.level = logging.DEBUG
 LOGGER = Logger()
+EXCLUDE_SUBSTRS = ["N10C", "N10D"]  # XXX HACK
 
 os.environ['KIVY_LOG_MODE'] = 'PYTHON'  # inhibit Kivy's custom log format
 import kivy
@@ -69,9 +70,19 @@ class ControllerApp(MDApp):
             if i >= self.MAX_SCROLLVIEWS - 1:
                 return
 
+    def check_exclusions(self, flight):
+        for substr in EXCLUDE_SUBSTRS:
+            if substr in flight.flight_id:
+                logger.debug("Excluded flight %s", flight.flight_id)
+                return True
+        return False
+
     @mainthread
     def update_strip(self, flight):
         """ Called on bbox change. """
+        if self.check_exclusions(flight):
+            return
+
         new_scrollview_index = flight.inside_bboxes_indices[0]
         # maybe have a redundant indside_bboxes_indexes?
         id = flight.flight_id
@@ -107,6 +118,9 @@ class ControllerApp(MDApp):
 
     @mainthread
     def remove_strip(self, flight):
+        if self.check_exclusions(flight):
+            return
+
         try:
             strip = self.strips[flight.flight_id]
         except KeyError:
@@ -119,6 +133,10 @@ class ControllerApp(MDApp):
     @mainthread
     def annotate_strip(self, flight, flight2):
         """Change the color and text of the strip for extra attention"""
+
+        if self.check_exclusions(flight):
+            return
+
         logger.debug("annotate strip %s", flight.flight_id)
         id = flight.flight_id
         try:

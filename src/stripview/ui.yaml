@@ -3,15 +3,11 @@
       - ../../tests/brc_large_regions.kml 
       - ../../tests/brc_small_regions.kml
 
-  aircraft_lists:
-    hide_aircraft: [ 'N10CG' ]
-
   rules:
     # callback to update strip for aircraft inside the covered regions,
     # for example to show a change in altitude.
     ui_update:
       conditions:
-        exclude_aircraft_list: hide_aircraft
         regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
       actions:
         callback: aircraft_update_cb
@@ -19,7 +15,6 @@
     # callback to hide strip for aircraft that left the covered regions
     ui_remove:
       conditions:
-        exclude_aircraft_list: hide_aircraft
         regions: []  # not in any KML-defined region
       actions:
         callback: aircraft_remove_cb
@@ -27,8 +22,7 @@
     # callback to hide strip for aircraft that is expired by the system
     # due to inactivity.
     ui_expire:
-      conditions:
-        exclude_aircraft_list: hide_aircraft
+      conditions: {} # always run for each aircraft update
       actions:
         expire_callback: aircraft_remove_cb
 
