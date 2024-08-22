@@ -246,6 +246,7 @@ class TCPConnection:
             if self.sock: self.sock.close()     # reconnect case
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.connect((self.host, self.port))
+            self.sock.settimeout(30)
             print('Successful Connection')
         except Exception as e:
             print('Connection Failed: '+str(e))
