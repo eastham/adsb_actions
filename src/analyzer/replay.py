@@ -6,8 +6,8 @@ running in realtime (which is unfortunately different from the disk
 format).
 
 Example Usage:
-Socket output mode: replay.py --port 6666 --utc_convert=-7 --speed_x=.01 [file]
-String output mode: replay.py --utc_convert=-7 --speed_x=.01 [file]
+Socket output mode: replay.py --port 6666 --utc_convert=-7 --speed_x=10 [file]
+String output mode: replay.py --utc_convert=-7 [file]
 json API:    
     allpoints = read_data(directory)
     allpoints_iterable = yield_json_data(allpoints)
@@ -112,8 +112,8 @@ def main(directory : str, port: int,
 
     if sock:
         print("Waiting for first network connection...")
-    while not sock.try_accept():
-        pass
+        while not sock.try_accept():
+            pass
     send_ctr = 0
 
     # Iterate through the points in time order.  One second at a time,
@@ -194,7 +194,7 @@ if __name__ == "__main__":
                         help='Network port.  If not specified, prints to stdout.')
     parser.add_argument('--utc_convert', type=int, default=0,
                         help='Time conversion from UTC to add in hours, positive or negative')
-    parser.add_argument('--speed_x', type=int, default=100,
+    parser.add_argument('--speed_x', type=int,
                         help='Playback speed multiplier. 1-3000 or so, or omit for full speed.')
     parser.add_argument('directory', type=str, help='Directory to scan')
 
