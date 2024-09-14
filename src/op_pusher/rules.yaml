@@ -6,6 +6,8 @@
     takeoff:
       conditions:
         transition_regions: [ "Generic Gate Ground", "Generic Gate Air" ]
+        exclude_aircraft_substrs: ["N10C", "N10D"]  # ground vehicles
+
       actions:
         print: True
         callback: "takeoff"
@@ -15,6 +17,8 @@
     takeoff_popup:
       conditions:
         transition_regions: [ ~, "Generic Gate Air" ]
+        exclude_aircraft_substrs: ["N10C", "N10D"]  # ground vehicles
+
       actions:
         print: True
         callback: "popup_takeoff"
@@ -23,6 +27,8 @@
     landing:
       conditions:
         transition_regions: [ "Generic Gate Air", "Generic Gate Ground" ]
+        exclude_aircraft_substrs: ["N10C", "N10D"]  # ground vehicles
+
       actions:
         print: True
         callback: "landing"
@@ -34,5 +40,7 @@
         max_alt: 10000
         regions: [ "Generic Gate Air", "Vicinity" ]
         proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
+        exclude_aircraft_substrs: ["N10C", "N10D"]  # ground vehicles
+
       actions:
         callback: abe_update_cb

@@ -8,6 +8,7 @@
     # for example to show a change in altitude.
     ui_update:
       conditions:
+        exclude_aircraft_substrs: ["N10C", "N10D"]  # ground vehicles
         regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
       actions:
         callback: aircraft_update_cb
@@ -15,6 +16,7 @@
     # callback to hide strip for aircraft that left the covered regions
     ui_remove:
       conditions:
+        exclude_aircraft_substrs: ["N10C", "N10D"]
         regions: []  # not in any KML-defined region
       actions:
         callback: aircraft_remove_cb
@@ -22,13 +24,15 @@
     # callback to hide strip for aircraft that is expired by the system
     # due to inactivity.
     ui_expire:
-      conditions: {} # always run for each aircraft update
+      conditions: 
+        exclude_aircraft_substrs: ["N10C", "N10D"]
       actions:
         expire_callback: aircraft_remove_cb
 
     # callback for aircraft that are in close proximity of one another
     prox:
       conditions:
+        exclude_aircraft_substrs: ["N10C", "N10D"]
         min_alt: 4000
         max_alt: 10000
         regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
