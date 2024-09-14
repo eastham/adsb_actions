@@ -7,12 +7,12 @@
 
         {"name":"Python: Current File","type":"python","request":"launch","program":"${file}","console":"integratedTerminal","justMyCode":true},
         {
-            "name": "Harpers Stripview UI demo",
-            "type": "debugpy",
+            "name": "Stripview UI live from readsb",
+            "type": "python",
             "request": "launch",
             "program": "controller.py",
             "cwd": "${workspaceFolder}/src/stripview",
-            "args": " -- --ipaddr rpi4 --port 30006 --rules nberk_ui.yaml ../../tests/test_north_berkeley.kml",
+            "args": " -- --ipaddr boxone --port 30006 --rules ui.yaml ../../tests/brc_large_regions.kml",
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -53,16 +53,6 @@
             "cwd": "${workspaceFolder}",
             "program": "src/op_pusher/op_pusher.py",
             "args": "--ipaddr 127.0.0.1 --port 30006 --rules src/op_pusher/rules.yaml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Harpers Push ops to appsheet",
-            "type": "debugpy",
-            "request": "launch",
-            "cwd": "${workspaceFolder}",
-            "program": "src/op_pusher/op_pusher.py",
-            "args": "--ipaddr rpi4 --port 30006 --rules ./src/op_pusher/nberk_rules.yaml",
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -108,7 +98,7 @@
             "justMyCode": true
         },
         {
-            "name": "Airport monitor2",
+            "name": "Airport monitor 2",
             "type": "python",
             "request": "launch",
             "cwd": "${workspaceFolder}/src/airport_monitor2",
@@ -123,7 +113,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}/src/analyzer",
             "program": "replay_to_adsb.py",
-            "args": "--inject_addr 192.168.87.56:30001 ../../tests/1hr.json --speed_x 1",
+            "args": "--inject_addr boxone:30001 ../../tests/20minutes.json --speed_x 3",
             "console": "integratedTerminal",
             "justMyCode": true
         },
