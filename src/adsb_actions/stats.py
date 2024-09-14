@@ -34,7 +34,8 @@ class Stats:
 
     @classmethod
     def register_prom_callbacks(cl):
-        """Register a gauge callback for every int member of this class."""
+        """Register a gauge callback for every int member of this class.  This
+        will pick up all the stats above automatically."""
 
         def make_callback(attr_name):
             """Closure to capture the current attribute name in the for loop."""
