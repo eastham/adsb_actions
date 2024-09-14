@@ -12,7 +12,9 @@
         # when should we trigger this rule?  AND expression -- all conditions must be met.
         min_alt: 4000        # feet MSL, must be >= to match
         max_alt: 10000       # feel MSL, must be <= to match
-        aircraft_list: alert_aircraft  # use aircraft_list above
+        aircraft_list: alert_aircraft  # match aircraft_list above
+        exclude_aircraft_list: alert_aircraft # exclude aircraft_list above
+        exclude_aircraft_substrs: ["N10C", "N10D"]  # exclude aircraft matching any of these strings
         regions: [ "23 upwind", "Pattern" ]  # will match if inside any of these KML polygons
         regions: []          # not in any KML-defined region
         transition_regions: [ "from", "to" ] # moved from first region to second

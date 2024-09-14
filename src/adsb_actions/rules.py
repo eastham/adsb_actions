@@ -54,7 +54,8 @@ class Rules:
 
     def conditions_valid(self, conditions: dict):
         """Check for invalid or unknown conditions, return True if valid."""
-        VALID_CONDITIONS = ['proximity', 'aircraft_list', 'exclude_aircraft_list', 
+        VALID_CONDITIONS = ['proximity', 'aircraft_list', 'exclude_aircraft_list',
+                            'exclude_aircraft_substrs',
                             'min_alt', 'max_alt',
                             'transition_regions', 'regions', 'latlongring',
                             'cooldown', 'rule_cooldown', 'has_attr', 'min_time',
@@ -73,7 +74,9 @@ class Rules:
     def conditions_match(self, flight: Flight, conditions: dict,
                          rule_name: str) -> bool:
         """Determine if the given rule conditions match for the given 
-        flight.  Put expensive-to-evaluate conditions toward the bottom,
+        flight.  Returns true on match for the specific rule given, false 
+        otherwise.
+        Note: Put expensive-to-evaluate conditions toward the bottom,
         for best performance."""
 
         logger.debug("condition_match checking rules: %s", str(conditions))
@@ -107,6 +110,12 @@ class Rules:
             if not result:
                 return False
 
+        if 'exclude_aircraft_substrs' in conditions:
+            condition_value = conditions['exclude_aircraft_substrs']
+            for value in condition_value:
+                result = value in flight.flight_id
+                if result:
+                    return False
 
         if 'min_alt' in conditions:
             condition_value = conditions['min_alt']
