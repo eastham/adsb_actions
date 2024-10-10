@@ -1,4 +1,4 @@
-"""Iterate through all ADSBexchange-disk-format data found under the given path
+"""Iterate through all readsb-disk-format data found under the given path
 and report on how many positions were seen per day.
 
 Usage: python3 data_verifier.py [--by_hour] [--print_every PRINT_EVERY] directory
@@ -9,9 +9,9 @@ options:
                         Print out every nth entry
 """
 
-import replay
 import argparse
 import datetime
+import replay
 
 def get_adsbx_iterable(directory: str):
     allpoints = replay.read_data(directory)
