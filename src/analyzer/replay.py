@@ -68,7 +68,7 @@ def read_data(directory):
     allpoints = parse_files(files)
     return allpoints
 
-def yield_json_data(allpoints):
+def yield_json_data(allpoints, insert_dummy_entries = True):
 
     first_ts = min(allpoints.keys())
     last_ts = max(allpoints.keys())
@@ -86,7 +86,7 @@ def yield_json_data(allpoints):
         if not k in allpoints:
             # send an entry at least every 20 iterations to make it easy for the
             # client to account for the passage of time, do maintenance work, etc
-            if counter % 20 == 0:
+            if insert_dummy_entries and counter % 20 == 0:
                 EMPTY_MESSAGE['now'] = k
                 yield EMPTY_MESSAGE
         else:
