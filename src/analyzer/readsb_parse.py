@@ -1,3 +1,10 @@
+"""Support for translating readsb's disk files, from a difficult-to-
+read format to JSON that looks like this:
+
+{'now': 1725215956, 'alt_baro': '0', 'gscp': 1, 'lat': 40.763479, 
+'lon': -119.212334, 'track': 101.2, 'hex': 'ab86de', 'flight': 'N8417A', 
+'flightdict': None} 
+"""
 import pprint
 from datetime import datetime
 
@@ -12,7 +19,7 @@ def parse_readsb_json(input_dict: dict, parsed_output: dict, tp_callback = None)
         input_dict: input in readsb format
         parsed_output: dict by timestamp, each entry is a list of parsed json dicts
             Results are added to parsed_output which is mutated in place.
-        tp_callback: optional callback to fire with the data"""
+        tp_callback: optional callback to fire with the data for each point."""
 
     # A few details are at the aircraft level:
     icao_num = input_dict['icao']
@@ -36,7 +43,7 @@ def parse_readsb_json(input_dict: dict, parsed_output: dict, tp_callback = None)
 
         try:
             altint = int(alt)   # can be 'ground' etc
-        except Exception:
+        except Exception:      # pylint: disable=broad-except
             alt = "0"
 
         # Per-tracepoint timestamp is seconds past the per-file timestamp
@@ -53,11 +60,12 @@ def parse_readsb_json(input_dict: dict, parsed_output: dict, tp_callback = None)
             parsed_output[this_ts] = [newdict]
 
         if tp_callback:
-            tp_callback(icao_num, flight_str, lat, long, altint, timestr(this_ts))
+            tp_callback(icao_num, flight_str, lat, long, altint, 
+                        get_timestr(this_ts))
 
         point_ctr += 1
 
     # print(f"Parsed {point_ctr} points.")
 
-def timestr(ts):
+def get_timestr(ts):
     return (datetime.fromtimestamp(ts)).strftime('%H:%M:%S')
