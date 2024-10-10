@@ -13,7 +13,7 @@ import argparse
 import datetime
 import replay
 
-def get_adsbx_iterable(directory: str):
+def get_allpoints_iterable(directory: str):
     allpoints = replay.read_data(directory)
     allpoints_iterable = replay.yield_json_data(allpoints,
                                                 insert_dummy_entries=False)
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print("Loading all data files...")
-    adsbx_iterable = get_adsbx_iterable(args.directory)
+    allpoints_iterable = get_allpoints_iterable(args.directory)
 
     print("Parsing data...")
-    count_points(adsbx_iterable, args.by_hour, args.print_every)
+    count_points(allpoints_iterable, args.by_hour, args.print_every)
