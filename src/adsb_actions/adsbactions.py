@@ -32,7 +32,7 @@ from prometheus_client import start_http_server, Gauge
 from .adsb_logger import Logger
 
 logger = logging.getLogger(__name__)
-#logger.level = logging.DEBUG
+logger.level = logging.WARNING
 LOGGER = Logger()
 
 class AdsbActions:
@@ -117,7 +117,7 @@ class AdsbActions:
             # are seen.
             # If timely expiration/maintenance is needed, dummy events can be
             # injected.
-            time_for_forced_checkpoint = self.pedantic and last_read_return < 0
+            time_for_forced_checkpoint = self.pedantic
             time_for_checkpoint = not self.pedantic and last_read_return > 0 and \
                 last_read_time - self.flights.last_checkpoint >= CHECKPOINT_INTERVAL
 

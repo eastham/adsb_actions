@@ -13,7 +13,6 @@ LOGGER = Logger()
 Stats.register_prom_callbacks()
 
 def landing_cb(flight):
-
     logger.info("Landing detected! %s", flight.flight_id)
     if 'note' in flight.flags:
         logger.info("Local-flight landing detected! %s", flight.flight_id)

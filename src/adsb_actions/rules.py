@@ -248,8 +248,15 @@ class Rules:
                 Stats.callbacks_fired += 1
                 Stats.last_callback_flight = flight
                 if not action_value in self.callbacks:
-                    logger.error("No callback defined: %s, %s",
-                                 action_value, flight.flight_id)
+                    timestamp = datetime.datetime.fromtimestamp(
+                        flight.lastloc.now).strftime("%m/%d/%y %H:%M")
+                    other_flight_id = ""
+                    if cb_arg:
+                        other_flight_id = cb_arg.flight_id
+
+                    logger.error("No callback defined: %s, %s, %s, %s",
+                                 action_value, flight.flight_id, other_flight_id,
+                                 timestamp)
                     continue
 
                 logger.debug("Doing callback for %s", flight.flight_id)

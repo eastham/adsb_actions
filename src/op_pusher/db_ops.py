@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
 LOGGER = Logger()
 
-USE_APPSHEET = True
+USE_APPSHEET = True   # You can disable actual calls in appsheet_api.py
 TZ_CONVERT = 0  # -7  # UTC conversion for outgoing ops
 
 class Database:
@@ -82,12 +82,15 @@ def add_abe(flight1, flight2, latdist, altdist):
     flight1_internal_id = lookup_or_create_aircraft(flight1)
     flight2_internal_id = lookup_or_create_aircraft(flight2)
 
-    return DATABASE.add_abe_call(flight1_internal_id, flight2_internal_id,
-        latdist, altdist, flight1.lastloc.now, flight1.lastloc.lat, 
-        flight1.lastloc.lon)
+    if DATABASE.add_abe_call:
+        return DATABASE.add_abe_call(flight1_internal_id, flight2_internal_id,
+            latdist, altdist, flight1.lastloc.now, flight1.lastloc.lat, 
+            flight1.lastloc.lon)
+    return None
 
 def update_abe(flight1, flight2, latdist, altdist, create_time, id):
     flight1_internal_id = lookup_or_create_aircraft(flight1)
     flight2_internal_id = lookup_or_create_aircraft(flight2)
-    DATABASE.update_abe_call(flight1_internal_id, flight2_internal_id,
-                            latdist, altdist, create_time, id)
+    if DATABASE.update_abe_call:
+        DATABASE.update_abe_call(flight1_internal_id, flight2_internal_id,
+                                latdist, altdist, create_time, id)

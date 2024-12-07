@@ -35,7 +35,7 @@ REQUEST_BODY = {
 }
 
 # Testing flags/constants
-USE_FAKE_CALLS = False       # don't actually send anything to server
+USE_FAKE_CALLS = True        # don't actually send anything to server
 DELAYTEST = False            # add random delay for threading testing
 FAKE_KEY = "XXXfake keyXXX"  # fake db key to use if real db calls disabled
 DUMMY_AIRCRAFT = "N1911"     # aircraft to use for dummy ops

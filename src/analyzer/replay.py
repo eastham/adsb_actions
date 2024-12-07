@@ -8,13 +8,13 @@ format).
 Example Usage:
 Socket output mode: replay.py --port 6666 --utc_convert=-7 --speed_x=10 [file]
 String output mode: replay.py --utc_convert=-7 [file]
-json API:    
+JSON API:    
     allpoints = read_data(directory)
     allpoints_iterable = yield_json_data(allpoints)
 
 CAUTION: in socket mode, this silently drops data when run at high
 speed (>1000x), not sure why.  If you need that kind of speed,
-probably better to use the json API.
+probably better to use the JSON API.
 """
 
 import argparse
@@ -69,7 +69,6 @@ def read_data(directory):
     return allpoints
 
 def yield_json_data(allpoints, insert_dummy_entries = True):
-
     first_ts = min(allpoints.keys())
     last_ts = max(allpoints.keys())
     first_time = datetime.datetime.fromtimestamp(
@@ -84,9 +83,9 @@ def yield_json_data(allpoints, insert_dummy_entries = True):
     counter = 0
     for k in range(first_ts, last_ts):
         if not k in allpoints:
-            # send an entry at least every 20 iterations to make it easy for the
-            # client to account for the passage of time, do maintenance work, etc
             if insert_dummy_entries and counter % 20 == 0:
+                # Send an entry at least every 20 iterations to make it easy for the
+                # client to account for the passage of time, do maintenance work, etc
                 EMPTY_MESSAGE['now'] = k
                 yield EMPTY_MESSAGE
         else:
