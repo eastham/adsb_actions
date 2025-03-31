@@ -100,3 +100,34 @@ def big_prox_test(adsb_actions):
         rendered_flight_ctr += 1 if f.in_any_bbox() else 0
     assert rendered_flight_ctr == 4  # unexpired aircraft left
     assert abe_update_ctr == 28
+
+
+# Resampling test aircraft - they will cross each other's path in the middle
+# one aircraft varying in latitude only
+JSON_STRING_PLANE11_BEFORE = '{"now": 1661692168, "alt_baro": 4000, "gscp": 128, "lat": 39.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d2"}\n'
+JSON_STRING_PLANE11_AFTER = '{"now": 1661692188, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d2"}\n'
+# one aircraft varying in longitude only
+JSON_STRING_PLANE12_BEFORE = '{"now": 1661692168, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -118.2122323, "track": 203.4, "hex": "a061d3"}\n'
+JSON_STRING_PLANE12_AFTER = '{"now": 1661692188, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -120.2122323, "track": 203.4, "hex": "a061d3"}\n'
+
+def test_resampling_prox():
+    Stats.reset()
+    global abe_update_ctr
+    abe_update_ctr = 0
+
+    logging.basicConfig(format='%(levelname)s: %(message)s',
+                        level=logging.DEBUG)
+    logging.info('System started.')
+
+    yaml_data = yaml.safe_load(YAML_STRING)
+
+    adsb_actions = AdsbActions(yaml_data, resample=True)
+    adsb_actions.register_callback("abe_update_cb", abe_update_cb)
+
+    adsb_actions.loop(JSON_STRING_PLANE11_BEFORE)
+    adsb_actions.loop(JSON_STRING_PLANE11_AFTER)
+    adsb_actions.loop(JSON_STRING_PLANE12_BEFORE)
+    adsb_actions.loop(JSON_STRING_PLANE12_AFTER)
+
+    adsb_actions.do_prox_checks()
+    assert abe_update_ctr == 2  # one for each aircraft

@@ -26,6 +26,7 @@ from .flights import Flights
 from .bboxes import Bboxes
 from .stats import Stats
 from .location import Location
+from .resampler import Resampler
 
 from prometheus_client import start_http_server, Gauge
 
@@ -39,7 +40,8 @@ class AdsbActions:
     """Main API for the library."""
 
     def __init__(self, yaml_data=None, yaml_file=None, ip=None, port=None,
-                 mport=None, bboxes=None, expire_secs=180, pedantic=False):
+                 mport=None, bboxes=None, expire_secs=180, pedantic=False,
+                 resample=False):
         """Main API for the library.  You can provide network port info in the
         constructor here, or specify local data sources in the subsequent call to
         loop().  Either yaml_data or yaml_file must be specified.
@@ -56,6 +58,8 @@ class AdsbActions:
             pedantic: if True, enable strict behavior: checkpoints after each
                 observation, and all rule checks apply even if aircraft are 
                 not in known bounding boxes.
+            resample: if True, enable resampling to detect proximity events
+                between position updates.
         """
 
         assert yaml_data or yaml_file, "Must provide yaml or yaml_file"
@@ -71,12 +75,28 @@ class AdsbActions:
         self.exit_loop_flag = False      # set externally if we need to exit the main loop
         self.expire_secs = expire_secs
         self.pedantic = pedantic
+        self.enable_resample = resample
+
+        # Initialize location history for resampling
+        if resample:
+            self.resampler = Resampler()
 
         if ip and port:
             self.listen = self._setup_network(ip, port)
 
         if mport:
             start_http_server(mport)
+
+    def do_prox_checks(self) -> None:
+        """Perform resampling to detect proximity events between position updates.
+        
+        This method delegates to the LocationHistory class for resampling.
+        """
+        if not self.enable_resample:
+            logger.debug("Resampling is disabled")
+            return
+
+        self.resampler.do_prox_checks(self.rules, self.flights.bboxes)
 
     def loop(self, string_data = None, iterator_data = None, delay: float = 0.) -> None:
         """Process ADS-B json data in a loop on the previously-opened socket.
@@ -102,19 +122,24 @@ class AdsbActions:
             self.data_iterator = iterator_data
 
         last_read_time = 0
+        loop_ctr = 0
+
         while True:
+            loop_ctr += 1
             last_read_return = self._flight_update_read()
             if last_read_return > 0:
                 last_read_time = last_read_return
                 logger.debug("Main loop last_read_time: %s", last_read_time)
+                if loop_ctr % 1000 == 0:
+                    logger.info("Main loop last_read_time: %s", last_read_time)
 
             if not self.flights.last_checkpoint:
                 self.flights.last_checkpoint = last_read_time
 
             # Run a "Checkpoint".
-            # Here we do periodic maintenance tasks, and expensive operations.
-            # Note: this will of course not happen during gaps when no aircraft
-            # are seen.
+            # Here we do periodic maintenance tasks, and expensive operations,
+            # by default every 5 seconds.
+            # Note: this will not fire during gaps when no aircraft are seen.
             # If timely expiration/maintenance is needed, dummy events can be
             # injected.
             time_for_forced_checkpoint = self.pedantic
@@ -124,7 +149,7 @@ class AdsbActions:
             if (time_for_forced_checkpoint or time_for_checkpoint):
                 datestr = datetime.datetime.utcfromtimestamp(
                     last_read_time).strftime('%Y-%m-%d %H:%M:%S')
-                logger.info("%ds Checkpoint: %d ops, %d callbacks, last_read_time %d %s",
+                logger.debug("%ds Checkpoint: %d ops, %d callbacks, last_read_time %d %s",
                              CHECKPOINT_INTERVAL, Stats.json_readlines,
                              Stats.callbacks_fired, last_read_time, datestr)
 
@@ -169,8 +194,9 @@ class AdsbActions:
         except FileNotFoundError:
             logger.critical("File mentioned in yaml not found: %s", f)
             sys.exit(-1)
-        except:
-            pass
+        except Exception as e:
+            logger.critical("Other error in yaml: " + str(e))
+            sys.exit(-1)
         return bboxes_list
 
     def _setup_network(self, ipaddr : str, port : int,
@@ -228,6 +254,10 @@ class AdsbActions:
             # We got some valid data, process it. (points with no altitude
             # are ignored, they are likely to be dummy entries anyway)
             loc_update = Location.from_dict(jsondict)
+
+            if self.enable_resample:
+                self.resampler.add_location(loc_update)
+
             return self.flights.add_location(loc_update, self.rules)
 
         return 0
