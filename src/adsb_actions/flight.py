@@ -84,12 +84,13 @@ class Flight:
         return False
 
     def was_in_any_bbox(self):
-        assert self.prev_inside_bboxes_valid
+        if not self.prev_inside_bboxes_valid:
+            return False
         for bbox in self.prev_inside_bboxes:
             if bbox is not None:
                 return True
         return False
-    
+
     def is_in_bboxes(self, bb_list: list):
         """Is the flight in any of the bboxes specified in bb_list?
         If no boxes are specified on bb_list (None, [None], []), the flight 
@@ -177,8 +178,8 @@ class Flight:
         if self.inside_bboxes != self.prev_inside_bboxes:
             timestamp = datetime.datetime.fromtimestamp(
                 self.lastloc.now).strftime("%m/%d/%y %H:%M")
-            logger.debug("%s Bbox change for %s: was %s now %s", timestamp,
-                        self.flight_id, self.prev_inside_bboxes, self.inside_bboxes)
+            logger.debug("%s Bbox change for %s: was %s now %s %s", timestamp,
+                        self.flight_id, self.prev_inside_bboxes, self.inside_bboxes, loc.to_str())
 
     def get_bbox_at_level(self, level) -> str:
         """return the bbox name that we're in for the given kml file."""

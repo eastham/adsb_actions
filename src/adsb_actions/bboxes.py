@@ -49,6 +49,8 @@ class Bboxes:
         k.from_string(doc.encode('utf-8'))
         features = list(k.features())
         self.parse_placemarks(features)
+        if len(self.boxes) == 0:
+            logger.warning("No bboxes found")
         logger.info("Setup done for bboxes in %s", fn)
 
     def parse_placemarks(self, document):
