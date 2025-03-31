@@ -10,7 +10,7 @@ from .adsb_logger import Logger
 from .page import send_page, send_slack
 
 logger = logging.getLogger(__name__)
-#logger.level = logging.DEBUG
+logger.level = logging.INFO
 LOGGER = Logger()
 
 class Rules:
@@ -90,7 +90,7 @@ class Rules:
         Note: Put expensive-to-evaluate conditions toward the bottom,
         for best performance."""
 
-        # logger.debug("condition_match checking rules: %s", str(conditions))
+        #logger.debug("condition_match checking rules: %s", str(conditions))
         Stats.condition_match_calls += 1
 
         # TODO the approach below prevents us from having multiple rules of

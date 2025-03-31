@@ -109,18 +109,40 @@ JSON_STRING_PLANE11_AFTER = '{"now": 1661692188, "alt_baro": 4000, "gscp": 128, 
 # one aircraft varying in longitude only
 JSON_STRING_PLANE12_BEFORE = '{"now": 1661692168, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -118.2122323, "track": 203.4, "hex": "a061d3"}\n'
 JSON_STRING_PLANE12_AFTER = '{"now": 1661692188, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -120.2122323, "track": 203.4, "hex": "a061d3"}\n'
+# one aircraft in the middle that never moves
+JSON_STRING_PLANE13_CENTRAL = '{"now": 1661692168, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d4"}\n'
+
 
 def test_resampling_prox():
     Stats.reset()
-    global abe_update_ctr
+    global abe_update_ctr, JSON_STRING_PLANE11_BEFORE
     abe_update_ctr = 0
 
     logging.basicConfig(format='%(levelname)s: %(message)s',
                         level=logging.DEBUG)
     logging.info('System started.')
 
+    logging.info("*** resampling test 1 ***")
     yaml_data = yaml.safe_load(YAML_STRING)
+    run_crossing_prox_test(yaml_data)
 
+    assert abe_update_ctr == 2  # one for each aircraft
+
+    logging.info("*** resampling test 2 ***")
+    # vary time offsets of the test aircraft so they don't intersect.
+    JSON_STRING_PLANE11_BEFORE = '{"now": 1661692167, "alt_baro": 4000, "gscp": 128, "lat": 39.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d2"}\n'
+    run_crossing_prox_test(yaml_data)
+    assert abe_update_ctr == 2  # no change
+
+    logging.info("*** resampling test 3 ***")
+    run_singlepoint_prox_test(yaml_data)
+    assert abe_update_ctr == 4
+
+    logging.info("*** resampling test 4 ***")
+    run_singlepoint_prox_test_with_expiry(yaml_data)
+    assert abe_update_ctr == 4  # no change
+
+def run_crossing_prox_test(yaml_data):
     adsb_actions = AdsbActions(yaml_data, resample=True)
     adsb_actions.register_callback("abe_update_cb", abe_update_cb)
 
@@ -130,4 +152,27 @@ def test_resampling_prox():
     adsb_actions.loop(JSON_STRING_PLANE12_AFTER)
 
     adsb_actions.do_prox_checks()
-    assert abe_update_ctr == 2  # one for each aircraft
+
+def run_singlepoint_prox_test(yaml_data):
+    # plane 13 in the middle with only one data point, plane 12 crosses
+    adsb_actions = AdsbActions(yaml_data, resample=True)
+    adsb_actions.register_callback("abe_update_cb", abe_update_cb)
+
+    adsb_actions.loop(JSON_STRING_PLANE12_BEFORE)
+    adsb_actions.loop(JSON_STRING_PLANE13_CENTRAL)
+    adsb_actions.loop(JSON_STRING_PLANE12_AFTER)
+
+    adsb_actions.do_prox_checks()
+
+def run_singlepoint_prox_test_with_expiry(yaml_data):
+    # same as above but the central plane should be expired before other one crosses
+    OLD_CENTRAL_PLANE = '{"now": 1661692008, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d4"}\n'
+
+    adsb_actions = AdsbActions(yaml_data, resample=True)
+    adsb_actions.register_callback("abe_update_cb", abe_update_cb)
+
+    adsb_actions.loop(JSON_STRING_PLANE12_BEFORE)
+    adsb_actions.loop(OLD_CENTRAL_PLANE)
+    adsb_actions.loop(JSON_STRING_PLANE12_AFTER)
+
+    adsb_actions.do_prox_checks()

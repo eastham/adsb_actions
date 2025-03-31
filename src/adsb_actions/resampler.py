@@ -111,6 +111,7 @@ class Resampler:
             if current_time in self.timehistory:
                 for loc in self.timehistory[current_time]:
                     flights.add_location(loc, rules)
+                    logger.debug("Adding location %s to flights", loc.to_str())
 
             # Process proximity rules
             rules.handle_proximity_conditions(flights, current_time)
