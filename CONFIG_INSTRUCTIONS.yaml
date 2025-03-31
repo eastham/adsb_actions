@@ -19,6 +19,7 @@
         regions: []          # not in any KML-defined region
         transition_regions: [ "from", "to" ] # moved from first region to second
         transition_regions: [ ~, "to" ] # appeared in the second region from nowhere
+        changed_regions: True # moved from one region to another
         latlongring: [20, 40.763537, -119.2122323] # nm, lat, long
         proximity: [400, .3] # alt separation in feet, lateral separation in nm
         cooldown: 1          # minutes to wait before matching again for this a/c

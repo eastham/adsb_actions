@@ -32,15 +32,25 @@ class Rules:
         self.rule_execution_log = RuleExecutionLog()
         self.callbacks : dict[str, Callable]= {}    # mapping from yaml name to fn
 
+        if self.get_rules() is {}:
+            logger.warning("No rules found in YAML")
+            return
+
         # YAML rules correctness checks
-        for rule in self.yaml_data['rules'].values():
+        for rule in self.get_rules().values():
             assert self.conditions_valid(rule['conditions']), "Invalid conditions"
             assert self.actions_valid(rule['actions']), "Invalid actions"
+
+    def get_rules(self) -> list:
+        if not 'rules' in self.yaml_data:
+            return {}
+        else:
+            return self.yaml_data['rules']
 
     def process_flight(self, flight: Flight) -> None:
         """Apply rules and actions to the current position of a given flight. """
 
-        rule_items = self.yaml_data['rules'].items()
+        rule_items = self.get_rules().items()
 
         for rule_name, rule_value in rule_items:
             logger.debug("Checking rules %s", rule_name)
@@ -57,7 +67,8 @@ class Rules:
         VALID_CONDITIONS = ['proximity', 'aircraft_list', 'exclude_aircraft_list',
                             'exclude_aircraft_substrs',
                             'min_alt', 'max_alt',
-                            'transition_regions', 'regions', 'latlongring',
+                            'transition_regions', 'changed_regions',
+                            'regions', 'latlongring',
                             'cooldown', 'rule_cooldown', 'has_attr', 'min_time',
                             'max_time']
 
@@ -79,7 +90,7 @@ class Rules:
         Note: Put expensive-to-evaluate conditions toward the bottom,
         for best performance."""
 
-        logger.debug("condition_match checking rules: %s", str(conditions))
+        # logger.debug("condition_match checking rules: %s", str(conditions))
         Stats.condition_match_calls += 1
 
         # TODO the approach below prevents us from having multiple rules of
@@ -134,6 +145,14 @@ class Rules:
             condition_value = conditions['transition_regions']
             result = (flight.was_in_bboxes([condition_value[0]]) and
                        flight.is_in_bboxes([condition_value[1]]))
+            if not result:
+                return False
+
+        if 'changed_regions' in conditions:
+            if condition_value == "strict":
+                if not flight.was_in_any_bbox() or not flight.in_any_bbox():
+                    return False
+            result = flight.prev_inside_bboxes != flight.inside_bboxes
             if not result:
                 return False
 
@@ -293,7 +312,7 @@ class Rules:
         needed for UI implementations at least.
         TODO: tests needed."""
 
-        for rule_name, rule_value in self.yaml_data['rules'].items():
+        for rule_name, rule_value in self.get_rules().items():
             actions = rule_value['actions']
 
             if ( "expire_callback" in actions and
@@ -305,7 +324,7 @@ class Rules:
     def get_rules_with_condition(self, condition_type) -> list:
         """Returns a list of name/rule tuples that have a condition of the given type."""
 
-        rules_list = self.yaml_data['rules']
+        rules_list = self.get_rules()
         ret = []
         for rule_name, rule_body in rules_list.items():
             if condition_type in rule_body['conditions']:
@@ -315,7 +334,7 @@ class Rules:
     def get_rules_with_action(self, action_type) -> list:
         """Returns a list of name/rule tuples that have an action of the given type."""
 
-        rules_list = self.yaml_data['rules']
+        rules_list = self.get_rules()
         ret = []
         for rule_name, rule_body in rules_list.items():
             if action_type in rule_body['actions']:
@@ -356,10 +375,14 @@ class Rules:
                     flight2 = flights.find_nearby_flight(flight1, altsep, latsep,
                                                          last_read_time)
                     if flight2:
-                        logger.debug("Proximity match: %s %s", flight1.flight_id,
-                                     flight2.flight_id)
-                        self.do_actions(flight1, rule_body['actions'], rule_name,
-                                        flight2)
+                        # Also check if flight2 matches the rule conditions
+                        # This ensures excluded aircraft in flight2 won't trigger the rule
+                        if self.conditions_match(flight2, rule_conditions, rule_name):
+                            # Prox match found
+                            logger.debug("Proximity match: %s %s", flight1.flight_id,
+                                        flight2.flight_id)
+                            self.do_actions(flight1, rule_body['actions'], rule_name,
+                                            flight2)
 
     def print_final_report(self):
         """Print a report of rule execution statistics, for any rule
