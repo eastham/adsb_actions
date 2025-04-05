@@ -7,13 +7,13 @@ import threading
 import time
 import datetime
 
-from op_pusher.db_ops import add_abe, update_abe
+from db_ops import add_abe, update_abe
 from adsb_actions.stats import Stats
-
+from adsb_actions.location import Location
 from adsb_actions.adsb_logger import Logger
 
 logger = logging.getLogger(__name__)
-#logger.level = adsb_logger.logging.DEBUG
+#logger.level = logging.DEBUG
 LOGGER = Logger()
 
 class ABE:
@@ -57,7 +57,9 @@ class ABE:
         return key
 
 def process_abe_launch(flight1, flight2, do_threading=True):
-    """Saw an ABE, start a thread to process (so as not to block the caller)"""
+    """Saw an ABE, start a thread to process (so as not to block the caller).
+    NOTE: if not using threading, implementor must call abe_gc() periodically,
+    best to do it with a rule_cooldown rule."""
     if do_threading:
         t = threading.Thread(target=process_abe, args=[flight1, flight2])
         t.start()
@@ -83,11 +85,12 @@ def process_abe(flight1, flight2):
     with ABE.current_abe_lock:
         key = abe.get_key()
         if key in ABE.current_abes:
-            logger.debug("ABE update " + key)
+            logger.debug("ABE update of key %s", key)
             ABE.current_abes[key].update(lateral_distance, alt_distance, now)
             Stats.abe_update += 1
         else:
-            logger.debug("ABE add at "+str(datetime.datetime.utcfromtimestamp(now))+
+            logger.debug("ABE add key "+ key +" at " +
+                         str(datetime.datetime.utcfromtimestamp(now)) +
                          ": " + flight1.to_str() + " " + flight2.to_str())
             ABE.current_abes[key] = abe
             Stats.abe_add += 1
@@ -96,30 +99,41 @@ def process_abe(flight1, flight2):
                                alt_distance)
 
 def gc_loop():
+    """Run in a separate thread to periodically check for ABE's that are
+    ready to be finalized."""
     while True:
         time.sleep(ABE.ABE_GC_LOOP_DELAY)
-        abe_gc()
+        abe_gc(time.time())
         if ABE.quit: return
 
-def abe_gc(ts = time.time()):
-    logger.debug("ABE_GC")
+def abe_gc(ts):
+    """Check if any ABEs are ready to be finalized (i.e. final stats recorded)"""
+
     with ABE.current_abe_lock:
         abe_list = list(ABE.current_abes.values())
 
     for abe in abe_list:
         logger.debug(f"ABE_GC {abe.get_key()} {ts} {abe.last_time}")
+        flight1 = abe.flight1
+        flight2 = abe.flight2
 
-        # NOTE: time.time() doesn't behave correctly here when replaying recorded data.
         if ts - abe.last_time > ABE.ABE_GC_TIME:
             # No updates to this ABE for a while, finalize to database and remove.
             logger.info("ABE final update: %s %s - minimum separation: %f nm %d MSL. Last seen: %s",
-                        abe.flight1.flight_id, abe.flight2.flight_id,
-                        abe.min_latdist, abe.min_altdist,  datetime.datetime.utcfromtimestamp(abe.last_time))
+                        flight1.flight_id, flight2.flight_id,
+                        abe.min_latdist, abe.min_altdist, 
+                        datetime.datetime.utcfromtimestamp(abe.last_time))
             Stats.abe_finalize += 1
 
-            update_abe(abe.flight1, abe.flight2,
-                abe.min_latdist, abe.min_altdist, abe.create_time, abe.id)
+            update_abe(flight1, flight2, abe.min_latdist, abe.min_altdist, 
+                       abe.create_time, abe.id)
             try:
                 del ABE.current_abes[abe.get_key()]
             except KeyError:
                 logger.error("Didn't find key in current_abes")
+
+        # print CSV record
+        meanloc = Location.meanloc(flight1.lastloc, flight2.lastloc)
+        print("%d,%f,%f,%f,%s,%s" %
+              (flight1.lastloc.now, meanloc.lat, meanloc.lon, meanloc.alt_baro,
+              flight1.flight_id.strip(), flight2.flight_id.strip()))

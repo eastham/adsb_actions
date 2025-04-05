@@ -73,3 +73,15 @@ class Location:
     def distfrom(self, lat, lon):
         """Return distance from other lat/long in nm"""
         return distance.distance((self.lat, self.lon), (lat, lon)).nm
+
+    @classmethod
+    def meanloc(cls, loc1, loc2):
+        """Return a location that is the simple mean of two locations."""
+        alt = int((loc1.alt_baro + loc2.alt_baro) / 2)
+        newloc = Location(
+            lat=(loc1.lat + loc2.lat) / 2,
+            lon=(loc1.lon + loc2.lon) / 2,
+            alt_baro=alt
+        )
+        print(f"meanloc {loc1.alt_baro} {loc2.alt_baro} -> {newloc.alt_baro}")
+        return newloc
