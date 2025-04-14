@@ -45,6 +45,7 @@ def aircraft_remove_cb(flight):
 
 def abe_update_cb(flight1, flight2):
     global abe_update_ctr
+    logging.info(f"got abe_update_cb {flight1.flight_id} {flight2.flight_id}")
     abe_update_ctr += 1
 
 JSON_STRING_PLANE1_ZEROALT = '{"now": 1661692178, "alt_baro": 0, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}\n'
@@ -151,7 +152,7 @@ def run_crossing_prox_test(yaml_data):
     adsb_actions.loop(JSON_STRING_PLANE12_BEFORE)
     adsb_actions.loop(JSON_STRING_PLANE12_AFTER)
 
-    adsb_actions.do_prox_checks()
+    adsb_actions.do_resampled_prox_checks(gc_callback=None)
 
 def run_singlepoint_prox_test(yaml_data):
     # plane 13 in the middle with only one data point, plane 12 crosses
@@ -162,7 +163,7 @@ def run_singlepoint_prox_test(yaml_data):
     adsb_actions.loop(JSON_STRING_PLANE13_CENTRAL)
     adsb_actions.loop(JSON_STRING_PLANE12_AFTER)
 
-    adsb_actions.do_prox_checks()
+    adsb_actions.do_resampled_prox_checks(gc_callback=None)
 
 def run_singlepoint_prox_test_with_expiry(yaml_data):
     # same as above but the central plane should be expired before other one crosses
@@ -175,4 +176,4 @@ def run_singlepoint_prox_test_with_expiry(yaml_data):
     adsb_actions.loop(OLD_CENTRAL_PLANE)
     adsb_actions.loop(JSON_STRING_PLANE12_AFTER)
 
-    adsb_actions.do_prox_checks()
+    adsb_actions.do_resampled_prox_checks(gc_callback=None)

@@ -341,7 +341,7 @@ class Rules:
                 ret.append((rule_name, rule_body))
         return ret
 
-    def handle_proximity_conditions(self, flights, last_read_time) -> None:
+    def handle_proximity_conditions(self, flights, last_read_time) -> list:
         """
         This is run periodically to check distance between all aircraft --
         to check for any matching proximity conditions.  
@@ -352,6 +352,8 @@ class Rules:
         """
 
         prox_rules_list = self.get_rules_with_condition("proximity")
+        found_prox_events = []
+
         if prox_rules_list == []:
             return
 
@@ -376,13 +378,16 @@ class Rules:
                                                          last_read_time)
                     if flight2:
                         # Also check if flight2 matches the rule conditions
-                        # This ensures excluded aircraft in flight2 won't trigger the rule
+                        # This ensures excluded aircraft in flight2 won't
+                        # trigger the rule.  XXX should exclude rule_cooldowns,
+                        # probably -- they will always fire on the 2nd check
                         if self.conditions_match(flight2, rule_conditions, rule_name):
-                            # Prox match found
                             logger.debug("Proximity match: %s %s", flight1.flight_id,
                                         flight2.flight_id)
                             self.do_actions(flight1, rule_body['actions'], rule_name,
                                             flight2)
+                            found_prox_events.append((flight1, flight2))
+        return found_prox_events
 
     def print_final_report(self):
         """Print a report of rule execution statistics, for any rule

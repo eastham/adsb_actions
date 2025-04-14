@@ -2,12 +2,13 @@
 These are pushed once upon first detection and again once
 expired, so that the minimum distance is logged."""
 
+import copy
 import logging
 import threading
 import time
 import datetime
 
-from db_ops import add_abe, update_abe
+from op_pusher.db_ops import add_abe, update_abe
 from adsb_actions.stats import Stats
 from adsb_actions.location import Location
 from adsb_actions.adsb_logger import Logger
@@ -30,26 +31,40 @@ class ABE:
     quit = False
 
     def __init__(self, flight1, flight2, latdist, altdist, create_time):
-        # keep these in a universal order to enforce lock ordering and consistent keys
+        # Keep flight1/flight2 in a universal order to enforce lock ordering 
+        # and consistent keys
         if flight1.flight_id > flight2.flight_id:
             self.flight2 = flight1
             self.flight1 = flight2
         else:
             self.flight1 = flight1
             self.flight2 = flight2
+
+        # Make a deep copy of the current location to remember the location 
+        # of the event
+        self.first_loc_1 = copy.deepcopy(flight1.lastloc)
+        self.first_loc_2 = copy.deepcopy(flight2.lastloc)
+
+        # Closest-approach distances.  Perhaps this is better represented
+        # with an absolute distance?
         self.latdist = self.min_latdist = latdist
         self.altdist = self.min_altdist = altdist
+
         self.create_time = self.last_time = create_time
         self.id = None
 
-    def update(self, latdist, altdist, last_time):
+    def update(self, latdist, altdist, last_time, flight1, flight2,
+               update_loc_at_closest_approach=True):
         self.latdist = latdist
         self.altdist = altdist
         self.last_time = last_time
-        # perhaps this is better done with an absolute distance?
+
         if latdist <= self.min_latdist or altdist <= self.min_altdist:
             self.min_latdist = latdist
             self.min_altdist = altdist
+            if update_loc_at_closest_approach:
+                self.first_loc_1 = copy.deepcopy(flight1.lastloc)
+                self.first_loc_2 = copy.deepcopy(flight2.lastloc)
 
     def get_key(self):
         key = "%s %s" % (self.flight1.flight_id.strip(),
@@ -86,7 +101,8 @@ def process_abe(flight1, flight2):
         key = abe.get_key()
         if key in ABE.current_abes:
             logger.debug("ABE update of key %s", key)
-            ABE.current_abes[key].update(lateral_distance, alt_distance, now)
+            ABE.current_abes[key].update(lateral_distance, alt_distance, now,
+                                         flight1, flight2)
             Stats.abe_update += 1
         else:
             logger.debug("ABE add key "+ key +" at " +
@@ -121,19 +137,20 @@ def abe_gc(ts):
             # No updates to this ABE for a while, finalize to database and remove.
             logger.info("ABE final update: %s %s - minimum separation: %f nm %d MSL. Last seen: %s",
                         flight1.flight_id, flight2.flight_id,
-                        abe.min_latdist, abe.min_altdist, 
+                        abe.min_latdist, abe.min_altdist,
                         datetime.datetime.utcfromtimestamp(abe.last_time))
             Stats.abe_finalize += 1
 
-            update_abe(flight1, flight2, abe.min_latdist, abe.min_altdist, 
+            # do database update
+            update_abe(flight1, flight2, abe.min_latdist, abe.min_altdist,
                        abe.create_time, abe.id)
             try:
                 del ABE.current_abes[abe.get_key()]
             except KeyError:
                 logger.error("Didn't find key in current_abes")
 
-        # print CSV record
-        meanloc = Location.meanloc(flight1.lastloc, flight2.lastloc)
-        print("%d,%f,%f,%f,%s,%s" %
-              (flight1.lastloc.now, meanloc.lat, meanloc.lon, meanloc.alt_baro,
-              flight1.flight_id.strip(), flight2.flight_id.strip()))
+            # print CSV record
+            meanloc = Location.meanloc(abe.first_loc_1, abe.first_loc_2)
+            logger.info("%d,%f,%f,%f,%s,%s",
+                flight1.lastloc.now, meanloc.lat, meanloc.lon, meanloc.alt_baro,
+                flight1.flight_id.strip(), flight2.flight_id.strip())

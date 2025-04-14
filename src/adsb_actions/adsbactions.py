@@ -87,16 +87,15 @@ class AdsbActions:
         if mport:
             start_http_server(mport)
 
-    def do_prox_checks(self) -> None:
-        """Perform resampling to detect proximity events between position updates.
-        
-        This method delegates to the LocationHistory class for resampling.
-        """
+    def do_resampled_prox_checks(self, gc_callback) -> list:
+        """Complete resampling to detect proximity events between position
+        updates."""
         if not self.enable_resample:
             logger.debug("Resampling is disabled")
-            return
+            return None
 
-        self.resampler.do_prox_checks(self.rules, self.flights.bboxes)
+        return self.resampler.do_prox_checks(self.rules, self.flights.bboxes,
+                                             gc_callback=gc_callback)
 
     def loop(self, string_data = None, iterator_data = None, delay: float = 0.) -> None:
         """Process ADS-B json data in a loop on the previously-opened socket.

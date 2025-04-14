@@ -4,14 +4,17 @@ at a fixed interval.
 """
 
 import logging
+import datetime
 from typing import Dict, List, Optional, Tuple
 from .location import Location
 from .adsb_logger import Logger
 from .flights import Flights
 
 logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
+#logger.level = logging.DEBUG
 LOGGER = Logger()
+
+EXPIRE_TIME = 60 # seconds before we expire a location report.
 
 class Resampler:
     """Stores / resamples locations, then can check for proximity events.
@@ -26,33 +29,36 @@ class Resampler:
         self.min_time: Optional[int] = None
         self.max_time: Optional[int] = None
 
-    def add_location(self, location: Location) -> None:
+    def add_location(self, location: Location, altlimit=12000) -> None:
         """Add a location to the history, and resample for this aircraft 
         backwards in time.  It does this by looking up the previous location
         for this aircraft, then interpolating between the two locations.
         
         Args:
             location: The location to add
+            altlimit: optimization -- ignore locations above this altitude
         """
         if not location.tail:
             return  # Skip locations without a tail number
 
         flight_id = location.tail
         now = location.now
+        if location.alt_baro > altlimit:
+            return
 
         # Add interpolated locations to the time history -- look for previous entries
         # from this tail number, and if found, fill in the gaps
         if flight_id in self.tailhistory:
             prev_locations = self.tailhistory[flight_id]
             if prev_locations:
-                last_location = prev_locations[-1]
-                if now - 1 > last_location.now + 1:
+                prev_location = prev_locations[-1]
+                if now - 1 > prev_location.now + 1:
                     # Fill in the gap between the last location and the new one
-                    for t in range(int(last_location.now) + 1, int(now) - 1):
+                    for t in range(int(prev_location.now) + 1, int(now)):
                         if t not in self.timehistory:
                             self.timehistory[t] = []
                         interp_location = interpolate_location(
-                            last_location, location, t)
+                            prev_location, location, t)
                         if interp_location:
                             self.timehistory[t].append(interp_location)
 
@@ -64,7 +70,6 @@ class Resampler:
         if now not in self.timehistory:
             self.timehistory[now] = []
         self.timehistory[now].append(location)
-        # XXX check that result is contiguous
 
         # Update min and max times
         if self.min_time is None or location.now < self.min_time:
@@ -73,7 +78,8 @@ class Resampler:
         if self.max_time is None or location.now > self.max_time:
             self.max_time = location.now
 
-    def do_prox_checks(self, rules, bboxes, sample_interval: int = 1) -> None:
+    def do_prox_checks(self, rules, bboxes, sample_interval: int = 1,
+                       gc_callback = None) -> None:
         """Inspect resampled history to detect proximity events.
         
         This method:
@@ -97,28 +103,41 @@ class Resampler:
             logger.error("No time history available for resampling")
             return
 
-        logger.debug("Analyzing resampled time range: %.1f to %.1f", self.min_time, 
-                     self.max_time)
+        logger.debug("Analyzing resampled time range: %.1f to %.1f",
+                     self.min_time, self.max_time)
         flights = Flights(bboxes)
+        found_prox_events = []
+        location_ctr = 0
 
         # Iterate through time range
         for current_time in range(int(self.min_time), int(self.max_time) + 1,
                                   sample_interval):
+            utc_time = datetime.datetime.fromtimestamp(current_time,
+                                                       datetime.UTC)
             if current_time % 1000 == 0:
-                logger.debug("Doing prox checks at time %d", current_time)
+                logger.info("Doing prox checks at time %s", utc_time)
 
             # Add locations from timehistory to flights
             if current_time in self.timehistory:
                 for loc in self.timehistory[current_time]:
                     flights.add_location(loc, rules)
-                    logger.debug("Adding location %s to flights", loc.to_str())
+                    logger.debug("Adding location %s to flights at %s",
+                                loc.to_str(), utc_time)
+                    location_ctr += 1
 
             # Process proximity rules
-            rules.handle_proximity_conditions(flights, current_time)
+            found = rules.handle_proximity_conditions(flights, current_time)
+            if found:
+                found_prox_events.append(found)
 
-            # clear out recently-unseen locations
-            flights.expire_old(rules, current_time, 30) # XXX sync up with other expiration times
+            # Clear out recently-unseen locations
+            flights.expire_old(rules, current_time, EXPIRE_TIME)
 
+            if gc_callback:
+                gc_callback(current_time)
+
+        print(f"Processed {location_ctr} resampled events.")
+        return found_prox_events
 
 def interpolate_location(loc1: Location, loc2: Location, timestamp: float) -> Optional[Location]:
     """Interpolate between two locations based on timestamp.
