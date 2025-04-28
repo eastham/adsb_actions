@@ -151,6 +151,9 @@ def abe_gc(ts):
 
             # print CSV record
             meanloc = Location.meanloc(abe.first_loc_1, abe.first_loc_2)
-            logger.info("%d,%f,%f,%f,%s,%s",
-                flight1.lastloc.now, meanloc.lat, meanloc.lon, meanloc.alt_baro,
-                flight1.flight_id.strip(), flight2.flight_id.strip())
+            logger.info("%d,%f,%f,%d,%s,%s,%d,%d,%f,%d",
+                flight1.lastloc.now, meanloc.lat, meanloc.lon,
+                meanloc.alt_baro,
+                flight1.flight_id.strip(), flight2.flight_id.strip(),
+                flight1.lastloc.gs, flight2.lastloc.gs,
+                abe.min_latdist, abe.min_altdist)

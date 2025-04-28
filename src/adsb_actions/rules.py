@@ -257,10 +257,10 @@ class Rules:
                     logger.error("Unknown webhook action type: %s", action_type)
 
             elif 'print' == action_name:
-                timestamp = datetime.datetime.fromtimestamp(
-                    flight.lastloc.now).strftime("%m/%d/%y %H:%M")
+                ts_utc = datetime.datetime.utcfromtimestamp(
+                    flight.lastloc.now).strftime('%m/%d/%y %H:%M')
                 print(
-                    f"{timestamp}: Rule {rule_name} matched for {flight.to_str()}",
+                    f"Print action: {ts_utc} {flight.to_str()}",
                     f"{flight.flags.get('note', '')}")
 
             elif 'callback' == action_name:

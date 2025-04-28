@@ -29,21 +29,22 @@ class Resampler:
         self.min_time: Optional[int] = None
         self.max_time: Optional[int] = None
 
-    def add_location(self, location: Location, altlimit=12000) -> None:
+    def add_location(self, location: Location, minalt=3000, maxalt=12000) -> None:
         """Add a location to the history, and resample for this aircraft 
         backwards in time.  It does this by looking up the previous location
         for this aircraft, then interpolating between the two locations.
         
         Args:
             location: The location to add
-            altlimit: optimization -- ignore locations above this altitude
+            minalt: don't resample below this altitude -- exclude ground contacts
+            maxalt: optimization -- ignore locations above this altitude
         """
         if not location.tail:
             return  # Skip locations without a tail number
 
         flight_id = location.tail
         now = location.now
-        if location.alt_baro > altlimit:
+        if not minalt <= location.alt_baro <= maxalt:
             return
 
         # Add interpolated locations to the time history -- look for previous entries
@@ -52,7 +53,8 @@ class Resampler:
             prev_locations = self.tailhistory[flight_id]
             if prev_locations:
                 prev_location = prev_locations[-1]
-                if now - 1 > prev_location.now + 1:
+
+                if prev_location.now + EXPIRE_TIME > now and now - 1 > prev_location.now + 1:
                     # Fill in the gap between the last location and the new one
                     for t in range(int(prev_location.now) + 1, int(now)):
                         if t not in self.timehistory:
@@ -71,10 +73,9 @@ class Resampler:
             self.timehistory[now] = []
         self.timehistory[now].append(location)
 
-        # Update min and max times
+        # Update global time ranges
         if self.min_time is None or location.now < self.min_time:
             self.min_time = location.now
-
         if self.max_time is None or location.now > self.max_time:
             self.max_time = location.now
 
@@ -93,6 +94,7 @@ class Resampler:
             rules: Rules object containing proximity rules
             bboxes: bboxes to limit prox checkes to, if any
             sample_interval: Time interval in seconds between samples
+            gc_callback: Optional callback for finalization or garbage collection
         """
 
         # Get all proximity rules
