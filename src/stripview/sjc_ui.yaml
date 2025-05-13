@@ -1,0 +1,36 @@
+  monitor_config:
+#    window_size: [970, 1200]   # larger display
+    window_size: [400, 340]
+    window_top: 0
+    window_left: 950
+    text_position: [20, -20]
+
+  config:
+    kmls:
+      - ../../tests/sjc.kml 
+      - ../../tests/sjc.kml
+ 
+  rules:
+    ui_update:
+      conditions:
+        regions: [ "SJC Takeoff 30", "SJC Landing 30", "PAO Pattern", "Other nearby" ]
+        rule_cooldown: .02  # mins
+        exclude_aircraft_substrs: ["N10C", "N10D"] 
+      actions:
+        callback: aircraft_update_cb
+
+    ui_update2:   # clears departed ac, but run less often to not spam the system
+      conditions:
+        regions: [ "Other nearby" ]
+        rule_cooldown: 1  # mins
+        exclude_aircraft_substrs: ["N10C", "N10D"] 
+      actions:
+        callback: aircraft_update_cb
+
+    # callback to hide strip for aircraft that is expired by the system
+    # due to inactivity.
+    ui_expire:
+      conditions: 
+          regions: [ "SJC Takeoff 30", "SJC Landing 30", "PAO Pattern", "Other nearby" ]
+      actions:
+        expire_callback: aircraft_expire_cb
