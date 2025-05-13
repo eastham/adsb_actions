@@ -135,10 +135,13 @@ def abe_gc(ts):
 
         if ts - abe.last_time > ABE.ABE_GC_TIME:
             # No updates to this ABE for a while, finalize to database and remove.
+            datestring = datetime.datetime.utcfromtimestamp(abe.last_time)
+            altdatestring = datestring.strftime("%Y-%m-%d-%H:%M")
+
             logger.info("ABE final update: %s %s - minimum separation: %f nm %d MSL. Last seen: %s",
                         flight1.flight_id, flight2.flight_id,
                         abe.min_latdist, abe.min_altdist,
-                        datetime.datetime.utcfromtimestamp(abe.last_time))
+                        datestring)
             Stats.abe_finalize += 1
 
             # do database update
@@ -151,9 +154,9 @@ def abe_gc(ts):
 
             # print CSV record
             meanloc = Location.meanloc(abe.first_loc_1, abe.first_loc_2)
-            logger.info("%d,%f,%f,%d,%s,%s,%d,%d,%f,%d",
-                flight1.lastloc.now, meanloc.lat, meanloc.lon,
-                meanloc.alt_baro,
+            logger.info(",%d,%s,%s,%f,%f,%d,%s,%s,%d,%d,%f,%d",
+                flight1.lastloc.now, datestring, altdatestring,
+                meanloc.lat, meanloc.lon, meanloc.alt_baro,
                 flight1.flight_id.strip(), flight2.flight_id.strip(),
                 flight1.lastloc.gs, flight2.lastloc.gs,
                 abe.min_latdist, abe.min_altdist)
