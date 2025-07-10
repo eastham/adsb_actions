@@ -8,7 +8,7 @@ import threading
 import time
 import datetime
 
-from op_pusher.db_ops import add_abe, update_abe
+from db_ops import add_abe, update_abe
 from adsb_actions.stats import Stats
 from adsb_actions.location import Location
 from adsb_actions.adsb_logger import Logger
