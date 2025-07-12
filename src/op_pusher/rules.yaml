@@ -2,11 +2,22 @@
     kmls:
       - tests/brc_pusher_gates.kml 
 
+  aircraft_lists:
+    ground_vehicles: [ "N10CE", "N10CF", "N10CG", "N10CH", "N10CJ", "N10CK", "N10CL", "N10CM", "N10CN", "N10CP" ]
+    banned_aircraft: [ "NXXXX" ]
   rules:
+    print:
+      conditions:
+        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
+        exclude_aircraft_list: ground_vehicles 
+      actions:
+        print: True
+
     takeoff:
       conditions:
         transition_regions: [ "Generic Gate Ground", "Generic Gate Air" ]
-        exclude_aircraft_substrs: ["N10C", "N10D"]  # ground vehicles
+        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
+        exclude_aircraft_list: ground_vehicles 
 
       actions:
         print: True
@@ -17,8 +28,8 @@
     takeoff_popup:
       conditions:
         transition_regions: [ ~, "Generic Gate Air" ]
-        exclude_aircraft_substrs: ["N10C", "N10D"]  # ground vehicles
-
+        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
+        exclude_aircraft_list: ground_vehicles 
       actions:
         print: True
         callback: "popup_takeoff"
@@ -27,8 +38,8 @@
     landing:
       conditions:
         transition_regions: [ "Generic Gate Air", "Generic Gate Ground" ]
-        exclude_aircraft_substrs: ["N10C", "N10D"]  # ground vehicles
-
+        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
+        exclude_aircraft_list: ground_vehicles 
       actions:
         print: True
         callback: "landing"
@@ -40,7 +51,40 @@
         max_alt: 10000
         regions: [ "Generic Gate Air", "Vicinity" ]
         proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
-        exclude_aircraft_substrs: ["N10C", "N10D"]  # ground vehicles
-
+        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
+        exclude_aircraft_list: ground_vehicles 
       actions:
         callback: abe_update_cb
+
+
+    # This rule will trigger a slack message when a banned aircraft is seen.
+    banned_aircraft_seen_tcp_slack:
+      conditions:
+        aircraft_list: banned_aircraft  # use aircraft_list above
+        cooldown: 30  # minutes to wait before matching a second time for this a/c
+
+      actions:
+        webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
+        print: "banned aircraft seen"
+
+    # somewhat repeated rule since YAML doesn't support duplicate keys, this time
+    # send a page.
+    banned_aircraft_seen_tcp_page:
+      conditions:
+        aircraft_list: banned_aircraft  # use aircraft_list above
+        cooldown: 30  # minutes to wait before matching a second time for this a/c
+
+      actions:
+        webhook: ['page', 'deputy'] # send a message to a pager
+        print: "banned aircraft seen page"
+  
+    #low_flying_aircraft:
+    #  conditions:
+    #    latlongring: [15, 40.786969, -119.204101]
+    #    cooldown: 30
+    #    max_alt: 8000
+    #    exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
+    #    exclude_aircraft_list: ground_vehicles 
+    #  actions:
+    #    webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
+    #    print: "low flying"
