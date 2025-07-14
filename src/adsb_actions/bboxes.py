@@ -47,7 +47,12 @@ class Bboxes:
             doc = myfile.read()
         k = kml.KML()
         k.from_string(doc.encode('utf-8'))
-        features = list(k.features())
+        try:
+            features = list(k.features())
+        except Exception as e:
+            logger.error("Error parsing KML file %s: %s", fn, str(e))
+            raise ValueError("KML parse error: " + str(e))
+
         self.parse_placemarks(features)
         if len(self.boxes) == 0:
             logger.warning("No bboxes found")

@@ -70,7 +70,7 @@ Each YAML rule contains **conditions** and **actions**.
 <h3> Quick initial testing: </h3>
 
 1. Add "--net-json-port 30006" to readsb startup args, as adsb_actions reads the json output
-1. Run "python3 src/adsb_actions/main.py --ipaddr localhost --port 30006 src/adsb_actions/basic_rules.yaml"
+1. Run "python3 src/adsb_actions/adsbactions.py --ipaddr localhost --port 30006 src/adsb_actions/basic_rules.yaml"
 1. You should see output for the aircraft readsb is seeing.
 
 ```
