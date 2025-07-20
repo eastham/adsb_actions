@@ -237,9 +237,7 @@ class AdsbActions:
             logger.info("_flight_update_read: Data iterator exhausted (EOF)")
             return -1       # iterator EOF
         except Exception as e:   # pylint: disable=broad-except
-            logger.error("_flight_update_read: Exception occurred: %s", e)
-            logger.error("_flight_update_read: Traceback:\n%s",
-                         traceback.format_exc())
+            logger.warning("_flight_update_read: Exception occurred: %s", e)
             if self.listen and self.listen.retry:
                 logger.info(
                     "_flight_update_read Attempting reconnect... (listen=%s, retry=%s)", self.listen, self.listen.retry)
