@@ -33,7 +33,7 @@ from prometheus_client import start_http_server, Gauge
 from .adsb_logger import Logger
 
 logger = logging.getLogger(__name__)
-logger.level = logging.WARNING
+logger.level = logging.INFO
 LOGGER = Logger()
 
 class AdsbActions:
@@ -234,11 +234,15 @@ class AdsbActions:
         except json.JSONDecodeError:
             logger.error("_flight_update_read JSON Parse fail: %s", line)
         except StopIteration:
+            logger.info("_flight_update_read: Data iterator exhausted (EOF)")
             return -1       # iterator EOF
         except Exception as e:   # pylint: disable=broad-except
+            logger.error("_flight_update_read: Exception occurred: %s", e)
+            logger.error("_flight_update_read: Traceback:\n%s",
+                         traceback.format_exc())
             if self.listen and self.listen.retry:
-                # TODO needs testing/improvement.  This didn't always work in the past...
-                logger.warning("_flight_update_read Attempting reconnect...")
+                logger.info(
+                    "_flight_update_read Attempting reconnect... (listen=%s, retry=%s)", self.listen, self.listen.retry)
                 time.sleep(2)
                 self.listen.connect()
                 return 0
