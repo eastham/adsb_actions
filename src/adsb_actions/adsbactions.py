@@ -14,6 +14,7 @@ import json
 import datetime
 import logging
 import time
+import traceback
 import signal
 import socket
 import sys
@@ -238,6 +239,8 @@ class AdsbActions:
             return -1       # iterator EOF
         except Exception as e:   # pylint: disable=broad-except
             logger.warning("_flight_update_read: Exception occurred: %s", e)
+            logger.warning("_flight_update_read: Traceback:\n%s",
+                         traceback.format_exc())
             if self.listen and self.listen.retry:
                 logger.info(
                     "_flight_update_read Attempting reconnect... (listen=%s, retry=%s)", self.listen, self.listen.retry)
