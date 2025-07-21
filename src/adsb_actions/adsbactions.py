@@ -304,7 +304,7 @@ class TCPConnection:
             # Split at the first newline
             line, self.buffer = self.buffer.split(b'\n', 1)
             line = line.strip()
-            logger.info(f"Received line: {line.decode()}")
+            # logger.info(f"Received line: {line.decode()}")
             return line
         return None
 
