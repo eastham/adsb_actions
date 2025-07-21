@@ -71,7 +71,7 @@ class AdsbActions:
         self.flights = Flights(bboxes or self._load_bboxes(yaml_data),
                                ignore_unboxed_flights=not pedantic)
         self.rules = Rules(yaml_data)
-        self.listen = None
+        self.tcp_conn = None
         self.data_iterator = None
         self.exit_loop_flag = False      # set externally if we need to exit the main loop
         self.expire_secs = expire_secs
@@ -83,7 +83,7 @@ class AdsbActions:
             self.resampler = Resampler()
 
         if ip and port:
-            self.listen = self._setup_network(ip, port)
+            self.tcp_conn = self._setup_network(ip, port)
 
         if mport:
             start_http_server(mport)
@@ -116,8 +116,8 @@ class AdsbActions:
 
         # Two ways to inject data for non-network cases:
         if string_data:
-            self.listen = TCPConnection()
-            self.listen.f = StringIO(string_data)
+            self.tcp_conn = TCPConnection()
+            self.tcp_conn.test_fh = StringIO(string_data)
         else:
             self.data_iterator = iterator_data
 
@@ -219,19 +219,15 @@ class AdsbActions:
             a timestamp of the parsed location update if successful, 
             zero if not successful, -1 on EOF"""
 
-        # TODO this function is a bit of a mess with all the
-        # returns...needs cleanup and retest when/if we improve
-        # the network resiliency...
         jsondict = None
         try:
-            if self.listen:
-                line = self.listen.readline()
+            if self.tcp_conn:
+                line = self.tcp_conn.readline()
                 if not line:
                     raise IOError  # File EOF or socket closed
                 jsondict = json.loads(line)
             else:
                 jsondict = next(self.data_iterator)
-
         except json.JSONDecodeError:
             logger.error("_flight_update_read JSON Parse fail: %s", line)
         except StopIteration:
@@ -241,17 +237,17 @@ class AdsbActions:
             logger.warning("_flight_update_read: Exception occurred: %s", e)
             logger.warning("_flight_update_read: Traceback:\n%s",
                          traceback.format_exc())
-            if self.listen and self.listen.retry:
+            if self.tcp_conn and self.tcp_conn.retry:
                 logger.info(
-                    "_flight_update_read Attempting reconnect... (listen=%s, retry=%s)", self.listen, self.listen.retry)
-                time.sleep(2)
-                self.listen.connect()
+                    "_flight_update_read Attempting reconnect... (tcp_conn=%s, retry=%s)", 
+                    self.tcp_conn, self.tcp_conn.retry)
+                self.tcp_conn.connect()
+                logger.info("_flight_update_read Reconnected successfully")
                 return 0
             else:
                 logger.warning("_flight_update_read Exception: %s", e)
                 return -1
 
-        # logger.debug("Read json: %s ", str(jsondict))
         Stats.json_readlines += 1
 
         if jsondict and 'alt_baro' in jsondict:
@@ -273,22 +269,44 @@ class TCPConnection:
         self.port = port
         self.sock = None
         self.retry = retry
-        self.f = None
+
+        self.test_fh = None     # file handle, set directly in test cases
+        self.buffer = b""       # unprocessed socket data
 
     def connect(self):
         try:
             if self.sock: self.sock.close()     # reconnect case
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.connect((self.host, self.port))
-            self.sock.settimeout(30)
+            self.sock.settimeout(60)
             print('Successful Connection')
         except Exception as e:
             print('Connection Failed: '+str(e))
 
-        self.f = self.sock.makefile()
-
     def readline(self):
-        return self.f.readline()
+        """Blocking read of a line from the socket or file handle."""
+        if self.test_fh:
+            return self.test_fh.readline()
+        else:
+            while True:
+                line = self._readline_from_buffer()
+                if line:
+                    return line
+                
+                data = self.sock.recv(4096)
+                if not data:
+                    raise IOError  # File EOF or socket closed
+                self.buffer += data
+
+    def _readline_from_buffer(self):
+        # Process all complete lines in the buffer
+        if b'\n' in self.buffer:
+            # Split at the first newline
+            line, self.buffer = self.buffer.split(b'\n', 1)
+            line = line.strip()
+            logger.info(f"Received line: {line.decode()}")
+            return line
+        return None
 
 def sigint_handler(signum, frame):
     sys.exit(1)
