@@ -44,23 +44,32 @@ class FlightStrip:
         self.alt_string = ""
         self.loc_string = ""
         self.deanno_event = None
+        self.font_size = 11
 
-        self.layout = GridLayout(cols=2, row_default_height=dp(70),
-                                 height=dp(70), size_hint_y=None)
+        strip_height = 50
+        strip_width = 200
+
+        self.layout = GridLayout(cols=2, row_default_height=dp(strip_height),
+                                 height=dp(strip_height), size_hint_y=None)
         self.main_button = Button(size_hint_x=None, padding=(dp(5),dp(5)),
-            text_size=(dp(235),dp(75)), width=dp(235), height=dp(110),
+            text_size=(dp(strip_width),dp(strip_height + 5)), 
+            width=dp(strip_width), 
+            height=dp(strip_height + 40),
             halign="left", valign="top", markup=True,
-            on_release=self.main_button_click)
+            on_release=self.main_button_click,
+            font_size=dp(self.font_size))
 
-        self.right_layout = GridLayout(rows=3, row_default_height=dp(22))
+        self.right_layout = GridLayout(rows=3, 
+                                       row_default_height=dp(strip_height / 3))
 
         BUTTON_WIDTH = dp(65)
         self.admin_button = Button(text='?', size_hint_x=None,
-                                   width=BUTTON_WIDTH)
+                                   width=BUTTON_WIDTH, font_size=dp(self.font_size))
         self.focus_button = Button(text='?', size_hint_x=None,
-                                   width=BUTTON_WIDTH)
+                                   width=BUTTON_WIDTH, font_size=dp(self.font_size))
         self.web_button = Button(text='Open FA', size_hint_x=None,
                                  width=BUTTON_WIDTH, color="#7070E0",
+                                 font_size=dp(self.font_size),
                                  on_release=self.web_click)
 
         self.layout.add_widget(self.main_button)
@@ -156,7 +165,8 @@ class FlightStrip:
             extratail = flight.other_id
         else:
             extratail = ""
-        self.top_string = "[b][size=17dp]%s %s[/size][/b]" % (flight.flight_id.strip(),
+        self.top_string = "[b][size=%ddp]%s %s[/size][/b]" % (self.font_size, 
+                                                              flight.flight_id.strip(),
             extratail)
 
         if location and bboxes_list:
@@ -194,7 +204,7 @@ class FlightStrip:
         if self.deanno_event:
             Clock.unschedule(self.deanno_event)
         self.deanno_event = Clock.schedule_once(lambda dt: self.deannotate(), 10)
-        self.main_button.background_color = (.7,.7,0)
+        self.main_button.background_color = (1, 0, 0)
 
         self.update_strip_text()
 

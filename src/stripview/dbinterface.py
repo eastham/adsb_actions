@@ -42,10 +42,10 @@ class DbInterface:
             db_obj = AIRCRAFT_LOOKUP_DB_CALL(self.flight.flight_id, wholeobj=True)
             pilot_label = None
             code_label = None
-            ui_warning = False
+            ui_warning = False      # turns strip red if True
 
             if not db_obj:
-                note_string += "*Unreg "
+                note_string += "* No Reg "
                 ui_warning = True
             else:
                 # take a note of the db's identifier for later UI calls
@@ -66,8 +66,8 @@ class DbInterface:
                         pass
 
                 if not test_dict(db_obj, 'Registered online'):
-                    if not test_dict(db_obj, 'IsBxA'):
-                        note_string += "*Manual reg "
+                    if not test_dict(db_obj, 'IsBxA') and not test_dict(db_obj, 'Medevac'):
+                        note_string += "* No Reg "
                         ui_warning = True
 
                 if test_dict(db_obj, 'Related Notes'):

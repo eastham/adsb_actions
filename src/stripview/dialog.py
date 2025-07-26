@@ -4,32 +4,6 @@ from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivy.lang.builder import Builder
 from kivy.uix.boxlayout import BoxLayout
 
-kv_multi = '''
-<Content>:
-    orientation: "vertical"
-    spacing: "12dp"
-    size_hint: (1, None)
-    height:200
-
-    MDBoxLayout:
-        id: arrivals
-        orientation: "vertical"
-        adaptive_height: True
-
-        MDTextField:
-            focus: True
-            id : pin
-            on_text_validate: root.enter_pressed()
-            height: "30dp"
-        MDLabel:
-            text: "test"
-        MDTextField:
-            focus: True
-            id : pin
-            on_text_validate: root.enter_pressed()
-            height: "30dp"
-
-'''
 kv = '''
 <Content>:
     orientation: "vertical"

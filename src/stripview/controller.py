@@ -18,14 +18,13 @@ os.environ['KIVY_LOG_MODE'] = 'PYTHON'  # inhibit Kivy's custom log format
 import kivy
 kivy.require('1.0.5')
 from kivy.config import Config
-Config.set('graphics', 'width', '600')
-Config.set('graphics', 'height', '800')
+Config.set('graphics', 'width', '540')
+Config.set('graphics', 'height', '500')
 from kivy.core.window import Window
 from kivy.clock import Clock, mainthread
 from kivy.uix.floatlayout import FloatLayout
 
 from kivymd.app import MDApp
-from dialog import Dialog
 from flightstrip import FlightStrip
 
 controllerapp = None
@@ -35,7 +34,6 @@ class ControllerApp(MDApp):
         logger.debug("controller init")
 
         self.strips = {}    # dict of FlightStrips by id
-        self.dialog = None
         self.MAX_SCROLLVIEWS = 4
         self.bboxes = bboxes
         self.focus_q = focus_q
@@ -47,7 +45,6 @@ class ControllerApp(MDApp):
         logger.debug("controller build")
 
         self.controller = Controller()
-        self.dialog = Dialog()
         self.theme_cls.theme_style="Dark"
         self.setup_titles()
         logger.debug("controller build done")
