@@ -4,14 +4,15 @@
 
   aircraft_lists:
     ground_vehicles: [ "N10CE", "N10CF", "N10CG", "N10CH", "N10CJ", "N10CK", "N10CL", "N10CM", "N10CN", "N10CP" ]
-    banned_aircraft: [ "NXXXX" ]
+    banned_aircraft: [ "N1234" ]
+    medevac_aircraft: [ "N12345" ]
   rules:
-    print:
-      conditions:
-        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
-        exclude_aircraft_list: ground_vehicles 
-      actions:
-        print: True
+#    print:
+#      conditions:
+#        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
+#        exclude_aircraft_list: ground_vehicles 
+#      actions:
+#        print: True
 
     takeoff:
       conditions:
@@ -87,4 +88,19 @@
     #    exclude_aircraft_list: ground_vehicles 
     #  actions:
     #    webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
+    #    webhook: ['page', 'deputy'] # send a message to a pager
     #    print: "low flying"
+
+    #after_hours_aircraft_seen:
+    #  conditions:
+    #    latlongring: [15, 40.786969, -119.204101]
+    #    cooldown: 60
+    #    max_alt: 8000
+    #    max_time: 1330
+    #    min_time: 0130
+    #    exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
+    #    exclude_aircraft_list: ground_vehicles 
+    #    exclude_aircraft_list: medevac_aircraft
+    #  actions:
+    #    webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
+    #    print: "after-hours"
