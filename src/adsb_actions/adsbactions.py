@@ -238,6 +238,7 @@ class AdsbActions:
             logger.debug("_flight_update_read: Traceback:\n%s",
                          traceback.format_exc())
             if self.tcp_conn and self.tcp_conn.retry:
+                time.sleep(.2)          # avoid tight loop on error
                 logger.debug(
                     "_flight_update_read Attempting reconnect... (tcp_conn=%s, retry=%s)", 
                     self.tcp_conn, self.tcp_conn.retry)
