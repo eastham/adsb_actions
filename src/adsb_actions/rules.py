@@ -70,7 +70,7 @@ class Rules:
                             'transition_regions', 'changed_regions',
                             'regions', 'latlongring',
                             'cooldown', 'rule_cooldown', 'has_attr', 'min_time',
-                            'max_time']
+                            'max_time', 'time_ranges']
 
         try:
             for condition in conditions.keys():
@@ -214,7 +214,33 @@ class Rules:
             if not result:
                 return False
 
+        if 'time_ranges' in conditions:
+            ts_24hr = int(datetime.datetime.utcfromtimestamp(
+                flight.lastloc.now).strftime("%H%M"))
+            if not self._time_in_ranges(ts_24hr, conditions['time_ranges']):
+                return False
+
         return True
+
+    def _time_in_ranges(self, ts_24hr: int, time_ranges) -> bool:
+        """
+        Check if the integer time (HHMM, e.g. 1330) falls within any of the 
+        specified time ranges.  Each range is a string like "0000-0130" 
+        or "2200-0400" (wraps around midnight).
+        """
+        for rng in time_ranges:
+            start_str, end_str = rng.split('-')
+            start = int(start_str)
+            end = int(end_str)
+            if start <= end:
+                # Normal range (e.g., 0900-1700)
+                if start <= ts_24hr < end:
+                    return True
+            else:
+                # Wraps around midnight (e.g., 2200-0400)
+                if ts_24hr >= start or ts_24hr < end:
+                    return True
+        return False
 
     def actions_valid(self, actions: dict):
         """Check for invalid or unknown actions, return True if valid."""

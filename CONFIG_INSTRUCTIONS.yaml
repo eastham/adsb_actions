@@ -25,8 +25,9 @@
         cooldown: 1          # minutes to wait before matching again for this a/c
         rule_cooldown: 1     # minutes to wait before matching again for this rule
         has_attr: wd         # last report has a json element matching the string
-        min_time: 400        # earliest time, in 24h format, but don't use leading 0's
-        max_time: 1600       # latest time, in 24h format, but don't use leading 0's
+        min_time: 400        # earliest UTC time, in 24h format, but don't use leading 0's
+        max_time: 1600       # latest UTC time, in 24h format, but don't use leading 0's
+        time_ranges: [ "0000-0130", "1330-2400" ] # match if in any of these time ranges, in 24h format
       actions:
         # what should we do when triggered?  Note only one action per type will fire.
         callback: ground_cb  # call a function as specified by AdsbActions.register_callback()
