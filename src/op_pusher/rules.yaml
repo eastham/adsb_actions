@@ -68,39 +68,47 @@
         webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
         print: "banned aircraft seen"
 
-    # somewhat repeated rule since YAML doesn't support duplicate keys, this time
-    # send a page.
     banned_aircraft_seen_tcp_page:
       conditions:
         aircraft_list: banned_aircraft  # use aircraft_list above
         cooldown: 30  # minutes to wait before matching a second time for this a/c
-
+        time_ranges: [ "1300-0100" ]
       actions:
-        webhook: ['page', 'deputy'] # send a message to a pager
+        webhook: ['page', 'deputy manager safety']
         print: "banned aircraft seen page"
   
-    #low_flying_aircraft:
+    #low_flying_aircraft_prepost_slack:
     #  conditions:
-    #    latlongring: [15, 40.786969, -119.204101]
+    #    latlongring: [10, 40.7646878, -119.2271]
     #    cooldown: 30
     #    max_alt: 8000
     #    exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
     #    exclude_aircraft_list: ground_vehicles 
     #  actions:
-    #    webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
-    #    webhook: ['page', 'deputy'] # send a message to a pager
+    #    webhook: ['slack', 'slack_nearby_webhook']
     #    print: "low flying"
 
-    #after_hours_aircraft_seen:
+    #low_flying_aircraft_prepost_page:
     #  conditions:
-    #    latlongring: [15, 40.786969, -119.204101]
+    #    time_ranges: [ "1300-0100" ]
+    #    latlongring: [10, 40.7646878, -119.2271]
+    #    cooldown: 30
+    #    max_alt: 8000
+    #    exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
+    #    exclude_aircraft_list: ground_vehicles 
+    #  actions:
+    #    webhook: ['page', 'deputy manager safety']
+    #    print: "low flying"
+
+    #after_hours_aircraft_seen_slack:
+    #  conditions:
+    #    latlongring: [10, 40.7646878, -119.2271]
     #    cooldown: 60
     #    max_alt: 8000
-    #    max_time: 1330
-    #    min_time: 0130
     #    exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
     #    exclude_aircraft_list: ground_vehicles 
     #    exclude_aircraft_list: medevac_aircraft
+    #    time_ranges: [ "0100-1300" ]
     #  actions:
     #    webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
     #    print: "after-hours"
