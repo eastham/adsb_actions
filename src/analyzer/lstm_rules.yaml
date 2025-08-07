@@ -1,0 +1,15 @@
+  config:
+    kmls:
+      - detection_gates.kml
+
+  aircraft_lists:
+    # optional lists of tail numbers of interest.
+    alert_aircraft: [ "N733PVxxx" ] 
+
+  rules:
+
+    monitor:
+      conditions:
+        aircraft_list: alert_aircraft
+      actions:
+        print: True
