@@ -44,7 +44,7 @@ class FlightStrip:
         self.alt_string = ""
         self.loc_string = ""
         self.deanno_event = None
-        self.font_size = 11
+        self.font_size = 12
 
         strip_height = 50
         strip_width = 200
@@ -99,7 +99,11 @@ class FlightStrip:
         self.get_scrollview().remove_widget(self.layout)
 
     def update_strip_text(self):
-        self.main_button.text = (self.top_string + " " + self.loc_string +
+        self.main_button.text = "[size=%ddp][b]%s[/b] %s\n%s\n%s[/size]" % (
+            self.font_size, self.top_string,
+            self.loc_string, self.alt_string, self.note_string)
+
+        (self.top_string + " " + self.loc_string +
             "\n" + self.alt_string + "\n" + self.note_string)
 
     def get_scrollview(self):
@@ -165,8 +169,7 @@ class FlightStrip:
             extratail = flight.other_id
         else:
             extratail = ""
-        self.top_string = "[b][size=%ddp]%s %s[/size][/b]" % (self.font_size, 
-                                                              flight.flight_id.strip(),
+        self.top_string = "[b]%s %s[/b]" % (flight.flight_id.strip(),
             extratail)
 
         if location and bboxes_list:
