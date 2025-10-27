@@ -1,4 +1,4 @@
-"""Push ABE's (ADS-B Events) to the server.  
+"""Push Loss of Separation Events, aka ABE's (ADS-B Events) to the server.  
 These are pushed once upon first detection and again once
 expired, so that the minimum distance is logged."""
 
@@ -8,7 +8,7 @@ import threading
 import time
 import datetime
 
-from db_ops import add_abe, update_abe
+from op_pusher.db_ops import add_abe, update_abe
 from adsb_actions.stats import Stats
 from adsb_actions.location import Location
 from adsb_actions.adsb_logger import Logger
@@ -114,6 +114,26 @@ def process_abe(flight1, flight2):
             abe.id = add_abe(flight1, flight2, lateral_distance,
                                alt_distance)
 
+def log_csv_record(flight1, flight2, abe, datestring, altdatestring):
+    """Put a CSV record in the log, with replay link for post-processing."""
+    meanloc = Location.meanloc(abe.first_loc_1, abe.first_loc_2)
+    replay_time = datetime.datetime.utcfromtimestamp(
+        flight1.lastloc.now
+    ).strftime("%Y-%m-%d-%H:%M")
+    link = (
+        f"https://globe.adsbexchange.com/"
+        f"?replay={replay_time}&lat={meanloc.lat}&lon={meanloc.lon}"
+        f"&zoom=12'"
+    )
+    csv_line = (
+        f"CSV OUTPUT FOR POSTPROCESSING: {flight1.lastloc.now},"
+        f"{datestring},{altdatestring},{meanloc.lat},{meanloc.lon},"
+        f"{meanloc.alt_baro},{flight1.flight_id.strip()},"
+        f"{flight2.flight_id.strip()},notused,"
+        f"{link},interp,audio,type,phase,,{abe.min_latdist},{abe.min_altdist}"
+    )
+    logger.info(csv_line)
+
 def gc_loop():
     """Run in a separate thread to periodically check for ABE's that are
     ready to be finalized."""
@@ -153,10 +173,4 @@ def abe_gc(ts):
                 logger.error("Didn't find key in current_abes")
 
             # print CSV record
-            meanloc = Location.meanloc(abe.first_loc_1, abe.first_loc_2)
-            logger.info(",%d,%s,%s,%f,%f,%d,%s,%s,%d,%d,%f,%d",
-                flight1.lastloc.now, datestring, altdatestring,
-                meanloc.lat, meanloc.lon, meanloc.alt_baro,
-                flight1.flight_id.strip(), flight2.flight_id.strip(),
-                flight1.lastloc.gs, flight2.lastloc.gs,
-                abe.min_latdist, abe.min_altdist)
+            log_csv_record(flight1, flight2, abe, datestring, altdatestring)
