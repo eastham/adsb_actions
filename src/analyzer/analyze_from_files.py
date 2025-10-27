@@ -50,7 +50,7 @@ if __name__ == "__main__":
     allpoints_iterator = replay.yield_json_data(allpoints)
 
     print("Processing...")
-    # XXX pedantic false catches lots less abe's.  (Still true with resampling?)
+
     adsb_actions = AdsbActions(yaml_file=fn, pedantic=False, resample=True)
 
     # ad-hoc analysis callbacks here:

@@ -1,6 +1,13 @@
+
   config:
     kmls:
-      - detection_gates.kml
+      - ../../tests/brc_pusher_gates.kml 
+
+  aircraft_lists:
+    ground_vehicles: [ "N10CE", "N10CF", "N10CG", "N10CH", "N10CJ", "N10CK", "N10CL", "N10CM", "N10CN", "N10CP" ]
+    banned_aircraft: [ "N1234" ]
+    medevac_aircraft: [ "N12345" ]
+
 
   rules:
     proximity_alert:
@@ -11,6 +18,16 @@
         proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
         exclude_aircraft_substrs: ["N10C", "N10D"]  # ground vehicles
       actions:
-        print: True
-        track: True
         callback: abe_update_cb
+
+    takeoff:
+      conditions:
+        transition_regions: [ "Generic Gate Ground", "Generic Gate Air" ]
+        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
+        exclude_aircraft_list: ground_vehicles 
+
+      actions:
+        print: True
+        callback: "takeoff"
+        note: "saw_takeoff"     # keep track that it was a takeoff from our airport, useful for tracking local flights
+

@@ -11,7 +11,7 @@ from .adsb_logger import Logger
 from .flights import Flights
 
 logger = logging.getLogger(__name__)
-#logger.level = logging.DEBUG
+logger.level = logging.INFO
 LOGGER = Logger()
 
 EXPIRE_TIME = 60 # seconds before we expire a location report.
@@ -21,13 +21,25 @@ class Resampler:
     """
 
     def __init__(self):
-        # Mapping from tail number to list of locations
+        # Mapping from flight_id (tail_number_N) to list of locations.
+        # Resampled locations are not added here.
         self.tailhistory: Dict[str, List[Location]] = {}
-        # Mapping from timestamp to list of locations
+
+        # Mapping from timestamp to list of locations.  Resampled and real locations
+        # are added here.
+        # Note: Keys are int (second granularity). Location.now values (which may be
+        # float) are cast to int. Multiple locations within the same second will be
+        # stored in the same list.
         self.timehistory: Dict[int, List[Location]] = {}
 
         self.min_time: Optional[int] = None
         self.max_time: Optional[int] = None
+
+        # Track current flight number and last time seen for each tail
+        self.flight_counters: Dict[str, int] = {}
+        self.last_time_seen: Dict[str, int] = {}
+
+        self.resample_ctr = 0
 
     def add_location(self, location: Location, minalt=3000, maxalt=12000) -> None:
         """Add a location to the history, and resample for this aircraft 
@@ -42,19 +54,39 @@ class Resampler:
         if not location.tail:
             return  # Skip locations without a tail number
 
-        flight_id = location.tail
+        tail = location.tail
         now = location.now
         if not minalt <= location.alt_baro <= maxalt:
             return
 
+        # --- Assign unique flight_id per flight per tail ---
+        # If this is the first time seeing this tail, start counter at 1
+        if tail not in self.flight_counters:
+            logger.info("New tail %s seen at %s", tail, datetime.datetime.fromtimestamp(now))
+            self.flight_counters[tail] = 1
+            self.last_time_seen[tail] = now
+        else:
+            # If time gap is large (EXPIRE_TIME), increment flight counter
+            if now - self.last_time_seen[tail] > EXPIRE_TIME:
+                self.flight_counters[tail] += 1
+            self.last_time_seen[tail] = now
+
+        # Assign the flight_id as tail + "_" + flight number
+        flight_id = f"{tail}_{self.flight_counters[tail]}"
+        location.flight = flight_id  # Adding field on the Location object
+
         # Add interpolated locations to the time history -- look for previous entries
-        # from this tail number, and if found, fill in the gaps
+        # from this flight_id, and if found, fill in the gaps
         if flight_id in self.tailhistory:
             prev_locations = self.tailhistory[flight_id]
             if prev_locations:
                 prev_location = prev_locations[-1]
 
-                if prev_location.now + EXPIRE_TIME > now and now - 1 > prev_location.now + 1:
+                # Only interpolate if:
+                # 1. Gap is less than EXPIRE_TIME (don't interpolate across large gaps)
+                # 2. Gap is greater than 1 second (need at least 2+ second gap to interpolate)
+                time_gap = now - prev_location.now
+                if time_gap <= EXPIRE_TIME and time_gap > 1:
                     # Fill in the gap between the last location and the new one
                     for t in range(int(prev_location.now) + 1, int(now)):
                         if t not in self.timehistory:
@@ -63,21 +95,32 @@ class Resampler:
                             prev_location, location, t)
                         if interp_location:
                             self.timehistory[t].append(interp_location)
-
-        # Add the current location to the histories
+                            self.resample_ctr += 1
+                            #if "FEMG_2" in flight_id:
+                            #    logger.debug("Interpolated location at %s: %s ts %d",
+                            #    interp_location.to_str(), flight_id, t)
+                            #logger.debug("Prev location was %s",
+                            #             prev_location.to_str())
+        
+        # Add the current (real, not resampled) location to the histories
         if flight_id not in self.tailhistory:
             self.tailhistory[flight_id] = []
         self.tailhistory[flight_id].append(location)
 
-        if now not in self.timehistory:
-            self.timehistory[now] = []
-        self.timehistory[now].append(location)
+        # Cast timestamp to int for second-granularity storage
+        # TODO: Sub-second overlaps - if same aircraft sends multiple updates within
+        # one second (e.g., 1000.2 and 1000.7), both are currently stored. Consider
+        # keeping only the latest update per aircraft per second.
+        int_now = int(now)
+        if int_now not in self.timehistory:
+            self.timehistory[int_now] = []
+        self.timehistory[int_now].append(location)
 
-        # Update global time ranges
-        if self.min_time is None or location.now < self.min_time:
-            self.min_time = location.now
-        if self.max_time is None or location.now > self.max_time:
-            self.max_time = location.now
+        # Update global time ranges (using int timestamps for consistency)
+        if self.min_time is None or int_now < self.min_time:
+            self.min_time = int_now
+        if self.max_time is None or int_now > self.max_time:
+            self.max_time = int_now
 
     def do_prox_checks(self, rules, bboxes, sample_interval: int = 1,
                        gc_callback = None) -> None:
@@ -140,6 +183,38 @@ class Resampler:
 
         print(f"Processed {location_ctr} resampled events.")
         return found_prox_events
+
+    def report_resampling_stats(self):
+        for tail, locations in self.tailhistory.items():
+            logger.info("Tail %s started with %d locations", tail, len(locations))
+        logger.info("Resampling counter: %d", self.resample_ctr)
+        logger.info("Timehistory locations after resampling: %d", sum(len(loc)
+                    for loc in self.timehistory.values()))
+
+    def for_each_resampled_point(self, callback):
+        """
+        Iterate through all resampled points and call the provided callback function
+        with (lat, lon, alt_baro, tail_number) for each point.
+
+        Args:
+            callback: A function accepting (lat, lon, alt_baro, tail_number)
+        """
+        callback_count = 0
+        flight_ctrs = {}
+        # iterate in sorted order by time
+        for time in sorted(self.timehistory.keys()):
+            locations = self.timehistory[time]
+            for loc in locations:
+                tail = loc.flight # XXX naming
+                flight_ctrs[tail] = flight_ctrs.get(tail, 0) + 1
+                callback(loc.lat, loc.lon, loc.alt_baro, loc.now, tail)
+                callback_count += 1
+                if callback_count % 10000 == 0:
+                    logger.info("Processed %d callbacks so far.", callback_count)
+            
+
+        for flight_id, count in flight_ctrs.items():
+            logger.info("for_each_resampled_point: flight %s saw %d total points", flight_id, count)
 
 def interpolate_location(loc1: Location, loc2: Location, timestamp: float) -> Optional[Location]:
     """Interpolate between two locations based on timestamp.
