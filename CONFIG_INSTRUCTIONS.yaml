@@ -8,8 +8,9 @@
 
   rules:
     arbitrary_rulename:
-      conditions: 
+      conditions:
         # when should we trigger this rule?  AND expression -- all conditions must be met.
+        enabled: True        # if False, this rule will never match (useful for temporarily disabling rules)
         min_alt: 4000        # feet MSL, must be >= to match
         max_alt: 10000       # feel MSL, must be <= to match
         aircraft_list: alert_aircraft  # match aircraft_list above

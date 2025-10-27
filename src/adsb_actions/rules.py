@@ -70,7 +70,7 @@ class Rules:
                             'transition_regions', 'changed_regions',
                             'regions', 'latlongring',
                             'cooldown', 'rule_cooldown', 'has_attr', 'min_time',
-                            'max_time', 'time_ranges']
+                            'max_time', 'time_ranges', 'enabled']
 
         try:
             for condition in conditions.keys():
@@ -95,6 +95,11 @@ class Rules:
 
         # TODO the approach below prevents us from having multiple rules of
         # the same type.  Do we need to support that?
+
+        # Check enabled condition first - cheap and can short-circuit evaluation
+        if 'enabled' in conditions:
+            if not conditions['enabled']:
+                return False
 
         if 'proximity' in conditions:
             return False  # handled asynchronously in handle_proximity_conditions
