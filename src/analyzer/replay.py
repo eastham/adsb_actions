@@ -65,6 +65,8 @@ def parse_files(files: list) -> dict:
 
 def read_data(directory):
     files = locate_files(directory, "*.json")
+    if not files:
+        files = {directory}
     allpoints = parse_files(files)
     return allpoints
 
