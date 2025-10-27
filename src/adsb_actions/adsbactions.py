@@ -34,7 +34,7 @@ from prometheus_client import start_http_server, Gauge
 from .adsb_logger import Logger
 
 logger = logging.getLogger(__name__)
-logger.level = logging.INFO
+logger.level = logging.DEBUG
 LOGGER = Logger()
 
 class AdsbActions:
@@ -260,7 +260,8 @@ class AdsbActions:
                 self.resampler.add_location(loc_update)
 
             return self.flights.add_location(loc_update, self.rules)
-
+        elif jsondict:
+            logger.debug("_flight_update_read: No alt_baro in jsondict for %s", jsondict)
         return 0
 
 
