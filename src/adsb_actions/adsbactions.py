@@ -34,7 +34,7 @@ from prometheus_client import start_http_server, Gauge
 from .adsb_logger import Logger
 
 logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
+logger.level = logging.INFO
 LOGGER = Logger()
 
 class AdsbActions:
