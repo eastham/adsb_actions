@@ -3,14 +3,16 @@
 This script reads a file containing CSV lines (including adsb_actions output)
 from stdin, extracts latitude and longitude coordinates, and plots them 
 on a base map using Folium. The map can be saved as an HTML file and 
-optionally opened in a web browser."""
+optionally opened in a web browser.
 
-# sample command line:
-# conda activate pyproj_env
-# cat 2022.csv | python3 ../visualizer.py  --map-image ./map_anno.png
+NOTE: uses geopandas, which is typically installed via conda, not pip.  
+once installed, command line is something like:
+
+conda activate pyproj_env
+cat 2022.csv | python3 ../visualizer.py  --map-image ./map_anno.png
+"""
 
 import argparse
-import datetime
 import folium
 import geopandas as gpd
 from shapely.geometry import Polygon, Point
@@ -19,7 +21,7 @@ import os
 import sys
 import csv
 
-# corners of the map
+# Corners of the map
 LL_LAT = 40.7145599
 UR_LAT = 40.8181649
 LL_LON = -119.2769929
@@ -101,7 +103,6 @@ def visualize_points(points, annotations, vectorlist,
 
     if open_in_browser:
         webbrowser.open("file://" + os.path.realpath(output_file))
-
 
 legend_html = """
     <div style="
