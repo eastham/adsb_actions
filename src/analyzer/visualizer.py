@@ -20,7 +20,7 @@ import webbrowser
 import os
 import sys
 import csv
-from map_elements import LEGEND_HTML, STATIC_LEGEND_HTML, CoordinateDisplay
+from visualizer_map_elements import LEGEND_HTML, STATIC_LEGEND_HTML, CoordinateDisplay
 
 # Corners of the map
 LL_LAT = 40.7145599
@@ -98,7 +98,7 @@ class MapVisualizer:
             return "green"
 
     def visualize(self, vectorlist=None, output_file="airport_map.html",
-                  open_in_browser=True, map_image=None):
+                  open_in_browser=True, map_image=None, overlay_image=None):
         """
         Generate and save the visualization map.
 
@@ -107,6 +107,7 @@ class MapVisualizer:
             output_file: Path to save the HTML map
             open_in_browser: If True, opens the map in the default web browser
             map_image: Path to the static PNG image to use as the map background
+            overlay_image: Path to a transparent PNG image to overlay on top of the map
 
         Raises:
             ValueError: If no points have been added or points/annotations length mismatch
@@ -172,6 +173,16 @@ class MapVisualizer:
                         fill=True, fill_color=color, popup=annotation).add_to(m)
         print("Points plotted.")
 
+        # Add overlay image if provided
+        if overlay_image:
+            folium.raster_layers.ImageOverlay(
+                image=overlay_image,
+                bounds=[[self.ll_lat, self.ll_lon], [self.ur_lat, self.ur_lon]],
+                opacity=0.8,
+                zindex=500
+            ).add_to(m)
+            print(f"Overlay image added: {overlay_image}")
+
         # Add a legend to the map
         m.get_root().html.add_child(folium.Element(self.legend_html))
 
@@ -194,6 +205,8 @@ if __name__ == "__main__":
                         help="Type of base map to use: 'sectional' (VFR chart) or 'satellite' (imagery)")
     parser.add_argument("--map-opacity", type=float, default=80.0,
                         help="Opacity percentage for the base map (0-100, default: 80)")
+    parser.add_argument("--overlay-image", type=str, default=None,
+                        help="Path to a transparent PNG image to overlay on the map at the defined boundaries")
     args = parser.parse_args()
 
     # Convert percentage to 0.0-1.0 range
@@ -224,4 +237,4 @@ if __name__ == "__main__":
             print(f"Parse error on row: {row} " + str(e) )
 
     print(f"Visualizing {ctr} points.")
-    visualizer.visualize(vectorlist=None) #, map_image=args.map_image)
+    visualizer.visualize(vectorlist=None, overlay_image=args.overlay_image)

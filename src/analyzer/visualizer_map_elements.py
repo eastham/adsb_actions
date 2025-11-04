@@ -9,7 +9,7 @@ from jinja2 import Template
 
 
 LEGEND_HTML = """
-    <div style="
+    <div id="legend-box" style="
         position: fixed;
         bottom: 50px;
         left: 50px;
@@ -32,10 +32,24 @@ LEGEND_HTML = """
         <i style="background: green; width: 10px; height: 10px; display: inline-block;"></i> Other<br>
 
     </div>
+    <script>
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                var legend = document.getElementById('legend-box');
+                var coordDisplay = document.querySelector('.coord-display');
+                if (legend) {
+                    legend.style.display = legend.style.display === 'none' ? 'block' : 'none';
+                }
+                if (coordDisplay) {
+                    coordDisplay.style.display = coordDisplay.style.display === 'none' ? 'block' : 'none';
+                }
+            }
+        });
+    </script>
     """
 
 STATIC_LEGEND_HTML = """
-    <div style="
+    <div id="legend-box" style="
         position: fixed;
         bottom: 50px;
         left: 50px;
@@ -55,6 +69,20 @@ STATIC_LEGEND_HTML = """
         <i style="background: red; width: 10px; height: 10px; display: inline-block;"></i> Head-On<br>
         <i style="background: green; width: 10px; height: 10px; display: inline-block;"></i> Other<br>
     </div>
+    <script>
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                var legend = document.getElementById('legend-box');
+                var coordDisplay = document.querySelector('.coord-display');
+                if (legend) {
+                    legend.style.display = legend.style.display === 'none' ? 'block' : 'none';
+                }
+                if (coordDisplay) {
+                    coordDisplay.style.display = coordDisplay.style.display === 'none' ? 'block' : 'none';
+                }
+            }
+        });
+    </script>
     """
 
 
@@ -104,7 +132,7 @@ class CoordinateDisplay(MacroElement):
                 var se = L.latLng(sw.lat, ne.lng);
                 var nw = L.latLng(ne.lat, sw.lng);
 
-                this._div.innerHTML = '<b>Current Viewport Bounds:</b><br>' +
+                this._div.innerHTML = '<b>Current Viewport Bounds: (esc to hide)</b><br>' +
                     'Lower-Left:  lat=' + sw.lat.toFixed(7) + ', lon=' + sw.lng.toFixed(7) + '<br>' +
                     'Upper-Right: lat=' + ne.lat.toFixed(7) + ', lon=' + ne.lng.toFixed(7) + '<br>' +
                     'Lower-Right: lat=' + se.lat.toFixed(7) + ', lon=' + se.lng.toFixed(7) + '<br>' +
