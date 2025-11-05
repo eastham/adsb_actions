@@ -46,7 +46,7 @@ Each YAML rule contains **conditions** and **actions**.
         print: True          # print info about this match to console
 ```
 
-<h3>Example execution/h3>
+<h3>Example execution</h3>
 
 1. (re)start your readsb to expose its raw output on a local port: --net-json-port=30006
 2. python3 live_eval.py example.yaml --port=30006 --callback_definitions=./example_callbacks.py
