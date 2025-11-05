@@ -7,8 +7,8 @@ specified in a simple human-readable YAML format.
 
 These actions can then:
 - Drive a UI
-- Do real-time analysis and alerting, for example for aircraft of interest
-- Do offline analysis, for example to  generate operational counts and statistics
+- Do real-time analysis and alerting, for example loss-of-separation events
+- Do offline analysis, for example to generate operational counts and statistics
 - Push operations to a database
 - Whatever else you can imagine!
 
@@ -46,17 +46,11 @@ Each YAML rule contains **conditions** and **actions**.
         print: True          # print info about this match to console
 ```
 
-<h3>API Usage:</h3>
+<h3>Example execution/h3>
 
-```
-    # First, (re)start your readsb including the option --net-json-port=[port]
-    # This exposes a json-formatted live stream on that port. 
-    # Then, to receive the data:
-
-    yaml_file = "src/adsb_actions/basic_rules.yaml" # simple test config
-    adsb_actions = AdsbActions(yaml_file=yaml_file, ip=[ipaddr], port=[port])
-    adsb_actions.loop()
-```
+1. (re)start your readsb to expose its raw output on a local port: --net-json-port=30006
+2. python3 live_eval.py example.yaml --port=30006 --callback_definitions=./example_callbacks.py
+   
 
 <h3>Installation from github:</h3>
 
@@ -67,7 +61,7 @@ Each YAML rule contains **conditions** and **actions**.
 1. (install geos native library: https://libgeos.org/usage/install/ -- "apt-get install geos" or "libgeos-c1v5" may do it)
 1. pytest -s tests/test_1hr.py
 
-<h3> Quick initial testing: </h3>
+<h3>Quick initial testing, assuming you have a radio with readsb running:</h3>
 
 1. Add "--net-json-port 30006" to readsb startup args, as adsb_actions reads the json output
 1. Run "python3 src/adsb_actions/adsbactions.py --ipaddr localhost --port 30006 src/adsb_actions/basic_rules.yaml"
