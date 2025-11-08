@@ -49,8 +49,9 @@ class Flight:
 
     def __post_init__(self):
         assert self.flight_id and len(self.flight_id) > 0
-        self.inside_bboxes = [None] * len(self.all_bboxes_list)
-        self.inside_bboxes_indices = [None] * len(self.all_bboxes_list)
+        bboxes_len = len(self.all_bboxes_list) if self.all_bboxes_list else 0
+        self.inside_bboxes = [None] * bboxes_len
+        self.inside_bboxes_indices = [None] * bboxes_len
 
     def to_str(self):
         """String representation includes lat/long and bbox list."""
@@ -163,6 +164,10 @@ class Flight:
 
         self.prev_inside_bboxes = self.inside_bboxes.copy()
 
+        # Handle case where bbox_list is None or empty
+        if not bbox_list:
+            return
+
         for i, bbox in enumerate(bbox_list):
             self.inside_bboxes[i] = None
             self.inside_bboxes_indices[i] = None
@@ -183,4 +188,6 @@ class Flight:
 
     def get_bbox_at_level(self, level) -> str:
         """return the bbox name that we're in for the given kml file."""
+        if level < 0 or level >= len(self.inside_bboxes):
+            return None
         return self.inside_bboxes[level]

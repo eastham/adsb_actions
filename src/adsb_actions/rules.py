@@ -38,8 +38,8 @@ class Rules:
 
         # YAML rules correctness checks
         for rule in self.get_rules().values():
-            assert self.conditions_valid(rule['conditions']), "Invalid conditions"
-            assert self.actions_valid(rule['actions']), "Invalid actions"
+            assert self.conditions_valid(rule['conditions']), "Invalid conditions, see log for more info"
+            assert self.actions_valid(rule['actions']), "Invalid actions, see log for more info"
 
     def get_rules(self) -> list:
         if not 'rules' in self.yaml_data:
@@ -310,14 +310,17 @@ class Rules:
                     continue
 
                 logger.debug("Doing callback for %s", flight.flight_id)
-                if cb_arg:
-                    # this is used for proximity events where you need to
-                    # be able to refer to both flights that are near each other
-                    self.callbacks[action_value](flight, cb_arg)
-                else:
-                    # all non-proximity events go here
-                    self.callbacks[action_value](flight)
-
+                try:
+                    if cb_arg:
+                        # this is used for proximity events where you need to
+                        # be able to refer to both flights that are near each other
+                        self.callbacks[action_value](flight, cb_arg)
+                    else:
+                        # all non-proximity events go here
+                        self.callbacks[action_value](flight)
+                except TypeError as e:
+                    logger.error("Callback %s arguments incorrect: %s",
+                                 action_value, str(e))
             elif 'note' == action_name:
                 # Attach a note to this flight for later use, typically in
                 # another rule's callback.

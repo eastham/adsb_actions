@@ -187,6 +187,10 @@ class AdsbActions:
 
     def _load_bboxes(self, yaml: str) -> list[Bboxes]:
         """Load the kml files found in the yaml, and parse those kmls."""
+        # Return None if there's no config section
+        if 'config' not in yaml or 'kmls' not in yaml.get('config', {}):
+            return None
+
         bboxes_list = []
         try:
             for f in yaml['config']['kmls']:

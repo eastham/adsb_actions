@@ -1,0 +1,10 @@
+  rules:
+    low_alt:
+      conditions:
+        min_alt: 100
+        max_alt: 4500
+        cooldown: 10      # only trigger every 10 minutes per aircraft
+      actions:
+        callback: altitude_alert_cb   # call this when matched
+        print: True                   # also print to console
+
