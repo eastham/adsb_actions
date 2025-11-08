@@ -4,126 +4,183 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+      {
+        "name": "Python: Current File",
+        "type": "python",
+        "request": "launch",
+        "program": "${file}",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Generic analyzer -- from files",
+        "type": "python",
+        "request": "launch",
+        "program": "generic_analyzer.py",
+        "cwd": "${workspaceFolder}/src/analyzer",
+        "args": " --data ../../tests/sample_readsb_data --callback_definitions ./example_callbacks.py example_rules.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Stripview UI live from readsb",
+        "type": "python",
+        "request": "launch",
+        "program": "controller.py",
+        "cwd": "${workspaceFolder}/src/stripview",
+        "args": " -- --ipaddr boxone --port 30006 --rules ui.yaml ../../tests/brc_large_regions.kml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Stripview UI demo",
+        "type": "python",
+        "request": "launch",
+        "program": "controller.py",
+        "cwd": "${workspaceFolder}/src/stripview",
+        "args": " -- --testdata ../../tests/20minutes.json --delay .2 --rules ui.yaml ../../tests/brc_large_regions.kml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Public UI",
+        "type": "python",
+        "request": "launch",
+        "program": "public_ui.py",
+        "cwd": "${workspaceFolder}/src/stripview",
+        "args": " -- --testdata ../../tests/20minutes.json --delay .01 --rules public_ui.yaml ../../tests/test2.kml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Push ops to appsheet",
+        "type": "python",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/op_pusher/op_pusher.py",
+        "args": "--testdata tests/20minutes.json --delay .01 --rules src/op_pusher/rules.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Push from live feed",
+        "type": "python",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/op_pusher/op_pusher.py",
+        "args": "--ipaddr 127.0.0.1 --port 30006 --rules src/op_pusher/rules.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Replay data to port",
+        "type": "python",
+        "request": "launch",
+        "cwd": "${workspaceFolder}/src/analyzer",
+        "program": "replay.py",
+        "args": "--port 6666  --speed_x 1000 ../../tests/sample_readsb_data",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Parse and print data from port",
+        "type": "python",
+        "request": "launch",
+        "cwd": "${workspaceFolder}/src/simple",
+        "program": "main.py",
+        "args": "--ipaddr 127.0.0.1 --port 6666 basic_rules.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Parse all data from files",
+        "type": "python",
+        "request": "launch",
+        "cwd": "${workspaceFolder}/src/analyzer",
+        "program": "analyze_from_files.py",
+        "args": "--yaml analyze_from_files.yaml /Users/eastham/adsb_data/2024/08/27",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Do prox resampling from files",
+        "type": "python",
+        "request": "launch",
+        "cwd": "${workspaceFolder}/src/analyzer",
+        "program": "prox_analyze_from_files.py",
+        "args": "--yaml prox_analyze_from_files.yaml /Users/eastham/adsb_data/2025/08/30 --resample",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
 
-        {"name":"Python: Current File","type":"python","request":"launch","program":"${file}","console":"integratedTerminal","justMyCode":true},
-        {
-            "name": "Stripview UI live from readsb",
-            "type": "python",
-            "request": "launch",
-            "program": "controller.py",
-            "cwd": "${workspaceFolder}/src/stripview",
-            "args": " -- --ipaddr boxone --port 30006 --rules ui.yaml ../../tests/brc_large_regions.kml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Stripview UI demo",
-            "type": "python",
-            "request": "launch",
-            "program": "controller.py",
-            "cwd": "${workspaceFolder}/src/stripview",
-            "args": " -- --testdata ../../tests/20minutes.json --delay .2 --rules ui.yaml ../../tests/brc_large_regions.kml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Public UI",
-            "type": "python",
-            "request": "launch",
-            "program": "public_ui.py",
-            "cwd": "${workspaceFolder}/src/stripview",
-            "args": " -- --testdata ../../tests/20minutes.json --delay .01 --rules public_ui.yaml ../../tests/test2.kml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Push ops to appsheet",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}",
-            "program": "src/op_pusher/op_pusher.py",
-            "args": "--testdata tests/20minutes.json --delay .01 --rules src/op_pusher/rules.yaml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Push from live feed",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}",
-            "program": "src/op_pusher/op_pusher.py",
-            "args": "--ipaddr 127.0.0.1 --port 30006 --rules src/op_pusher/rules.yaml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Replay data to port",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/src/analyzer",
-            "program": "replay.py",
-            "args": "--port 6666  --speed_x 1000 ../../tests/sample_readsb_data",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Parse and print data from port",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/src/simple",
-            "program": "main.py",
-            "args": "--ipaddr 127.0.0.1 --port 6666 basic_rules.yaml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Parse all data from files",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/src/analyzer",
-            "program": "analyze_from_files.py",
-            "args": "../../tests/sample_readsb_data",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Airport monitor 3",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/src/airport_monitor3",
-            "program": "monitor.py",
-            "args": " -- --testdata ../../tests/20minutes.json --delay .2 --rules monitor.yaml",
-//            "args": " -- --ipaddr 192.168.87.56 --port 30006 --rules monitor.yaml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Airport monitor 2",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/src/airport_monitor2",
-            "program": "monitorapp.py",
-            "args": " -- --testdata ../../tests/20minutes.json --delay .2 --rules monitor.yaml ../../tests/test2.kml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Inject ADS-B data to readsb",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/src/analyzer",
-            "program": "replay_to_adsb.py",
-            "args": "--inject_addr boxone:30001 ../../tests/20minutes.json --speed_x 3",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "TCP API client",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/src/tcp_client",
-            "program": "tcp_client.py",
-            "args": "tcp_rules.yaml"
-        }
+      {
+        "name": "Airport monitor 3",
+        "type": "python",
+        "request": "launch",
+        "cwd": "${workspaceFolder}/src/airport_monitor3",
+        "program": "monitor.py",
+        "args": " -- --testdata ../../tests/20minutes.json --delay .2 --rules monitor.yaml",
+        //            "args": " -- --ipaddr 192.168.87.56 --port 30006 --rules monitor.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Airport monitor 2",
+        "type": "python",
+        "request": "launch",
+        "cwd": "${workspaceFolder}/src/airport_monitor2",
+        "program": "monitorapp.py",
+        "args": " -- --testdata ../../tests/20minutes.json --delay .2 --rules monitor.yaml ../../tests/test2.kml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Inject ADS-B data to readsb",
+        "type": "python",
+        "request": "launch",
+        "cwd": "${workspaceFolder}/src/analyzer",
+        "program": "replay_to_adsb.py",
+        "args": "--inject_addr boxone:30001 ../../tests/20minutes.json --speed_x 1",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "TCP API client",
+        "type": "python",
+        "request": "launch",
+        "cwd": "${workspaceFolder}/src/tcp_client",
+        "program": "tcp_client.py",
+        "args": "tcp_rules.yaml"
+      },
+      {
+        "name": "Run LSTM large",
+        "type": "python",
+        "request": "launch",
+        "cwd": "${workspaceFolder}/src/analyzer",
+        "program": "run_lstm.py",
+        "args": "--yaml lstm_rules.yaml /Users/eastham/adsb_data/2024/08",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Run LSTM small",
+        "type": "python",
+        "request": "launch",
+        "cwd": "${workspaceFolder}/src/analyzer",
+        "program": "run_lstm.py",
+        "args": "--yaml lstm_rules.yaml /Users/eastham/adsb_data/2024/08/27",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Run LSTM tiny",
+        "type": "python",
+        "request": "launch",
+        "cwd": "${workspaceFolder}/src/analyzer",
+        "program": "run_lstm.py",
+        "args": "--yaml lstm_rules.yaml /Users/eastham/adsb_data/2024/08/27/traces/cf",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      }
     ]
 }
