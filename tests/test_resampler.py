@@ -88,7 +88,7 @@ def test_resampler_interpolation_increases_points():
 
     # Now, count points after resampling/interpolation in tailhistory
     resampled_points = sum(len(locs)
-                           for locs in resampler.timehistory.values())
+                           for locs in resampler.locations_by_time.values())
     logging.info("Points in tailhistory after resampling: %d",
                  resampled_points)
 
@@ -99,14 +99,14 @@ def test_resampler_interpolation_increases_points():
 
     # Sanity checks: Verify actual interpolation is happening correctly
     # Check that we have data at specific timestamps
-    assert 1000 in resampler.timehistory, "Missing timestamp 1000"
-    assert 1020 in resampler.timehistory, "Missing timestamp 1020 (interpolated)"
-    assert 1040 in resampler.timehistory, "Missing timestamp 1040"
+    assert 1000 in resampler.locations_by_time, "Missing timestamp 1000"
+    assert 1020 in resampler.locations_by_time, "Missing timestamp 1020 (interpolated)"
+    assert 1040 in resampler.locations_by_time, "Missing timestamp 1040"
 
     # Check midpoint between 1005 and 1040 (t=1022.5, approximately t=1022 or 1023)
 
-    if 1023 in resampler.timehistory:
-        loc_1023 = resampler.timehistory[1023][0]
+    if 1023 in resampler.locations_by_time:
+        loc_1023 = resampler.locations_by_time[1023][0]
         logging.info("Interpolated location at t=1023: lat=%.4f, lon=%.4f, alt=%d",
                      loc_1023.lat, loc_1023.lon, loc_1023.alt_baro)
         # Check that values are interpolated (not just copied from endpoints)
@@ -117,7 +117,7 @@ def test_resampler_interpolation_increases_points():
         assert False, "Missing interpolated timestamp 1023"
 
     # Check that we have continuous timestamps (no gaps in interpolation)
-    timestamps = sorted(resampler.timehistory.keys())
+    timestamps = sorted(resampler.locations_by_time.keys())
     for i in range(len(timestamps) - 1):
         if timestamps[i] < 1040:  # Only check before the gap to timestamp 1100
             time_gap = timestamps[i + 1] - timestamps[i]
@@ -127,8 +127,8 @@ def test_resampler_interpolation_increases_points():
 
     adsb_actions.loop(JSON_STRING_4)
     resampled_points_after4 = sum(len(locs)
-                                  for locs in resampler.timehistory.values())
-    logging.info("Points in timehistory after second resampling: %d",
+                                  for locs in resampler.locations_by_time.values())
+    logging.info("Points in locations_by_time after second resampling: %d",
                  resampled_points_after4)
     
     # After the second loop, we should have only one more point due to
