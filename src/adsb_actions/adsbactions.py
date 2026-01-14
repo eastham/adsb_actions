@@ -96,6 +96,7 @@ class AdsbActions:
             return None
 
         return self.resampler.do_prox_checks(self.rules, self.flights.bboxes,
+                                             ignore_unboxed_flights=self.flights.ignore_unboxed_flights,
                                              gc_callback=gc_callback)
 
     def loop(self, string_data = None, iterator_data = None, delay: float = 0.) -> None:

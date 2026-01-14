@@ -114,20 +114,22 @@ class Resampler:
         self.locations_by_time[int_now].append(location)
 
     def do_prox_checks(self, rules, bboxes, sample_interval: int = 1,
+                       ignore_unboxed_flights: bool = True,
                        gc_callback = None) -> None:
         """Inspect resampled history to detect proximity events.
-        
+
         This method:
         1. Gets the overall time range from the location history
         2. Iterates through this range at fixed intervals
         3. Builds up a Flights object to track what's active
         4. Processes proximity rules for the flights in the object, using the
            same methods aas the standard event loop.
-        
+
         Args:
             rules: Rules object containing proximity rules
             bboxes: bboxes to limit prox checkes to, if any
             sample_interval: Time interval in seconds between samples
+            ignore_unboxed_flights: If True, skip aircraft not in any bbox (default True)
             gc_callback: Optional callback for finalization or garbage collection
         """
 
@@ -145,7 +147,7 @@ class Resampler:
 
         logger.debug("Analyzing resampled time range: %.1f to %.1f",
                      min_time, max_time)
-        flights = Flights(bboxes)
+        flights = Flights(bboxes, ignore_unboxed_flights=ignore_unboxed_flights)
         found_prox_events = []
         location_ctr = 0
 
