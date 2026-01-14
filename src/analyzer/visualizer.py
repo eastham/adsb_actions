@@ -23,10 +23,10 @@ import csv
 from visualizer_map_elements import LEGEND_HTML, STATIC_LEGEND_HTML, CoordinateDisplay
 
 # Corners of the map
-LL_LAT = 40.7145599
-UR_LAT = 40.8181649
-LL_LON = -119.2769929
-UR_LON = -119.0903859
+LL_LAT = 40.7126
+UR_LAT = 40.8199
+LL_LON = -119.3068
+UR_LON = -119.0603
 
 
 class MapVisualizer:
