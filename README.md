@@ -50,7 +50,7 @@ Each YAML rule contains **conditions** and **actions**.
 
 1. (re)start your readsb to expose its raw output on a local port: --net-json-port=30006
 2. cd src/analyzer
-2. python3 generic_analyzer.py --data tests/sample_readsb_data --callback_definitions=example_callbacks.py example_rules.yaml 
+2. python3 generic_analyzer.py --data ../../tests/sample_readsb_data --callback_definitions=example_callbacks.py example_rules.yaml 
 
 <h3>Installation from github:</h3>
 
