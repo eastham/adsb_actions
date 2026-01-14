@@ -4,6 +4,8 @@ private.yaml
 # venv
 .venv
 .env
+pyvenv.cfg
+python3
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -28,3 +30,25 @@ var/
 .installed.cfg
 *.egg
 .DS_Store
+
+# Data analysis output files
+*.log
+*.csv
+*.kml
+*.out
+
+# Analysis-generated HTML and maps
+src/analyzer/*.html
+src/analyzer/*.png
+src/adsb_actions/*.html
+
+# ML model files
+*.pth
+*.h5
+*.pkl
+*.joblib
+
+# Analysis directories
+analysis/
+remote/
+find_cpes_not_needed_maybe/
