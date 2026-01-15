@@ -7,9 +7,8 @@ specified in a simple human-readable YAML format.
 
 These actions can then:
 
-- Drive a UI:
-
-&nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/stripview.png?raw=true" alt="Screenshot of Stripview">
+- Drive a UI:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/stripview.png?raw=true" alt="Screenshot of Stripview"><br>
 &nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/monitor.png?raw=true" alt="Screenshot of monitor">
 
 - Do real-time analysis, for example detect loss-of-separation events:
@@ -35,6 +34,7 @@ Each YAML rule contains **conditions** and **actions**.
 **actions** include Slack, paging / JSON webhook, and python callback.  See CONFIG_INSTRUCTIONS.yaml for more info.
 
 <h3>Example YAML config:</h3>
+This will trigger a callback and save information to stdout when aircraft N12345 matches certain location criteria:
 
 ```
   config:
@@ -57,12 +57,6 @@ Each YAML rule contains **conditions** and **actions**.
         print: True          # print info about this match to console
 ```
 
-<h3>Example execution</h3>
-
-1. (re)start your readsb to expose its raw output on a local port: --net-json-port=30006
-2. cd src/analyzer
-2. python3 generic_analyzer.py --data ../../tests/sample_readsb_data --callback_definitions=example_callbacks.py example_rules.yaml 
-
 <h3>Installation from github:</h3>
 
 1. (download or clone code from github)
@@ -72,21 +66,16 @@ Each YAML rule contains **conditions** and **actions**.
 1. pip3 install -e ".[all]"  # All features
 1. pytest -s tests/test_1hr.py
 
+
 <h3>Quick initial testing, assuming you have a radio with readsb running:</h3>
 
 1. Add "--net-json-port 30006" to readsb startup args, as adsb_actions reads the json output
-1. Run "python3 src/adsb_actions/adsbactions.py --ipaddr localhost --port 30006 src/adsb_actions/basic_rules.yaml"
+1. Run "cd src/analyzer; python3 src/adsb_actions/adsbactions.py --ipaddr localhost --port 30006 --callback_definitions=example_callbacks.py example_rules.yaml
 1. You should see output for the aircraft readsb is seeing.
 
-```
-    Successful Connection
-    INFO:adsbactions:Setup done
-    01/21/24 14:38: Rule print_all_aircraft matched for N57111: 5350 MSL 141 deg 166.6 kts 37.8715, -122.2719
-    01/21/24 14:38: Rule print_all_aircraft matched for N449WN: 7150 MSL 322 deg 194.8 kts 37.8703, -122.1147
-```
 
 <h3> More things to try: </h3>
 
 1. Tests are available: pytest -s tests/*.py
-1. Invoke a sample UI: cd src/stripview ;  python3 controller.py -- --testdata ../../tests/1hr.json --rules ui.yaml --delay .01 ../../tests/test2.kml
+1. XXXXX Invoke a sample UI: cd src/stripview ;  python3 controller.py -- --testdata ../../tests/1hr.json --rules ui.yaml --delay .01 ../../tests/test2.kml
 1. Command lines for other sample applications can be found in launch.json.
