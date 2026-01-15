@@ -14,13 +14,15 @@ cat 2022.csv | python3 ../visualizer.py  --map-image ./map_anno.png
 
 import argparse
 import folium
-import geopandas as gpd
+from folium.plugins import HeatMap
+# import geopandas as gpd  # Not currently used
 from shapely.geometry import Polygon, Point
 import webbrowser
 import os
 import sys
 import csv
 from visualizer_map_elements import LEGEND_HTML, STATIC_LEGEND_HTML, CoordinateDisplay
+from hotspot_analyzer import compute_hotspot_heatmap
 
 # Corners of the map
 LL_LAT = 40.7126
@@ -98,7 +100,10 @@ class MapVisualizer:
             return "green"
 
     def visualize(self, vectorlist=None, output_file="airport_map.html",
-                  open_in_browser=True, map_image=None, overlay_image=None):
+                  open_in_browser=True, map_image=None, overlay_image=None,
+                  geojson_file=None,
+                  enable_heatmap=False, heatmap_bandwidth=None,
+                  heatmap_radius=20, heatmap_blur=25, heatmap_min_opacity=0.3):
         """
         Generate and save the visualization map.
 
@@ -166,6 +171,45 @@ class MapVisualizer:
                              fill=False, tooltip="Airport Boundary").add_to(m)
         print("Boundary drawn.")
 
+        # Load GeoJSON features if provided
+        if geojson_file:
+            import json
+            with open(geojson_file, 'r') as f:
+                geojson_data = json.load(f)
+
+            # Separate labels (Points) from other features
+            labels = []
+            other_features = []
+            for feature in geojson_data.get('features', []):
+                if feature.get('geometry', {}).get('type') == 'Point':
+                    labels.append(feature)
+                else:
+                    other_features.append(feature)
+
+            # Add non-point features via GeoJson
+            if other_features:
+                other_geojson = {'type': 'FeatureCollection', 'features': other_features}
+                folium.GeoJson(
+                    other_geojson,
+                    name="Features",
+                    tooltip=folium.GeoJsonTooltip(fields=['name'], aliases=[''])
+                ).add_to(m)
+
+            # Add labels as DivIcon markers (text only, no icon)
+            for label in labels:
+                coords = label['geometry']['coordinates']
+                props = label.get('properties', {})
+                name = props.get('name', '')
+                rotation = props.get('rotation', 0)
+                folium.Marker(
+                    location=[coords[1], coords[0]],  # GeoJSON is [lon, lat]
+                    icon=folium.DivIcon(
+                        html=f'<div style="font-size: 16px; font-weight: bold; color: black; white-space: nowrap; transform: rotate({rotation}deg); transform-origin: center;">{name}</div>'
+                    )
+                ).add_to(m)
+
+            print(f"GeoJSON features loaded from: {geojson_file}")
+
         # Plot points with annotations
         for (lat, lon), annotation in zip(self.points, self.annotations):
             color = self._get_point_color(annotation)
@@ -183,6 +227,38 @@ class MapVisualizer:
             ).add_to(m)
             print(f"Overlay image added: {overlay_image}")
 
+        # Add heatmap layer if enabled
+        if enable_heatmap:
+            # Compute heatmap using KDE from external module
+            # Pass bounds=None to auto-compute from data with padding
+            heatmap_data = compute_hotspot_heatmap(
+                self.points,
+                bounds=None,
+                bandwidth=heatmap_bandwidth
+            )
+
+            if heatmap_data:
+                HeatMap(
+                    heatmap_data,
+                    name="LOS Hotspots",
+                    radius=heatmap_radius,
+                    blur=heatmap_blur,
+                    min_opacity=heatmap_min_opacity,
+                    max_zoom=13,
+                    gradient={
+                        '0.0': 'blue',
+                        '0.3': 'cyan',
+                        '0.5': 'lime',
+                        '0.7': 'yellow',
+                        '0.9': 'orange',
+                        '1.0': 'red'
+                    }
+                ).add_to(m)
+
+                # Add layer control to toggle heatmap
+                folium.LayerControl().add_to(m)
+                print(f"Heatmap layer added with {len(heatmap_data)} points")
+
         # Add a legend to the map
         m.get_root().html.add_child(folium.Element(self.legend_html))
 
@@ -198,15 +274,28 @@ class MapVisualizer:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Visualize points on a map.")
-    parser.add_argument("--map-image", type=str, default="map.png",
-                        help="Path to the static PNG image for the map background.")
+    parser.add_argument("--map-image", type=str, default=None,
+                        help="Path to a static PNG image for the map background. If not specified, uses --map-type.")
     parser.add_argument("--map-type", type=str, default="sectional",
                         choices=["sectional", "satellite"],
                         help="Type of base map to use: 'sectional' (VFR chart) or 'satellite' (imagery)")
     parser.add_argument("--map-opacity", type=float, default=80.0,
-                        help="Opacity percentage for the base map (0-100, default: 80)")
+                        help="Opacity percentage" \
+                        " for the base map (0-100, default: 80)")
     parser.add_argument("--overlay-image", type=str, default=None,
                         help="Path to a transparent PNG image to overlay on the map at the defined boundaries")
+    parser.add_argument("--geojson", type=str, default=None,
+                        help="Path to a GeoJSON file with polygons, lines, and/or labels to overlay")
+    parser.add_argument("--enable-heatmap", action="store_true",
+                        help="Enable KDE-based heatmap overlay showing LOS hotspots")
+    parser.add_argument("--heatmap-bandwidth", type=float, default=None,
+                        help="KDE bandwidth in degrees (default: auto using Scott's rule)")
+    parser.add_argument("--heatmap-radius", type=int, default=20,
+                        help="Heatmap point radius (default: 20)")
+    parser.add_argument("--heatmap-blur", type=int, default=25,
+                        help="Heatmap blur amount (default: 25)")
+    parser.add_argument("--heatmap-opacity", type=float, default=0.3,
+                        help="Heatmap minimum opacity 0.0-1.0 (default: 0.3)")
     args = parser.parse_args()
 
     # Convert percentage to 0.0-1.0 range
@@ -237,4 +326,14 @@ if __name__ == "__main__":
             print(f"Parse error on row: {row} " + str(e) )
 
     print(f"Visualizing {ctr} points.")
-    visualizer.visualize(vectorlist=None, overlay_image=args.overlay_image)
+    visualizer.visualize(
+        vectorlist=None,
+        map_image=args.map_image,
+        overlay_image=args.overlay_image,
+        geojson_file=args.geojson,
+        enable_heatmap=args.enable_heatmap,
+        heatmap_bandwidth=args.heatmap_bandwidth,
+        heatmap_radius=args.heatmap_radius,
+        heatmap_blur=args.heatmap_blur,
+        heatmap_min_opacity=args.heatmap_opacity
+    )
