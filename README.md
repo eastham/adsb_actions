@@ -7,12 +7,16 @@ specified in a simple human-readable YAML format.
 
 These actions can then:
 - Do real-time analysis, for example detect loss-of-separation events:
+
 ![Screenshot of LOS](misc/los.png?raw=true "Screenshot of LOS")
 - Drive a UI:
+
 ![Screenshot of Stripview](misc/stripview.png?raw=true "Screenshot of Stripview")
 - Visualize events and find hotspots:
+
 ![Screenshot of hotspots](misc/heatmap.png?raw=true "Screenshot of hotspots")
 - Do offline analysis, for example to generate operational counts and statistics
+
 ![Screenshot of landings](misc/landing.png?raw=true "Screenshot of landings")
 - Trigger Slack alerts based on arbitrary conditions
 - Push operations to a database
