@@ -26,9 +26,10 @@ These actions can then:
 <h3>Overview</h3>
 Each YAML rule contains ✅ <strong>conditions</strong> and ⚡ <strong>actions</strong>. 
 <p>
-✅ <strong>conditions</strong> are an ANDed set, and can include altitude ranges, lat/long proximity, location within a region specified in a KML file, etc.
+
+✅ <strong>Conditions</strong> are an ANDed set, and can include altitude ranges, lat/long proximity, location within a region specified in a KML file, etc.
 <p>
-⚡ <strong>actions</strong> include Slack, paging / JSON webhook, and python callback.  See CONFIG_INSTRUCTIONS.yaml for more info.
+⚡ <strong>Actions</strong> include Slack, paging / JSON webhook, and python callback.  See CONFIG_INSTRUCTIONS.yaml for more info.
 
 <h3>Example YAML config:</h3>
 This will trigger a callback and save information to stdout when aircraft N12345 matches certain location criteria:<p>
@@ -61,10 +62,10 @@ This will trigger a callback and save information to stdout when aircraft N12345
 1. source .venv/bin/activate
 1. pip3 install -e .  # Core only (no GUI or analysis tools)
 1. pip3 install -e ".[all]"  # All features
-1. pytest -s tests/test_1hr.py
+1. pytest -s tests/test_1hr.py # Analyzes a pre-recorded session
 
 
-<h3>Quick initial testing from a local readsb instance:</h3>
+<h3>Quick setup with a local readsb instance:</h3>
 
 1. Add "--net-json-port 30006" to readsb configuration parmaeters (usually found in /etc/default/readsb), this will expose a JSON feed on port 30006
 1. Run "cd src/analyzer; python3 src/adsb_actions/adsbactions.py --ipaddr localhost --port 30006 --callback_definitions=example_callbacks.py example_rules.yaml

@@ -154,7 +154,11 @@ class Rules:
                 return False
 
         if 'changed_regions' in conditions:
-            if condition_value == "strict":
+            condition_value = conditions['changed_regions']
+            # "any" (or True for backwards compat): trigger on any region change
+            # "strict": only trigger if both prev and current are in some region
+            mode = str(condition_value).lower() if condition_value is not True else "any"
+            if mode == "strict":
                 if not flight.was_in_any_bbox() or not flight.in_any_bbox():
                     return False
             result = flight.prev_inside_bboxes != flight.inside_bboxes
