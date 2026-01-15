@@ -8,22 +8,30 @@ specified in a simple human-readable YAML format.
 These actions can then:
 - Do real-time analysis, for example detect loss-of-separation events:
 
-![Screenshot of LOS](misc/los.png?raw=true "Screenshot of LOS")
+| |
+|:--:|
+| ![Screenshot of LOS](misc/los.png?raw=true) |
+
 - Drive a UI:
 
-![Screenshot of Stripview](misc/stripview.png?raw=true "Screenshot of Stripview")
+| |
+|:--:|
+| ![Screenshot of Stripview](misc/stripview.png?raw=true) |
+
 - Visualize events and find hotspots:
 
-![Screenshot of hotspots](misc/heatmap.png?raw=true "Screenshot of hotspots")
-- Do offline analysis, for example to generate operational counts and statistics
+| |
+|:--:|
+| ![Screenshot of hotspots](misc/heatmap.png?raw=true) |
 
-![Screenshot of landings](misc/landing.png?raw=true "Screenshot of landings")
+- Do offline analysis, for example to generate operational counts and statistics:
+
+| |
+|:--:|
+| ![Screenshot of landings](misc/landing.png?raw=true) |
 - Trigger Slack alerts based on arbitrary conditions
 - Push operations to a database
 - Whatever else you can imagine!
-
-Sample implementations of each of these are included -- here is a screenshot of the UI "stripview":
-
 
 <h3>Overview</h3>
 Each YAML rule contains **conditions** and **actions**. 
