@@ -6,6 +6,7 @@ takeoffs/landings/local flights.
 
 import logging
 import yaml
+import time
 import testinfra
 
 from adsb_actions.stats import Stats
@@ -38,7 +39,8 @@ def landing_cb(flight):
     global landing_ctr, local_landing_ctr
     landing_ctr += 1
     if 'note' in flight.flags:
-        logging.info("Local-flight landing detected!")
+        logging.info("Landing detected: %s at %s",
+                     flight.flight_id, time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(flight.lastloc.now)))
         local_landing_ctr += 1
 
 def takeoff_cb(flight):

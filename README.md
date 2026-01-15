@@ -6,15 +6,20 @@ other ADS-B data provider.  The conditions and actions are
 specified in a simple human-readable YAML format.
 
 These actions can then:
-- Drive a UI
-- Do real-time analysis and alerting, for example loss-of-separation events
+- Do real-time analysis, for example detect loss-of-separation events:
+![Screenshot of LOS](misc/los.png?raw=true "Screenshot of LOS")
+- Drive a UI:
+![Screenshot of Stripview](misc/stripview.png?raw=true "Screenshot of Stripview")
+- Visualize events and find hotspots:
+![Screenshot of hotspots](misc/heatmap.png?raw=true "Screenshot of hotspots")
 - Do offline analysis, for example to generate operational counts and statistics
+![Screenshot of landings](misc/landing.png?raw=true "Screenshot of landings")
+- Trigger Slack alerts based on arbitrary conditions
 - Push operations to a database
 - Whatever else you can imagine!
 
 Sample implementations of each of these are included -- here is a screenshot of the UI "stripview":
 
-![Screenshot of Stripview](misc/stripview.png?raw=true "Screenshot of Stripview")
 
 <h3>Overview</h3>
 Each YAML rule contains **conditions** and **actions**. 
