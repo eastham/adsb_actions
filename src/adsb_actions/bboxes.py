@@ -83,7 +83,9 @@ class Bboxes:
                 logger.debug("Adding bounding box %s: %d-%d %d-%d deg",
                     name, minalt, maxalt, starthdg, endhdg)
 
-                newbox = Bbox(polygon=Polygon(feature.geometry),
+                # Extract coordinates from pygeoif geometry for Shapely 2.x compatibility
+                coords = list(feature.geometry.exterior.coords)
+                newbox = Bbox(polygon=Polygon(coords),
                     minalt=minalt, maxalt=maxalt, starthdg=starthdg,
                     endhdg=endhdg, name=name)
                 self.boxes.append(newbox)

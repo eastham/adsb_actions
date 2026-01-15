@@ -14,7 +14,7 @@ authors = [
 ]
 description = "A package for taking actions based on ADS-B data"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.8,<3.13"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: BSD License",
@@ -23,8 +23,8 @@ classifiers = [
 dependencies = [
     "PyYAML >= 6.0.1",
     "icao-nnumber-converter-us >= 0.1.0",
-    "geopy >=  2.4.1",
-    "Shapely ==  1.8.4",
+    "geopy >= 2.4.1",
+    "Shapely >= 2.1.2",
     "lxml >= 4.9.4",
     "fastkml == 0.12",
     "requests >= 2.31.0",
