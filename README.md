@@ -11,16 +11,13 @@ These actions can then:
 &nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/stripview.png?raw=true" alt="Screenshot of Stripview"><br>
 &nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/monitor.png?raw=true" alt="Screenshot of monitor">
 
-- Do real-time analysis, for example detect loss-of-separation events:
-
+- Do real-time analysis, for example detect loss-of-separation events:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/los.png?raw=true" alt="Screenshot of LOS">
 
-- Visualize events and find hotspots:
-
+- Visualize events and find hotspots:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/heatmap.png?raw=true" alt="Screenshot of hotspots">
 
-- Do offline analysis, for example to generate operational counts and statistics:
-
+- Do offline analysis, for example to generate operational counts and statistics:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/landing.png?raw=true" alt="Screenshot of landings">
 - Trigger Slack alerts based on arbitrary conditions
 - Push operations to a database
