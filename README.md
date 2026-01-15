@@ -67,7 +67,6 @@ This will trigger a callback and save information to stdout when aircraft N12345
 <h3>Quick initial testing from a local readsb instance:</h3>
 
 1. Add "--net-json-port 30006" to readsb configuration parmaeters (usually found in /etc/default/readsb), this will expose a JSON feed on port 30006
-XXX where
 1. Run "cd src/analyzer; python3 src/adsb_actions/adsbactions.py --ipaddr localhost --port 30006 --callback_definitions=example_callbacks.py example_rules.yaml
 1. You should see output for the aircraft readsb is seeing.
 
