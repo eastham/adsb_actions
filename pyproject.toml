@@ -26,7 +26,7 @@ dependencies = [
     "geopy >= 2.4.1",
     "Shapely >= 2.1.2",
     "lxml >= 4.9.4",
-    "fastkml == 0.12",
+    "fastkml >= 1.4.0",
     "requests >= 2.31.0",
     "Kivy == 2.3.0",
     "kivymd == 1.1.1",

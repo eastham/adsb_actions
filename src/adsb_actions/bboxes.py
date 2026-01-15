@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from shapely.geometry import Point, Polygon
 # for fastkml, which breaks in newer versions
 warnings.filterwarnings("ignore", category=DeprecationWarning)
-from fastkml import kml
+from fastkml import kml, features, containers
 
 from .adsb_logger import Logger
 
@@ -43,17 +43,14 @@ class Bboxes:
     def __init__(self, fn):
         self.boxes: list[Bbox] = []
 
-        with open(fn, 'rt', encoding="utf-8") as myfile:
-            doc = myfile.read()
-        k = kml.KML()
-        k.from_string(doc.encode('utf-8'))
         try:
-            features = list(k.features())
+            k = kml.KML.parse(fn, strict=False)
+            kml_features = list(k.features)
         except Exception as e:
             logger.error("Error parsing KML file %s: %s", fn, str(e))
             raise ValueError("KML parse error: " + str(e))
 
-        self.parse_placemarks(features)
+        self.parse_placemarks(kml_features)
         if len(self.boxes) == 0:
             logger.warning("No bboxes found")
         logger.info("Setup done for bboxes in %s", fn)
@@ -62,13 +59,13 @@ class Bboxes:
         """Parses a placemark of the form:
         Name: minalt-maxalt minheading-maxheading
 
-        for example, this defines a region called "Rwy 25 Approach" from 
+        for example, this defines a region called "Rwy 25 Approach" from
         4500-5500 feet, with heading 230 to 270:
 
         Rwy 25 Approach: 4500-5500 230-270
         """
         for feature in document:
-            if isinstance(feature, kml.Placemark):
+            if isinstance(feature, features.Placemark):
                 re_result = re.search(r"^([^:]+):\s*(\d+)-(\d+)\s+(\d+)-(\d+)",
                     feature.name)
                 if not re_result:
@@ -83,8 +80,7 @@ class Bboxes:
                 logger.debug("Adding bounding box %s: %d-%d %d-%d deg",
                     name, minalt, maxalt, starthdg, endhdg)
 
-                # Extract coordinates from pygeoif geometry for Shapely 2.x compatibility
-                coords = list(feature.geometry.exterior.coords)
+                coords = list(feature.kml_geometry.geometry.exterior.coords)
                 newbox = Bbox(polygon=Polygon(coords),
                     minalt=minalt, maxalt=maxalt, starthdg=starthdg,
                     endhdg=endhdg, name=name)
@@ -92,10 +88,10 @@ class Bboxes:
 
         for feature in document:
             # Note: recursive calls, some systems put features in invisible folders...
-            if isinstance(feature, kml.Folder):
-                self.parse_placemarks(list(feature.features()))
-            if isinstance(feature, kml.Document):
-                self.parse_placemarks(list(feature.features()))
+            if isinstance(feature, containers.Folder):
+                self.parse_placemarks(list(feature.features))
+            if isinstance(feature, containers.Document):
+                self.parse_placemarks(list(feature.features))
 
     def contains(self, lat, long, hdg, alt):
         """returns index of first matching bounding box, or -1 if not found"""
