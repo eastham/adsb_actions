@@ -19,7 +19,6 @@ import replay
 import sys
 from adsb_actions.adsbactions import AdsbActions
 from adsb_actions.adsb_logger import Logger
-from op_pusher.los import process_los_launch, los_gc
 
 logger = logging.getLogger(__name__)
 logger.level = logging.INFO
@@ -28,10 +27,10 @@ def parseargs():
     parser = argparse.ArgumentParser(
         description="render a simple flight status board.")
     parser.add_argument('rules', help="rules.yaml file to use")
-    parser.add_argument('--ipaddr', help="IP address to connect to", 
+    parser.add_argument('--ipaddr', help="IP address to connect to",
                         default="127.0.0.1")
     parser.add_argument('--port', help="port to connect to")
-    parser.add_argument('--callback_definitions', 
+    parser.add_argument('--callback_definitions',
                         help="callback definitions file")
     parser.add_argument('--data', help="readsb data files for analysis")
     parser.add_argument(

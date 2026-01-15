@@ -25,13 +25,13 @@ These actions can then:
 
 <h3>Overview</h3>
 Each YAML rule contains **conditions** and **actions**. 
-
+<p>
 **conditions** are an ANDed set, and can include altitude ranges, lat/long proximity, location within a region specified in a KML file, etc.
-
+<p>
 **actions** include Slack, paging / JSON webhook, and python callback.  See CONFIG_INSTRUCTIONS.yaml for more info.
 
 <h3>Example YAML config:</h3>
-This will trigger a callback and save information to stdout when aircraft N12345 matches certain location criteria:
+This will trigger a callback and save information to stdout when aircraft N12345 matches certain location criteria:<p>
 
 ```
   config:
@@ -64,9 +64,10 @@ This will trigger a callback and save information to stdout when aircraft N12345
 1. pytest -s tests/test_1hr.py
 
 
-<h3>Quick initial testing, assuming you have a radio with readsb running:</h3>
+<h3>Quick initial testing from a local readsb instance:</h3>
 
-1. Add "--net-json-port 30006" to readsb startup args, as adsb_actions reads the json output
+1. Add "--net-json-port 30006" to readsb configuration parmaeters (usually found in /etc/default/readsb), this will expose a JSON feed on port 30006
+XXX where
 1. Run "cd src/analyzer; python3 src/adsb_actions/adsbactions.py --ipaddr localhost --port 30006 --callback_definitions=example_callbacks.py example_rules.yaml
 1. You should see output for the aircraft readsb is seeing.
 
@@ -74,5 +75,5 @@ This will trigger a callback and save information to stdout when aircraft N12345
 <h3> More things to try: </h3>
 
 1. Tests are available: pytest -s tests/*.py
-1. XXXXX Invoke a sample UI: cd src/stripview ;  python3 controller.py -- --testdata ../../tests/1hr.json --rules ui.yaml --delay .01 ../../tests/test2.kml
+1. Invoke a sample UI: cd src/stripview ;  python3 controller.py -- --testdata ../../tests/20minutes.json --delay .2 --rules ui.yaml ../../tests/brc_large_regions.kml
 1. Command lines for other sample applications can be found in launch.json.

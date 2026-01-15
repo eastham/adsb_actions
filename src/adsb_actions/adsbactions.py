@@ -1,4 +1,4 @@
-"""This is the main API For the  library.
+"""This is the main API For the library.
 
 The following code will instantiate the library, attempt to connect to a network
 socket, and process the ADS-B data coming in:

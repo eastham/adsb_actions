@@ -9,13 +9,17 @@ logger = adsb_logger.logging.getLogger(__name__)
 #logger.level = adsb_logger.logging.DEBUG
 LOGGER = Logger()
 
-USE_APPSHEET = True
+USE_APPSHEET = False
 if USE_APPSHEET:
     sys.path.insert(0, '../db')
-    import appsheet_api
-    APPSHEET = appsheet_api.Appsheet()
-    AIRCRAFT_LOOKUP_DB_CALL = APPSHEET.aircraft_lookup
-    PILOT_LOOKUP_DB_CALL = APPSHEET.pilot_lookup
+    try:
+        import appsheet_api
+        APPSHEET = appsheet_api.Appsheet()
+    except Exception as e:
+        logger.error("Error importing appsheet_api, disabled: %s", str(e))
+    else:
+        AIRCRAFT_LOOKUP_DB_CALL = APPSHEET.aircraft_lookup
+        PILOT_LOOKUP_DB_CALL = APPSHEET.pilot_lookup
 
 else:
     # add other dbs here
@@ -36,13 +40,13 @@ class DbInterface:
 
         note_string = ""
         ui_warning = False
+        pilot_label = None
+        code_label = None
+        ui_warning = False      # turns strip red if True
 
         try:
             # TODO could optimize: only if unregistered?
             db_obj = AIRCRAFT_LOOKUP_DB_CALL(self.flight.flight_id, wholeobj=True)
-            pilot_label = None
-            code_label = None
-            ui_warning = False      # turns strip red if True
 
             if not db_obj:
                 note_string += "* No Reg "
