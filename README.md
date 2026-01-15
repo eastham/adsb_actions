@@ -6,13 +6,16 @@ other ADS-B data provider.  The conditions and actions are
 specified in a simple human-readable YAML format.
 
 These actions can then:
-- Do real-time analysis, for example detect loss-of-separation events:
-
-&nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/los.png?raw=true" alt="Screenshot of LOS">
 
 - Drive a UI:
 
 &nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/stripview.png?raw=true" alt="Screenshot of Stripview">
+
+&nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/monitor.png?raw=true" alt="Screenshot of monitor">
+
+- Do real-time analysis, for example detect loss-of-separation events:
+
+&nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/los.png?raw=true" alt="Screenshot of LOS">
 
 - Visualize events and find hotspots:
 
