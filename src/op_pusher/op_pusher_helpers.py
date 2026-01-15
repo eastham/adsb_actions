@@ -1,5 +1,5 @@
 import logging
-from abe import process_abe_launch, ABE
+from los import process_los_launch, LOS
 from db_ops import DATABASE, add_op
 from adsb_actions.stats import Stats
 from prometheus_client import Gauge
@@ -32,20 +32,20 @@ def takeoff_cb(flight):
 
     add_op(flight, "Takeoff", False)
 
-def abe_cb(flight1, flight2):
-    """ABE = Ads-B Event -- two airplanes in close proximity"""
-    logger.info("ABE detected! %s", flight1.flight_id)
-    process_abe_launch(flight1, flight2)
+def los_cb(flight1, flight2):
+    """LOS = Loss of Separation -- two airplanes in close proximity"""
+    logger.info("LOS detected! %s", flight1.flight_id)
+    process_los_launch(flight1, flight2)
 
 def register_callbacks(adsb_actions):
     adsb_actions.register_callback("landing", landing_cb)
     adsb_actions.register_callback("takeoff", takeoff_cb)
     adsb_actions.register_callback("popup_takeoff", popup_takeoff_cb)
-    adsb_actions.register_callback("abe_update_cb", abe_cb)
+    adsb_actions.register_callback("los_update_cb", los_cb)
 
 def enter_db_fake_mode():
     DATABASE.enter_fake_mode()
 
 def exit_workers():
-    ABE.quit = True
-    logger.info("Please wait for final ABE GC...")
+    LOS.quit = True
+    logger.info("Please wait for final LOS GC...")

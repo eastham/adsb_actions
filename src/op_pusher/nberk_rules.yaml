@@ -27,7 +27,7 @@
         print: True
         callback: "landing"
 
-    # handle ABE's (close-proximity events)
+    # handle LOS (Loss of Separation / close-proximity events)
     prox:
       conditions:
         min_alt: 4000
@@ -35,4 +35,4 @@
         regions: [ "OAK West", "OAK East", "OAK Approach" ]
         proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
       actions:
-        callback: abe_update_cb
+        callback: los_update_cb

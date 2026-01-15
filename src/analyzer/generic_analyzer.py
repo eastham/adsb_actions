@@ -19,7 +19,7 @@ import replay
 import sys
 from adsb_actions.adsbactions import AdsbActions
 from adsb_actions.adsb_logger import Logger
-from op_pusher.abe import process_abe_launch, abe_gc
+from op_pusher.los import process_los_launch, los_gc
 
 logger = logging.getLogger(__name__)
 logger.level = logging.INFO

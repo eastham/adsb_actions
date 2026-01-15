@@ -8,8 +8,8 @@ from adsb_actions.adsbactions import AdsbActions
 YAML_STRING = """
   config:
     kmls:
-      - tests/test2.kml 
-      - tests/test3.kml 
+      - tests/test2.kml
+      - tests/test3.kml
 
   rules:
     ui_update:
@@ -31,10 +31,10 @@ YAML_STRING = """
             regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
             proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
         actions:
-            callback: abe_update_cb
+            callback: los_update_cb
 """
 
-aircraft_update_ctr = aircraft_remove_ctr = abe_update_ctr = 0
+aircraft_update_ctr = aircraft_remove_ctr = los_update_ctr = 0
 def aircraft_update_cb(flight):
     global aircraft_update_ctr
     aircraft_update_ctr += 1
@@ -43,10 +43,10 @@ def aircraft_remove_cb(flight):
     global aircraft_remove_ctr
     aircraft_remove_ctr += 1
 
-def abe_update_cb(flight1, flight2):
-    global abe_update_ctr
-    logging.info(f"got abe_update_cb {flight1.flight_id} {flight2.flight_id}")
-    abe_update_ctr += 1
+def los_update_cb(flight1, flight2):
+    global los_update_ctr
+    logging.info(f"got los_update_cb {flight1.flight_id} {flight2.flight_id}")
+    los_update_ctr += 1
 
 JSON_STRING_PLANE1_ZEROALT = '{"now": 1661692178, "alt_baro": 0, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}\n'
 JSON_STRING_PLANE1_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}\n'
@@ -68,7 +68,7 @@ def test_prox():
     adsb_actions = AdsbActions(yaml_data)
     adsb_actions.register_callback("aircraft_update_cb", aircraft_update_cb)
     adsb_actions.register_callback("aircraft_remove_cb", aircraft_remove_cb)
-    adsb_actions.register_callback("abe_update_cb", abe_update_cb)
+    adsb_actions.register_callback("los_update_cb", los_update_cb)
 
     basic_prox_test(adsb_actions)
 
@@ -87,7 +87,7 @@ def basic_prox_test(adsb_actions):
     adsb_actions.loop(JSON_STRING_PLANE6_TOOFAR_ALT)
     adsb_actions.loop(JSON_STRING_PLANE5_WITHINPROX)
     adsb_actions.loop(JSON_STRING_PLANE3_DELAY) # allow time to pass for checkpoint
-    assert abe_update_ctr == 3  # PLANE1 is near PLANE5, PLANE5 is near PLANE4
+    assert los_update_ctr == 3  # PLANE1 is near PLANE5, PLANE5 is near PLANE4
 
 def big_prox_test(adsb_actions):
     with open("tests/20minutes.json", 'rt', encoding="utf-8") as myfile:
@@ -100,7 +100,7 @@ def big_prox_test(adsb_actions):
     for f in adsb_actions.flights.flight_dict.values():
         rendered_flight_ctr += 1 if f.in_any_bbox() else 0
     assert rendered_flight_ctr == 4  # unexpired aircraft left
-    assert abe_update_ctr == 28
+    assert los_update_ctr == 28
 
 
 # Resampling test aircraft - they will cross each other's path in the middle
@@ -116,8 +116,8 @@ JSON_STRING_PLANE13_CENTRAL = '{"now": 1661692168, "alt_baro": 4000, "gscp": 128
 
 def test_resampling_prox():
     Stats.reset()
-    global abe_update_ctr, JSON_STRING_PLANE11_BEFORE
-    abe_update_ctr = 0
+    global los_update_ctr, JSON_STRING_PLANE11_BEFORE
+    los_update_ctr = 0
 
     logging.basicConfig(format='%(levelname)s: %(message)s',
                         level=logging.DEBUG)
@@ -127,25 +127,25 @@ def test_resampling_prox():
     yaml_data = yaml.safe_load(YAML_STRING)
     run_crossing_prox_test(yaml_data)
 
-    assert abe_update_ctr == 2  # one for each aircraft
+    assert los_update_ctr == 2  # one for each aircraft
 
     logging.info("*** resampling test 2 ***")
     # vary time offsets of the test aircraft so they don't intersect.
     JSON_STRING_PLANE11_BEFORE = '{"now": 1661692167, "alt_baro": 4000, "gscp": 128, "lat": 39.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d2"}\n'
     run_crossing_prox_test(yaml_data)
-    assert abe_update_ctr == 2  # no change
+    assert los_update_ctr == 2  # no change
 
     logging.info("*** resampling test 3 ***")
     run_singlepoint_prox_test(yaml_data)
-    assert abe_update_ctr == 4
+    assert los_update_ctr == 4
 
     logging.info("*** resampling test 4 ***")
     run_singlepoint_prox_test_with_expiry(yaml_data)
-    assert abe_update_ctr == 4  # no change
+    assert los_update_ctr == 4  # no change
 
 def run_crossing_prox_test(yaml_data):
     adsb_actions = AdsbActions(yaml_data, resample=True)
-    adsb_actions.register_callback("abe_update_cb", abe_update_cb)
+    adsb_actions.register_callback("los_update_cb", los_update_cb)
 
     adsb_actions.loop(JSON_STRING_PLANE11_BEFORE)
     adsb_actions.loop(JSON_STRING_PLANE11_AFTER)
@@ -157,7 +157,7 @@ def run_crossing_prox_test(yaml_data):
 def run_singlepoint_prox_test(yaml_data):
     # plane 13 in the middle with only one data point, plane 12 crosses
     adsb_actions = AdsbActions(yaml_data, resample=True)
-    adsb_actions.register_callback("abe_update_cb", abe_update_cb)
+    adsb_actions.register_callback("los_update_cb", los_update_cb)
 
     adsb_actions.loop(JSON_STRING_PLANE12_BEFORE)
     adsb_actions.loop(JSON_STRING_PLANE13_CENTRAL)
@@ -170,7 +170,7 @@ def run_singlepoint_prox_test_with_expiry(yaml_data):
     OLD_CENTRAL_PLANE = '{"now": 1661692008, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d4"}\n'
 
     adsb_actions = AdsbActions(yaml_data, resample=True)
-    adsb_actions.register_callback("abe_update_cb", abe_update_cb)
+    adsb_actions.register_callback("los_update_cb", los_update_cb)
 
     adsb_actions.loop(JSON_STRING_PLANE12_BEFORE)
     adsb_actions.loop(OLD_CENTRAL_PLANE)

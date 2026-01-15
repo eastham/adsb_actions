@@ -224,7 +224,7 @@ class Appsheet:
             self.add_op(ac_ref, time.time(), False,
                         "Arrival", "Test Flight")
 
-    def add_cpe(self, flight1, flight2, latdist, altdist, time, lat, long):
+    def add_los(self, flight1, flight2, latdist, altdist, time, lat, long):
         # XXX needs test w/ lat /long addition
         optime = datetime.datetime.fromtimestamp(time)
 
@@ -242,14 +242,14 @@ class Appsheet:
 
         try:
             if not self.use_fake_calls:
-                ret = self.sendop(self.config.private_vars["appsheet"]["cpe_url"], body)
+                ret = self.sendop(self.config.private_vars["appsheet"]["los_url"], body)
                 return ret["Rows"][0]["Row ID"]
             return FAKE_KEY
         except Exception as e:
-            logger.warning("add_cpe op raised exception: " + str(e))
+            logger.warning("add_los op raised exception: " + str(e))
         return None
 
-    def update_cpe(self, flight1, flight2, latdist, altdist, time, rowid):
+    def update_los(self, flight1, flight2, latdist, altdist, time, rowid):
         optime = datetime.datetime.fromtimestamp(time)
         body = copy.deepcopy(REQUEST_BODY)
         body["Action"] = "Edit"
@@ -265,11 +265,11 @@ class Appsheet:
 
         try:
             if not self.use_fake_calls:
-                ret = self.sendop(self.config.private_vars["appsheet"]["cpe_url"], body)
+                ret = self.sendop(self.config.private_vars["appsheet"]["los_url"], body)
                 return ret
             return FAKE_KEY
         except Exception as e:
-            logger.warning("update_cpe op raised exception: " + str(e))
+            logger.warning("update_los op raised exception: " + str(e))
         return None
 
     def sendop(self, url, body, timeout=30):
@@ -318,7 +318,7 @@ if __name__ == "__main__":
     parser.add_argument("--delete_all_ops", action="store_true")
     parser.add_argument("--delete_all_pilots", action="store_true")
     parser.add_argument("--delete_all_aircraft", action="store_true")
-    parser.add_argument("--delete_all_abes", action="store_true")
+    parser.add_argument("--delete_all_los", action="store_true")
     parser.add_argument("--delete_all_notes", action="store_true")
     parser.add_argument("--add_aircraft", help="add all aircraft listed in file, one per line")
     parser.add_argument("--delete_aircraft", help="delete all copies of argument aircraft")
@@ -350,8 +350,8 @@ if __name__ == "__main__":
         confirm = input("Deleting all aircraft. Are you sure? (y/n): ")
         if confirm.lower() == 'y':
             as_instance.delete_all_entries("aircraft")
-    if args.delete_all_abes:
-        confirm = input("Deleting all ABEs. Are you sure? (y/n): ")
+    if args.delete_all_los:
+        confirm = input("Deleting all LOS events. Are you sure? (y/n): ")
         if confirm.lower() == 'y':
             as_instance.delete_all_entries("cpe")
     if args.delete_all_notes:

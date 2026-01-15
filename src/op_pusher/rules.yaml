@@ -45,7 +45,7 @@
         print: True
         callback: "landing"
 
-    # handle ABE's (close-proximity events)
+    # handle LOS (Loss of Separation / close-proximity events)
     prox:
       conditions:
         min_alt: 4000
@@ -53,9 +53,9 @@
         regions: [ "Generic Gate Air", "Vicinity" ]
         proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
         exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
-        exclude_aircraft_list: ground_vehicles 
+        exclude_aircraft_list: ground_vehicles
       actions:
-        callback: abe_update_cb
+        callback: los_update_cb
 
 
     # This rule will trigger a slack message when a banned aircraft is seen.

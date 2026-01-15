@@ -213,7 +213,7 @@ def setup(focus_q, admin_q):
     adsb_actions.register_callback(
         "aircraft_remove_cb", controllerapp.remove_strip)
     adsb_actions.register_callback(
-        "abe_update_cb", controllerapp.annotate_strip)
+        "los_update_cb", controllerapp.annotate_strip)
 
     read_thread = threading.Thread(target=adsb_actions.loop,
         kwargs={'string_data': json_data, 'delay': float(args.delay)})

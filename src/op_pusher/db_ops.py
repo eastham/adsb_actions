@@ -17,8 +17,8 @@ class Database:
         self.lookup_db_call = None
         self.add_op_db_call = None
         self.add_aircraft_db_call = None
-        self.add_abe_call = None
-        self.update_abe_call = None
+        self.add_los_call = None
+        self.update_los_call = None
         self.enter_fake_mode = None
 
         if USE_APPSHEET:
@@ -34,8 +34,8 @@ class Database:
         self.lookup_db_call = APPSHEET.aircraft_lookup
         self.add_op_db_call = APPSHEET.add_op
         self.add_aircraft_db_call = APPSHEET.add_aircraft
-        self.add_abe_call = APPSHEET.add_cpe
-        self.update_abe_call = APPSHEET.update_cpe
+        self.add_los_call = APPSHEET.add_los
+        self.update_los_call = APPSHEET.update_los
         self.enter_fake_mode = APPSHEET.enter_fake_mode
 
 DATABASE = Database()
@@ -78,19 +78,19 @@ def lookup_or_create_aircraft(flight):
 
     return flight.external_id
 
-def add_abe(flight1, flight2, latdist, altdist):
+def add_los(flight1, flight2, latdist, altdist):
     flight1_internal_id = lookup_or_create_aircraft(flight1)
     flight2_internal_id = lookup_or_create_aircraft(flight2)
 
-    if DATABASE.add_abe_call:
-        return DATABASE.add_abe_call(flight1_internal_id, flight2_internal_id,
-            latdist, altdist, flight1.lastloc.now, flight1.lastloc.lat, 
+    if DATABASE.add_los_call:
+        return DATABASE.add_los_call(flight1_internal_id, flight2_internal_id,
+            latdist, altdist, flight1.lastloc.now, flight1.lastloc.lat,
             flight1.lastloc.lon)
     return None
 
-def update_abe(flight1, flight2, latdist, altdist, create_time, id):
+def update_los(flight1, flight2, latdist, altdist, create_time, id):
     flight1_internal_id = lookup_or_create_aircraft(flight1)
     flight2_internal_id = lookup_or_create_aircraft(flight2)
-    if DATABASE.update_abe_call:
-        DATABASE.update_abe_call(flight1_internal_id, flight2_internal_id,
+    if DATABASE.update_los_call:
+        DATABASE.update_los_call(flight1_internal_id, flight2_internal_id,
                                 latdist, altdist, create_time, id)

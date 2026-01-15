@@ -29,7 +29,7 @@
       actions:
         expire_callback: aircraft_remove_cb
 
-    # callback for aircraft that are in close proximity of one another
+    # callback for aircraft that are in close proximity (LOS - Loss of Separation)
     prox:
       conditions:
         exclude_aircraft_substrs: ["N10C", "N10D"]
@@ -39,4 +39,4 @@
         proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
       actions:
         print: True
-        callback: abe_update_cb
+        callback: los_update_cb
