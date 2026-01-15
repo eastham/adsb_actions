@@ -24,11 +24,11 @@ These actions can then:
 - Whatever else you can imagine!
 
 <h3>Overview</h3>
-Each YAML rule contains **conditions** and **actions**. 
+Each YAML rule contains <strong>conditions</strong> and <strong>actions</strong>. 
 <p>
-**conditions** are an ANDed set, and can include altitude ranges, lat/long proximity, location within a region specified in a KML file, etc.
+<strong>conditions</strong> are an ANDed set, and can include altitude ranges, lat/long proximity, location within a region specified in a KML file, etc.
 <p>
-**actions** include Slack, paging / JSON webhook, and python callback.  See CONFIG_INSTRUCTIONS.yaml for more info.
+<strong>actions</strong> include Slack, paging / JSON webhook, and python callback.  See CONFIG_INSTRUCTIONS.yaml for more info.
 
 <h3>Example YAML config:</h3>
 This will trigger a callback and save information to stdout when aircraft N12345 matches certain location criteria:<p>
