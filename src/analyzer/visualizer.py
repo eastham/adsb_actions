@@ -15,8 +15,6 @@ cat 2022.csv | python3 ../visualizer.py  --map-image ./map_anno.png
 import argparse
 import folium
 from folium.plugins import HeatMap
-# import geopandas as gpd  # Not currently used
-from shapely.geometry import Polygon, Point
 import webbrowser
 import os
 import sys

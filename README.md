@@ -57,8 +57,8 @@ Each YAML rule contains **conditions** and **actions**.
 1. (download or clone code from github)
 1. python3 -m venv .venv
 1. source .venv/bin/activate
-1. pip3 install -e .
-1. (install geos native library: https://libgeos.org/usage/install/ -- "apt-get install geos" or "libgeos-c1v5" may do it)
+1. pip3 install -e .  # Core only (no GUI or analysis tools)
+1. pip3 install -e ".[all]"  # All features
 1. pytest -s tests/test_1hr.py
 
 <h3>Quick initial testing, assuming you have a radio with readsb running:</h3>

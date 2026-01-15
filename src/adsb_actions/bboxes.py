@@ -11,11 +11,10 @@ import warnings
 import logging
 
 from dataclasses import dataclass
-from shapely.geometry import Point, Polygon
+from typing import List, Tuple
 # for fastkml, which breaks in newer versions
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 from fastkml import kml, features, containers
-
 from .adsb_logger import Logger
 
 logger = logging.getLogger(__name__)
@@ -25,7 +24,7 @@ LOGGER = Logger()
 @dataclass
 class Bbox:
     """A single bounding box defined by a polygon, altitude range, and heading range."""
-    polygon: Polygon
+    polygon_coords: List[Tuple[float, float]]  # List of (x, y) coordinates
     minalt: int
     maxalt: int
     starthdg: int
@@ -81,7 +80,7 @@ class Bboxes:
                     name, minalt, maxalt, starthdg, endhdg)
 
                 coords = list(feature.kml_geometry.geometry.exterior.coords)
-                newbox = Bbox(polygon=Polygon(coords),
+                newbox = Bbox(polygon_coords=coords,
                     minalt=minalt, maxalt=maxalt, starthdg=starthdg,
                     endhdg=endhdg, name=name)
                 self.boxes.append(newbox)
@@ -96,7 +95,7 @@ class Bboxes:
     def contains(self, lat, long, hdg, alt):
         """returns index of first matching bounding box, or -1 if not found"""
         for i, box in enumerate(self.boxes):
-            if (box.polygon.contains(Point(long,lat)) and
+            if (point_in_polygon(long, lat, box.polygon_coords) and
                 Bboxes.hdg_contains(hdg, box.starthdg, box.endhdg)):
                 if (alt >= box.minalt and alt <= box.maxalt):
                     return i
@@ -112,3 +111,25 @@ class Bboxes:
         except (TypeError, ArithmeticError):
             logger.critical("Math error in heading check")
             return False
+
+def point_in_polygon(x, y, polygon_coords):
+    """Ray-casting algorithm for point-in-polygon test.
+
+    Args:
+        x: X coordinate (longitude) of the point
+        y: Y coordinate (latitude) of the point
+        polygon_coords: List of (x, y) tuples defining the polygon vertices
+
+    Returns:
+        True if point is inside the polygon, False otherwise
+    """
+    n = len(polygon_coords)
+    inside = False
+    j = n - 1
+    for i in range(n):
+        xi, yi = polygon_coords[i][:2]  # Handle coords with optional z value
+        xj, yj = polygon_coords[j][:2]
+        if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
+            inside = not inside
+        j = i
+    return inside

@@ -24,14 +24,27 @@ dependencies = [
     "PyYAML >= 6.0.1",
     "icao-nnumber-converter-us >= 0.1.0",
     "geopy >= 2.4.1",
-    "Shapely >= 2.1.2",
     "lxml >= 4.9.4",
     "fastkml >= 1.4.0",
     "requests >= 2.31.0",
+    "prometheus_client >= 0.20.0",
+    "pytest >= 8.1.1",
+]
+
+[project.optional-dependencies]
+gui = [
     "Kivy == 2.3.0",
     "kivymd == 1.1.1",
-    "pytest >= 8.1.1",
-    "prometheus_client >= 0.20.0",
+]
+analysis = [
+    "folium >= 0.20.0",
+    "numpy >= 2.3.1",
+    "scipy >= 1.11.0",
+]
+all = [
+    "Kivy == 2.3.0",
+    "kivymd == 1.1.1",
+    "folium >= 0.20.0",
     "numpy >= 2.3.1",
     "scipy >= 1.11.0",
 ]
