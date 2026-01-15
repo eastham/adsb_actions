@@ -10,7 +10,6 @@ These actions can then:
 - Drive a UI:
 
 &nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/stripview.png?raw=true" alt="Screenshot of Stripview">
-
 &nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/monitor.png?raw=true" alt="Screenshot of monitor">
 
 - Do real-time analysis, for example detect loss-of-separation events:
