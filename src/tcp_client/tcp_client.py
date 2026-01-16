@@ -1,9 +1,11 @@
-"""Monitor ADS-B data from API and process it.
-API calls are made based on any rule with a latlongring condition in the 
-yaml file.
+"""Monitor ADS-B data from an internet API and apply adsb_actions 
+rules/actions as usual.
+
+API requests for aircraft data are made based on all "latlongring" conditions
+found in the yaml file.
 
 Usage:
-    python3 monitor.py <yaml_path>
+    python3 tcp_client.py <yaml_path>
 """
 
 import argparse
