@@ -43,8 +43,7 @@ Then restart readsb: `sudo systemctl restart readsb`
 ### Step 2: Run the simple monitor
 
 ```bash
-cd src/simple
-python3 main.py --ipaddr localhost --port 30006 basic_rules.yaml
+python3 src/tools/examples/simple_monitor.py --ipaddr localhost --port 30006 examples/generic/basic_rules.yaml
 ```
 
 You should see aircraft printed to the console every minute (based on the `cooldown: 1` in basic_rules.yaml).
@@ -83,7 +82,7 @@ If you don't need these, you don't need to configure them. The library will log 
 1. **Customize rules**: Edit the YAML to match your use case
 2. **Add KML regions**: Define geographic areas of interest
 3. **Write callbacks**: Create Python functions triggered by rules
-4. **Try the GUI**: `cd src/stripview && python3 controller.py --help`
+4. **Try the GUI**: `python3 src/applications/stripview/controller.py --help`
 
 ## Environment Variables
 
@@ -113,18 +112,24 @@ Make sure you've activated the virtual environment:
 source .venv/bin/activate
 ```
 
-## Example Projects
+## Project Structure
 
 | Directory | Description |
 |-----------|-------------|
-| `src/simple/` | Minimal example - just prints aircraft |
-| `src/analyzer/` | Analysis tools, replay, visualization |
-| `src/stripview/` | Kivy-based flight strip GUI |
-| `src/airport_monitor*/` | Airport monitoring applications |
+| `src/adsb_actions/` | Core library - rule engine, flight tracking |
+| `src/core/database/` | Database abstraction layer |
+| `src/core/network/` | Network utilities (TCP client) |
+| `src/tools/analysis/` | Analysis tools - replay, visualization, hotspot detection |
+| `src/tools/examples/` | Example scripts - simple_monitor, generic_analyzer |
+| `src/applications/airport_monitor/` | Headless airport monitoring service |
+| `src/applications/flight_info_display/` | Kivy-based FIDS (Flight Info Display) |
+| `src/applications/stripview/` | Kivy-based ATC flight strip GUI |
+| `examples/88nv/` | Example configs for 88NV airport |
+| `examples/generic/` | Generic example configs |
 
 
 <h3> More things to try: </h3>
 
-1. Tests are available: pytest -s tests/*.py
-1. Invoke a sample UI: cd src/stripview ;  python3 controller.py -- --testdata ../../tests/20minutes.json --delay .2 --rules ui.yaml ../../tests/brc_large_regions.kml
-1. Command lines for other sample applications can be found in launch.json.
+1. Tests are available: `pytest -s tests/*.py`
+2. Invoke a sample UI: `python3 src/applications/stripview/controller.py --testdata tests/20minutes.json --delay .2 --rules examples/88nv/stripview_ui.yaml`
+3. Command lines for other sample applications can be found in launch.json.

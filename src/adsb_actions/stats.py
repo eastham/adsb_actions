@@ -11,7 +11,7 @@ class Stats:
 
     webhooks_fired: int = 0
 
-    # Stats below here come from the op_pusher module, perhaps should be
+    # Stats below here come from the airport_monitor module, perhaps should be
     # separated out someday.
     takeoffs: int = 0
     popup_takeoffs: int = 0

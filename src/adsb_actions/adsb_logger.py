@@ -31,7 +31,7 @@ class Logger:
             logging.StreamHandler(),
             logging.handlers.SysLogHandler()
 #            logging.handlers.SysLogHandler(address='/dev/log')
-    #        logging.FileHandler("log/op_pusher.log"),
+    #        logging.FileHandler("log/adsb_actions.log"),
         ]
     )
 

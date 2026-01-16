@@ -2,8 +2,8 @@ Support for offline playback and analysis, taking data from
 readsb's disk format.
 
 analyze_from_files.py: Offline flight operation analyzer,
-tracking takeoffs, landings, etc.  See src/op_pusher for an
-example of an online analyzer. 
+tracking takeoffs, landings, etc.  See src/applications/airport_monitor
+for an example of an online analyzer. 
 
 Example output:
 

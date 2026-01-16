@@ -38,8 +38,8 @@ var/
 *.out
 
 # Analysis-generated HTML and maps
-src/analyzer/*.html
-src/analyzer/*.png
+src/tools/analysis/*.html
+src/tools/analysis/*.png
 src/adsb_actions/*.html
 
 # ML model files
