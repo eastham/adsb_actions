@@ -17,28 +17,39 @@ CONFIG = Config()
 SEND_SLACK = True
 SEND_PAGE = True
 
-def send_slack(channel: str, text: str):
+def send_slack(channel: str, text: str) -> bool:
     """Send a message to a slack channel.
 
     Args:
         channel (str): The name of the private config var identifying the
                        slack channel to send to.
         text (str): The message to send.
+
+    Returns:
+        bool: True if message was sent successfully, False otherwise.
     """
     if not SEND_SLACK:
         logger.warning("Skipping slack send of: " + text)
-        return
+        return False
+
+    if not CONFIG.private_vars:
+        logger.debug("Slack skipped - no private.yaml configured")
+        return False
+
+    if channel not in CONFIG.private_vars:
+        logger.warning(f"Slack channel '{channel}' not found in private.yaml")
+        return False
 
     logger.info(f"Sending slack msg to channel {channel}: {text}")
     try:
         webhook = CONFIG.private_vars[channel]
-    except:     # pylint: disable=bare-except
-        logger.error(f"Failed: Channel \"{channel}\" not found in config")
-        return
-
-    payload = {"text": text}
-    response = requests.post(webhook, json.dumps(payload), timeout=10)
-    logger.debug(f"Slack response: {response}")
+        payload = {"text": text}
+        response = requests.post(webhook, json.dumps(payload), timeout=10)
+        logger.debug(f"Slack response: {response}")
+        return response.status_code == 200
+    except Exception as e:  # pylint: disable=broad-except
+        logger.error(f"Slack send failed: {e}")
+        return False
 
 
 def send_page(recipients: str, msg: str):
@@ -59,39 +70,56 @@ def send_page(recipients: str, msg: str):
             result = False
     return result
 
-def send_one_page(recipient: str, msg: str):
-    """Send a page to a single recipient."""
+def send_one_page(recipient: str, msg: str) -> bool:
+    """Send a page to a single recipient.
 
+    Returns:
+        bool: True if page was sent successfully, False otherwise.
+    """
     if not SEND_PAGE:
         logger.warning("Skipping page send")
         return False
+
+    if not CONFIG.private_vars:
+        logger.debug("Paging skipped - no private.yaml configured")
+        return False
+
+    # Check for required paging configuration
+    required_keys = ['page_recipients', 'page_user', 'page_pw', 'page_url']
+    for key in required_keys:
+        if key not in CONFIG.private_vars:
+            logger.warning(f"Paging not configured - '{key}' missing from private.yaml")
+            return False
 
     # lookup the recipient's id from the config
     try:
         recipient_id = CONFIG.private_vars['page_recipients'][recipient.lower()]
     except KeyError:
-        logger.error(f"Failed: Recipient \"{recipient}\" not found in config")
+        logger.warning(f"Recipient '{recipient}' not found in page_recipients config")
         return False
 
     logger.info(f"Sending page to {recipient_id}: {msg}")
-    body = {
-    "username": CONFIG.private_vars['page_user'],
-    "password": CONFIG.private_vars['page_pw'],
-    "sendpage": {
-        "recipients": {
-            "people":
-                [str(recipient_id)]
-        },
-        "message":
-            msg
-    }}
+    try:
+        body = {
+            "username": CONFIG.private_vars['page_user'],
+            "password": CONFIG.private_vars['page_pw'],
+            "sendpage": {
+                "recipients": {
+                    "people": [str(recipient_id)]
+                },
+                "message": msg
+            }
+        }
 
-    response = requests.Session().post(CONFIG.private_vars['page_url'],
-                                       json = body)
+        response = requests.Session().post(CONFIG.private_vars['page_url'],
+                                           json=body, timeout=30)
 
-    success = "success" in response.json().get('status')
-    logger.info("Page success: %s, response: %s", success, response.text)
-    return success
+        success = "success" in response.json().get('status', '')
+        logger.info("Page success: %s, response: %s", success, response.text)
+        return success
+    except Exception as e:  # pylint: disable=broad-except
+        logger.error(f"Page send failed: {e}")
+        return False
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:

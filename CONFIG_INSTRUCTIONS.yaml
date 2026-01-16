@@ -1,3 +1,6 @@
+# This file documents all possible configuration options in the yaml rule/action 
+# files.   For a more concise example, see src/simple/basic_rules.yaml .
+
   config:
     kmls:  # optional KML files that specify geographic regions.  aircraft may be in 0-1 regions per file at any time
       - tests/test1.kml 
@@ -9,7 +12,8 @@
   rules:
     arbitrary_rulename:
       conditions:
-        # when should we trigger this rule?  AND expression -- all conditions must be met.
+        # When should we trigger this rule?  AND expression -- all conditions must be met.
+        # NOTE: yaml only allows one of each condition type per rule.
         enabled: True        # if False, this rule will never match (useful for temporarily disabling rules)
         min_alt: 4000        # feet MSL, must be >= to match
         max_alt: 10000       # feet MSL, must be <= to match
@@ -24,14 +28,14 @@
         changed_regions: strict  # "strict": both positions must be in some region
         latlongring: [20, 40.763537, -119.2122323] # radius in nm, lat, long
         proximity: [400, .3] # alt separation in feet, lateral separation in nm
-        cooldown: 1          # minutes to wait before matching again for this a/c
+        cooldown: 1          # minutes to wait before matching again for this aircraft
         rule_cooldown: 1     # minutes to wait before matching again for this rule
         has_attr: wd         # last report has a json element matching the string
         min_time: 400        # earliest UTC time, in 24h format, but don't use leading 0's
         max_time: 1600       # latest UTC time, in 24h format, but don't use leading 0's
-        time_ranges: [ "0000-0130", "1330-2400" ] # match if in any of these time ranges, in 24h format
+        time_ranges: [ "0000-0130", "1330-2400" ] # match if in any of these time ranges, in UTC/24h format
       actions:
-        # what should we do when triggered?  Note only one action per type will fire.
+        # what should we do when triggered?  NOTE: only one action per type will fire.
         callback: ground_cb  # call a function as specified by AdsbActions.register_callback()
         expire_callback: expire_cb  # callback for when the flight is being evicted
         print: True          # print info about this aircraft to console
@@ -39,7 +43,29 @@
         note: ~              # clear note
         track: True          # track execution statistics for this rule, to be printed later
         webhook: ['slack', 'slack_channel'] # send a message to a slack channel specified in private.yaml
-        webhook: ['page', 'pager1 pager2'] # send a message to two pagers
+        webhook: ['page', 'pager1 pager2']  # send a message to two pagers
+        webhook: ['custom', 'recipient']    # use a custom webhook handler registered via register_webhook_handler()
+        shell: "echo 'Aircraft {flight_id}'"  # run a shell command (see below for variables)
+
+# Shell action variable substitution:
+# The shell action supports these variables (all sanitized with shlex.quote for security):
+#   {flight_id} - tail number/callsign
+#   {hex}       - ICAO hex code
+#   {alt}       - altitude in feet (integer)
+#   {lat}       - latitude (float)
+#   {lon}       - longitude (float)
+#   {speed}     - ground speed (integer)
+#   {track}     - heading (integer)
+#   {rule}      - rule name that matched
+# Example: shell: "echo '{flight_id} at {alt}ft' >> ~/aircraft.log"
+# Note: The YAML file is trusted. Variable values are sanitized to prevent injection
+#       from ADS-B data. Commands have a 10-second timeout.
+
+# Custom webhook handlers:
+# You can register custom webhook types in your callback file:
+#   from adsb_actions.webhooks import register_webhook_handler
+#   def my_handler(recipient, message): ...
+#   register_webhook_handler('custom', my_handler)
 
 # Other notes:
 # - Callbacks take one arg (the flight) unless matching on a proximity condition -- in that

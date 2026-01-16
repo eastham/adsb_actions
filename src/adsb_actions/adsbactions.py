@@ -28,6 +28,8 @@ from .bboxes import Bboxes
 from .stats import Stats
 from .location import Location
 from .resampler import Resampler
+from .webhooks import register_webhook_handler
+from .page import send_slack, send_page
 
 from prometheus_client import start_http_server, Gauge
 
@@ -87,6 +89,10 @@ class AdsbActions:
 
         if mport:
             start_http_server(mport)
+
+        # Register default webhook handlers
+        register_webhook_handler('slack', send_slack)
+        register_webhook_handler('page', send_page)
 
     def do_resampled_prox_checks(self, gc_callback) -> list:
         """Complete resampling to detect proximity events between position

@@ -1,4 +1,5 @@
-# Just print all aircraft seen every minute.
+# Just print info about all aircraft seen below 40000 feet, maximum of one 
+# print per aircraft per minute.
 
   rules:
     print_all_aircraft:

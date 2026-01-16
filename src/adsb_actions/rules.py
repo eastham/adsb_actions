@@ -2,12 +2,14 @@
 
 import datetime
 import logging
+import shlex
+import subprocess
 from typing import Callable
 from .flight import Flight
 from .stats import Stats
 from .ruleexecutionlog import RuleExecutionLog, ExecutionCounter
 from .adsb_logger import Logger
-from .page import send_page, send_slack
+from .webhooks import send_webhook
 
 logger = logging.getLogger(__name__)
 logger.level = logging.INFO
@@ -254,7 +256,7 @@ class Rules:
     def actions_valid(self, actions: dict):
         """Check for invalid or unknown actions, return True if valid."""
         VALID_ACTIONS = ['webhook', 'print', 'callback', 'note', 'track',
-                         'expire_callback']
+                         'expire_callback', 'shell']
 
         for action in actions.keys():
             if action not in VALID_ACTIONS:
@@ -275,21 +277,46 @@ class Rules:
                 Stats.webhooks_fired += 1
                 try:
                     [action_type, action_recipient] = action_value
-                except Exception: # pylint: disable=broad-except
+                except Exception:  # pylint: disable=broad-except
                     logger.error("Invalid webhook action: %s", action_value)
                     continue
 
-                if 'slack' == action_type:
+                # Build message based on webhook type
+                if action_type == 'slack':
                     text = (f"Rule {rule_name} matched for: {flight.to_str()}\n"
-                        f"LIVE LINK: {flight.to_link()}\n"
-                        f"RECORDING: {flight.to_recording()}")
-                    send_slack(action_recipient, text)
-                elif 'page' == action_type:
+                            f"LIVE LINK: {flight.to_link()}\n"
+                            f"RECORDING: {flight.to_recording()}")
+                else:
+                    # Generic/page format
                     text = (f"Rule {rule_name}: {flight.lastloc.to_short_str()} "
                             f"{str(flight.inside_bboxes)}")
-                    send_page(action_recipient, text)
-                else:
-                    logger.error("Unknown webhook action type: %s", action_type)
+
+                if not send_webhook(action_type, action_recipient, text):
+                    logger.debug("Webhook '%s' was not sent (not configured or failed)",
+                                action_type)
+
+            elif 'shell' == action_name:
+                # Execute shell command with sanitized variable substitution
+                try:
+                    cmd = action_value.format(
+                        flight_id=shlex.quote(flight.flight_id or ''),
+                        hex=shlex.quote(flight.lastloc.hex or ''),
+                        alt=int(flight.lastloc.alt_baro or 0),
+                        lat=float(flight.lastloc.lat or 0),
+                        lon=float(flight.lastloc.lon or 0),
+                        speed=int(flight.lastloc.gs or 0),
+                        track=int(flight.lastloc.track or 0),
+                        rule=shlex.quote(rule_name),
+                    )
+                    logger.debug("Executing shell command: %s", cmd)
+                    subprocess.run(cmd, shell=True, timeout=10,
+                                   capture_output=True, check=False)
+                except subprocess.TimeoutExpired:
+                    logger.warning("Shell command timed out: %s", cmd[:50])
+                except KeyError as e:
+                    logger.error("Shell command has unknown variable: %s", e)
+                except Exception as e:  # pylint: disable=broad-except
+                    logger.error("Shell command failed: %s", e)
 
             elif 'print' == action_name:
                 ts_utc = datetime.datetime.utcfromtimestamp(

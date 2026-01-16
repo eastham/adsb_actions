@@ -1,6 +1,17 @@
 #!/usr/bin/python3
-"""Make calls to appsheet to get and set database data.
-Also can be called from the command line to make certain db calls."""
+"""AppSheet implementation of DatabaseInterface.
+
+This is a reference implementation showing how to connect adsb-actions
+to an external database. Copy and modify for your own backend.
+
+Requires private.yaml with appsheet credentials:
+    appsheet:
+      accesskey: "your-key"
+      aircraft_url: "https://..."
+      ops_url: "https://..."
+
+Can also be called from the command line for database management.
+"""
 
 import copy
 import json
@@ -13,6 +24,7 @@ import sys
 import pprint
 import requests
 from adsb_actions.adsb_logger import Logger
+from db.database_interface import DatabaseInterface
 
 logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
@@ -20,7 +32,7 @@ logger = logging.getLogger(__name__)
 LOGGER = Logger()
 
 from adsb_actions.config import Config
-from prometheus_client import start_http_server, Gauge, Counter
+from prometheus_client import Gauge
 
 # define metrics for Prometheus
 appsheet_error_gauge = Gauge('appsheet_error', 'Appsheet errors', [ 'type', 'error'])
@@ -35,21 +47,45 @@ REQUEST_BODY = {
 }
 
 # Testing flags/constants
-USE_FAKE_CALLS = True        # don't actually send anything to server
+USE_FAKE_CALLS = False        # don't actually send anything to server
 DELAYTEST = False            # add random delay for threading testing
 FAKE_KEY = "XXXfake keyXXX"  # fake db key to use if real db calls disabled
 DUMMY_AIRCRAFT = "N1911"     # aircraft to use for dummy ops
 
-class Appsheet:
-    def __init__(self):
+class AppsheetDatabase(DatabaseInterface):
+    """AppSheet implementation of DatabaseInterface.
+
+    This is a reference implementation for connecting to AppSheet.
+    Use as a template for creating your own database backend.
+    """
+
+    def __init__(self, use_fake_calls: bool = None):
+        """Initialize AppSheet connection.
+
+        Args:
+            use_fake_calls: If True, don't make actual API calls.
+                           Defaults to USE_FAKE_CALLS module constant.
+        """
         self.config = Config()
-        self.headers = {"ApplicationAccessKey":
-            self.config.private_vars["appsheet"]["accesskey"]}
-        self.use_fake_calls = USE_FAKE_CALLS
+        self.use_fake_calls = use_fake_calls if use_fake_calls is not None else USE_FAKE_CALLS
+        self.pp = pprint.PrettyPrinter(indent=4)
+
+        # Only set up headers if we have appsheet config
+        if (self.config.private_vars and
+            'appsheet' in self.config.private_vars and
+            'accesskey' in self.config.private_vars['appsheet']):
+            self.headers = {"ApplicationAccessKey":
+                self.config.private_vars["appsheet"]["accesskey"]}
+        else:
+            self.headers = {}
+            if not self.use_fake_calls:
+                logger.warning("AppSheet credentials not found in private.yaml - "
+                              "entering fake mode")
+                self.use_fake_calls = True
+
         if self.use_fake_calls:
             logger.warning("NOTE: using fake database calls, "
                            "no actions will be taken")
-        self.pp = pprint.PrettyPrinter(indent=4)
 
     def pprint_format(self, arg):
         """return the complex arg as a pretty-printed string"""
@@ -78,7 +114,7 @@ class Appsheet:
                 return ret
             return FAKE_KEY
         except Exception as e:
-            logger.warning("aircraft_lookup op raised exception" + str(e))
+            logger.warning("aircraft_lookup op raised exception: %s", e)
 
         return None
 
@@ -290,10 +326,9 @@ class Appsheet:
             url,
             headers=self.headers, json=body, timeout=timeout)
         if response.status_code != 200:
-            logger.warning("sendop non-200 return: %s",
-                            self.pprint_format(response))
-            raise requests.HTTPError("op returned non-200 code: " +
-                                     str(response))
+            logger.warning("sendop (%s) non-200 return: status=%s, body=%s",
+                            caller, response.status_code, response.text)
+            raise requests.HTTPError(f"status {response.status_code}: {response.text}")
 
         if not response.text:
             logger.debug("Empty response from appsheet")
@@ -307,10 +342,15 @@ class Appsheet:
 
         return response_dict
 
+
+# Backward compatibility alias
+Appsheet = AppsheetDatabase
+
+
 if __name__ == "__main__":
     logger.info('System started.')
 
-    as_instance = Appsheet()
+    as_instance = AppsheetDatabase()
 
     parser = argparse.ArgumentParser(description="match flights against kml bounding boxes")
     parser.add_argument("--get_all_ops", action="store_true")

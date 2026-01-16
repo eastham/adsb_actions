@@ -1,6 +1,7 @@
 import logging
 from los import process_los_launch, LOS
-from db_ops import DATABASE, add_op
+from db_ops import add_op
+from db.database_interface import get_database
 from adsb_actions.stats import Stats
 from prometheus_client import Gauge
 
@@ -44,7 +45,7 @@ def register_callbacks(adsb_actions):
     adsb_actions.register_callback("los_update_cb", los_cb)
 
 def enter_db_fake_mode():
-    DATABASE.enter_fake_mode()
+    get_database().enter_fake_mode()
 
 def exit_workers():
     LOS.quit = True

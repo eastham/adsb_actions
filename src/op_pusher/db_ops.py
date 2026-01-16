@@ -1,46 +1,31 @@
-"""Module to call out to external database."""
+"""Module to call out to external database.
+
+This module provides helper functions for database operations, using
+the configured DatabaseInterface backend.
+
+To configure a database backend:
+    from db.database_interface import set_database
+    from db.appsheet_api import AppsheetDatabase
+
+    set_database(AppsheetDatabase(use_fake_calls=False))
+
+If no database is configured, NullDatabase is used (all ops succeed silently).
+"""
+
 import datetime
 import logging
 from adsb_actions.adsb_logger import Logger
+from db.database_interface import get_database
 
 logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
 LOGGER = Logger()
 
-USE_APPSHEET = True   # You can disable actual calls in appsheet_api.py
-TZ_CONVERT = 0  # -7  # UTC conversion for outgoing ops
+TZ_CONVERT = 0  # UTC conversion for outgoing ops (e.g., -7 for PDT)
 
-class Database:
-    """Abstraction layer for different database backends."""
-
-    def __init__(self):
-        self.lookup_db_call = None
-        self.add_op_db_call = None
-        self.add_aircraft_db_call = None
-        self.add_los_call = None
-        self.update_los_call = None
-        self.enter_fake_mode = None
-
-        if USE_APPSHEET:
-            self.appsheet_setup()
-        else:
-            # add other dbs here
-            pass
-
-    def appsheet_setup(self):
-        from db import appsheet_api
-
-        APPSHEET = appsheet_api.Appsheet()
-        self.lookup_db_call = APPSHEET.aircraft_lookup
-        self.add_op_db_call = APPSHEET.add_op
-        self.add_aircraft_db_call = APPSHEET.add_aircraft
-        self.add_los_call = APPSHEET.add_los
-        self.update_los_call = APPSHEET.update_los
-        self.enter_fake_mode = APPSHEET.enter_fake_mode
-
-DATABASE = Database()
 
 def add_op(flight, op, flags):
+    """Add an operation (arrival/departure) to the database."""
     flight_name = flight.flight_id.strip()
     flighttime = datetime.datetime.fromtimestamp(flight.lastloc.now + 7*60*60)
     logger.debug("add_op %s %s at %s", op, flight_name,
@@ -48,15 +33,16 @@ def add_op(flight, op, flags):
 
     aircraft_internal_id = lookup_or_create_aircraft(flight)
 
-    DATABASE.add_op_db_call(aircraft_internal_id, flight.lastloc.now + TZ_CONVERT*60*60,
-        flags, op, flight_name)
+    get_database().add_op(aircraft_internal_id,
+                          flight.lastloc.now + TZ_CONVERT*60*60,
+                          flags, op, flight_name)
+
 
 def lookup_or_create_aircraft(flight):
-    """
-    Return database internal id for flight, checking w/ server if needed,
-    creating if needed.
-    """
+    """Return database internal id for flight, creating if needed.
 
+    Uses local caching on the flight object to avoid repeated lookups.
+    """
     # check local cache
     if flight.external_id:
         return flight.external_id
@@ -65,10 +51,12 @@ def lookup_or_create_aircraft(flight):
     with flight.threadlock:
         if flight.external_id:  # recheck in case we were preempted
             return flight.external_id
-        aircraft_external_id = DATABASE.lookup_db_call(flight.flight_id)
+
+        db = get_database()
+        aircraft_external_id = db.aircraft_lookup(flight.flight_id)
 
         if not aircraft_external_id:
-            aircraft_external_id = DATABASE.add_aircraft_db_call(flight.flight_id)
+            aircraft_external_id = db.add_aircraft(flight.flight_id)
             logger.debug("LOOKUP added aircraft and now has aircraft_external_id %s",
                          aircraft_external_id)
         else:
@@ -78,19 +66,21 @@ def lookup_or_create_aircraft(flight):
 
     return flight.external_id
 
+
 def add_los(flight1, flight2, latdist, altdist):
+    """Add a loss-of-separation event to the database."""
     flight1_internal_id = lookup_or_create_aircraft(flight1)
     flight2_internal_id = lookup_or_create_aircraft(flight2)
 
-    if DATABASE.add_los_call:
-        return DATABASE.add_los_call(flight1_internal_id, flight2_internal_id,
-            latdist, altdist, flight1.lastloc.now, flight1.lastloc.lat,
-            flight1.lastloc.lon)
-    return None
+    return get_database().add_los(flight1_internal_id, flight2_internal_id,
+                                  latdist, altdist, flight1.lastloc.now,
+                                  flight1.lastloc.lat, flight1.lastloc.lon)
 
-def update_los(flight1, flight2, latdist, altdist, create_time, id):
+
+def update_los(flight1, flight2, latdist, altdist, create_time, rowid):
+    """Update an existing LOS record with final values."""
     flight1_internal_id = lookup_or_create_aircraft(flight1)
     flight2_internal_id = lookup_or_create_aircraft(flight2)
-    if DATABASE.update_los_call:
-        DATABASE.update_los_call(flight1_internal_id, flight2_internal_id,
-                                latdist, altdist, create_time, id)
+
+    return get_database().update_los(flight1_internal_id, flight2_internal_id,
+                                     latdist, altdist, create_time, rowid)

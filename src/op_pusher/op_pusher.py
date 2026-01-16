@@ -8,6 +8,9 @@ import op_pusher_helpers
 from prometheus_client import Gauge
 from adsb_actions.adsb_logger import Logger
 
+from db.database_interface import set_database
+from db.appsheet_api import AppsheetDatabase
+
 logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
 LOGGER = Logger()
@@ -33,6 +36,8 @@ def run():
         sys.exit(1)
     if args.ipaddr and args.delay:
         logger.warning("--delay has no effect when ipaddr is given")
+
+    set_database(AppsheetDatabase(use_fake_calls=False))
 
     json_data = None
     if not args.testdata:

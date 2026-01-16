@@ -14,6 +14,7 @@ authors = [
 ]
 description = "A package for taking actions based on ADS-B data"
 readme = "README.md"
+# <3.13: numpy/scipy lack aarch64 wheels for 3.13 (affects Raspberry Pi 5 64-bit)
 requires-python = ">=3.8,<3.13"
 classifiers = [
     "Programming Language :: Python :: 3",

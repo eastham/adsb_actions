@@ -55,25 +55,11 @@ This will trigger a callback and save information to stdout when aircraft N12345
         print: True          # print info about this match to console
 ```
 
-<h3>Installation from github:</h3>
-
-1. (download or clone code from github)
-1. python3 -m venv .venv
-1. source .venv/bin/activate
-1. pip3 install -e .  # Core only (no GUI or analysis tools)
-1. pip3 install -e ".[all]"  # All features
-1. pytest -s tests/test_1hr.py # Analyzes a pre-recorded session
 
 
-<h3>Quick setup with a local readsb instance:</h3>
+**Ready to try it?** See [GETTING_STARTED.md](GETTING_STARTED.md) for a step-by-step setup guide.
 
-1. Add "--net-json-port 30006" to readsb configuration parmaeters (usually found in /etc/default/readsb), this will expose a JSON feed on port 30006
-1. Run "cd src/analyzer; python3 src/adsb_actions/adsbactions.py --ipaddr localhost --port 30006 --callback_definitions=example_callbacks.py example_rules.yaml
-1. You should see output for the aircraft readsb is seeing.
+<h3>Prerequisites</h3>
 
-
-<h3> More things to try: </h3>
-
-1. Tests are available: pytest -s tests/*.py
-1. Invoke a sample UI: cd src/stripview ;  python3 controller.py -- --testdata ../../tests/20minutes.json --delay .2 --rules ui.yaml ../../tests/brc_large_regions.kml
-1. Command lines for other sample applications can be found in launch.json.
+- Python 3.8 or higher
+- An ADS-B data source (readsb, dump1090, etc.) OR use included test data

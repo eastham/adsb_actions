@@ -1,0 +1,51 @@
+# private.yaml.example - Template for optional integrations
+#
+# Copy this file to private.yaml and fill in the values you need.
+# All sections are OPTIONAL - the library works without any of them.
+#
+# Location: Place private.yaml in the project root directory,
+# or set ADSB_PRIVATE_PATH environment variable to a custom location.
+
+# =============================================================================
+# SLACK INTEGRATION
+# =============================================================================
+# Add Slack incoming webhook URLs. The key name is used in YAML rules:
+#   webhook: ['slack', 'alerts_channel']
+#
+# To get a webhook URL:
+# 1. Go to https://api.slack.com/apps
+# 2. Create an app or select existing one
+# 3. Enable "Incoming Webhooks"
+# 4. Add a webhook to your workspace
+
+# alerts_channel: "https://hooks.slack.com/services/YOUR_WORKSPACE/YOUR_CHANNEL/YOUR_SECRET"
+# ops_channel: "https://hooks.slack.com/services/YOUR_WORKSPACE/YOUR_CHANNEL/YOUR_SECRET"
+
+# =============================================================================
+# PAGING INTEGRATION
+# =============================================================================
+# Configure your paging service credentials.
+# Used with: webhook: ['page', 'recipient_name']
+
+# page_url: "https://your-paging-service.com/api/sendpage"
+# page_user: "your_username"
+# page_pw: "your_password"
+
+# Map recipient names to their IDs in your paging system:
+# page_recipients:
+#   manager: 12345
+#   oncall: 67890
+#   team: 11111
+
+# =============================================================================
+# APPSHEET DATABASE INTEGRATION
+# =============================================================================
+# For logging operations to AppSheet. This is a reference implementation -
+# you can create your own DatabaseInterface for other backends.
+
+# appsheet:
+#   accesskey: "your-appsheet-access-key"
+#   aircraft_url: "https://api.appsheet.com/api/v2/apps/YOUR_APP_ID/tables/Aircraft/Action"
+#   pilot_url: "https://api.appsheet.com/api/v2/apps/YOUR_APP_ID/tables/Pilots/Action"
+#   ops_url: "https://api.appsheet.com/api/v2/apps/YOUR_APP_ID/tables/Ops/Action"
+#   los_url: "https://api.appsheet.com/api/v2/apps/YOUR_APP_ID/tables/LOS/Action"

@@ -1,111 +1,90 @@
-"""Module to call out to external database for potential on-screen updates."""
+"""Module to call out to external database for potential on-screen updates.
 
-import sys
+This module provides DbInterface, which queries the configured database
+for aircraft information and calls a UI update callback with the results.
 
-import adsb_logger
-from adsb_logger import Logger
+Custom interpretation logic can be provided via the custom_logic_cb parameter.
+See brc_db_logic.py for an example of custom logic (Burning Man specific).
+"""
 
-logger = adsb_logger.logging.getLogger(__name__)
-#logger.level = adsb_logger.logging.DEBUG
-LOGGER = Logger()
+import logging
 
-USE_APPSHEET = False
-if USE_APPSHEET:
-    sys.path.insert(0, '../db')
-    try:
-        import appsheet_api
-        APPSHEET = appsheet_api.Appsheet()
-    except Exception as e:
-        logger.error("Error importing appsheet_api, disabled: %s", str(e))
-    else:
-        AIRCRAFT_LOOKUP_DB_CALL = APPSHEET.aircraft_lookup
-        PILOT_LOOKUP_DB_CALL = APPSHEET.pilot_lookup
+logger = logging.getLogger(__name__)
 
-else:
-    # add other dbs here
-    pass
+# Import database interface - uses NullDatabase by default if not configured
+from db.database_interface import get_database
+
 
 class DbInterface:
-    def __init__(self, flight, ui_update_cb):
+    """Interface for querying database and updating UI with results.
+
+    Args:
+        flight: The Flight object to look up
+        ui_update_cb: Callback function(note, warning, pilot, code, extra)
+        custom_logic_cb: Optional callback to interpret database results.
+                        If None, uses default logic (just shows if found).
+                        Signature: fn(db_obj, pilot_lookup_fn) ->
+                                   (note_str, warning, pilot_label, code_label)
+    """
+
+    def __init__(self, flight, ui_update_cb, custom_logic_cb=None):
         self.flight = flight
         self.ui_update_cb = ui_update_cb
+        self.custom_logic_cb = custom_logic_cb
 
     def call_database(self):
         """Call the remote database to see if we should update the
         on-screen information for the given flight.  Returned information
         is then passed to the UI via callback.
-        May block, should be run in own thread. """
 
+        May block, should be run in own thread.
+        """
         logger.debug("call_database: %s", self.flight.flight_id)
 
         note_string = ""
         ui_warning = False
         pilot_label = None
         code_label = None
-        ui_warning = False      # turns strip red if True
 
         try:
-            # TODO could optimize: only if unregistered?
-            db_obj = AIRCRAFT_LOOKUP_DB_CALL(self.flight.flight_id, wholeobj=True)
+            db = get_database()
+            db_obj = db.aircraft_lookup(self.flight.flight_id, wholeobj=True)
 
-            if not db_obj:
-                note_string += "* No Reg "
-                ui_warning = True
+            if db_obj:
+                # Store the database row ID for later use
+                if 'Row ID' in db_obj:
+                    self.flight.flags['Row ID'] = db_obj['Row ID']
+
+            if self.custom_logic_cb:
+                # Use custom logic to interpret the database result
+                note_string, ui_warning, pilot_label, code_label = \
+                    self.custom_logic_cb(db_obj, db.pilot_lookup)
             else:
-                # take a note of the db's identifier for later UI calls
-                self.flight.flags['Row ID'] = db_obj['Row ID']
-
-                note_string += "Arrivals=%s " % db_obj['Arrivals']
-
-                if test_dict(db_obj, 'Ban'):
-                    note_string += "*BANNED "
+                # Default logic: just show if aircraft was found
+                if db_obj:
+                    note_string = "Found in DB"
+                    ui_warning = False
+                else:
+                    note_string = "Not in DB"
                     ui_warning = True
 
-                if not test_dict(db_obj, 'IsBxA'):
-                    arr = db_obj['Arrivals']
-                    try:
-                        if int(arr) > 2:
-                            note_string += "* >2 arrivals "
-                    except Exception:
-                        pass
+        except Exception as e:  # pylint: disable=broad-except
+            logger.debug("call_database failed: %s", str(e))
 
-                if not test_dict(db_obj, 'Registered online'):
-                    if not test_dict(db_obj, 'IsBxA') and not test_dict(db_obj, 'Medevac'):
-                        note_string += "* No Reg "
-                        ui_warning = True
+        logger.debug("call_database complete for %s: note %s warn %s",
+                     self.flight.flight_id, note_string, ui_warning)
+        self.ui_update_cb(note_string, ui_warning, pilot_label, code_label, None)
 
-                if test_dict(db_obj, 'Related Notes'):
-                    note_string += "*Notes "
-
-                if test_dict(db_obj, 'IsBxA'):
-                    note_string += "BxA"
-
-                if test_dict(db_obj, 'lead pilot'):
-                    pilot_id = db_obj['lead pilot']
-                    pilot_obj = PILOT_LOOKUP_DB_CALL(pilot_id)
-                    if pilot_obj:
-                        if test_dict(pilot_obj, 'Playa name'):
-                            pilot_label = pilot_obj.get('Playa name')
-                        else:
-                            pilot_label = pilot_obj.get('Name')
-                        if pilot_label:
-                            pilot_label = pilot_label[0:7]
-                        else:
-                            pilot_label = None
-                        code_label = pilot_obj.get('Pilot code')
-
-        except Exception as e:
-            logger.debug("do_server_update parse failed: " + str(e))
-            pass
-
-        logger.debug("call_database complete for %s: note %s warn %d", 
-                      self.flight.flight_id, note_string, ui_warning)
-        self.ui_update_cb(note_string, ui_warning, pilot_label, code_label,
-                          None)
 
 def test_dict(d, key):
-    """Returns true if key is in d and that they key's entry is not empty/N"""
-    if not d: return False
-    if not key in d: return False
-    if d[key] == '' or d[key] == 'N': return False
+    """Returns True if key is in d and the value is not empty/N.
+
+    Utility function for checking database result fields.
+    """
+    if not d:
+        return False
+    if key not in d:
+        return False
+    if d[key] == '' or d[key] == 'N':
+        return False
     return True
