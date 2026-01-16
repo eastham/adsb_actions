@@ -22,7 +22,7 @@ from adsb_actions.flight import Flight
 from adsb_actions.adsbactions import AdsbActions
 from adsb_actions.adsb_logger import Logger
 
-from db import appsheet_api
+from core.database import appsheet
 
 logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
@@ -42,7 +42,7 @@ class Monitor(App):
         self.text_input = None
         self.image = None
         self.flight_name_cache = {}
-        self.appsheet_api = appsheet_api.Appsheet()
+        self.appsheet = appsheet.Appsheet()
         self.last_read = 0
 
     def build(self):
@@ -77,8 +77,8 @@ class Monitor(App):
     def flight_db_lookup(self, flight_id):
         logger.debug("Looking up pilot for flight %s", flight_id)
         try:
-            aircraft_obj = self.appsheet_api.aircraft_lookup(flight_id, True)
-            pilot = self.appsheet_api.pilot_lookup(aircraft_obj['lead pilot'])
+            aircraft_obj = self.appsheet.aircraft_lookup(flight_id, True)
+            pilot = self.appsheet.pilot_lookup(aircraft_obj['lead pilot'])
             name = pilot.get('Playa name')
             if not name or name == "":
                 return False

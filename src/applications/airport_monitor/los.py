@@ -8,7 +8,7 @@ import threading
 import time
 import datetime
 
-from db_ops import add_los, update_los
+from applications.airport_monitor.db_ops import add_los, update_los
 from adsb_actions.stats import Stats
 from adsb_actions.location import Location
 from adsb_actions.adsb_logger import Logger

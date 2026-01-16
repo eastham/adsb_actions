@@ -1,6 +1,6 @@
   config:
     kmls:
-      - tests/brc_pusher_gates.kml 
+      - examples/88nv/regions/brc_pusher_gates.kml
 
   aircraft_lists:
     ground_vehicles: [ "N10CE", "N10CF", "N10CG", "N10CH", "N10CJ", "N10CK", "N10CL", "N10CM", "N10CN", "N10CP" ]

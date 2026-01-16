@@ -4,8 +4,8 @@ This module provides helper functions for database operations, using
 the configured DatabaseInterface backend.
 
 To configure a database backend:
-    from db.database_interface import set_database
-    from db.appsheet_api import AppsheetDatabase
+    from core.database.interface import set_database
+    from core.database.appsheet import AppsheetDatabase
 
     set_database(AppsheetDatabase(use_fake_calls=False))
 
@@ -15,7 +15,7 @@ If no database is configured, NullDatabase is used (all ops succeed silently).
 import datetime
 import logging
 from adsb_actions.adsb_logger import Logger
-from db.database_interface import get_database
+from core.database.interface import get_database
 
 logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG

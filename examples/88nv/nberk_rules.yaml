@@ -1,6 +1,6 @@
   config:
     kmls:
-      - tests/test_north_berkeley.kml 
+      - examples/88nv/regions/test_north_berkeley.kml
 
   rules:
     takeoff:

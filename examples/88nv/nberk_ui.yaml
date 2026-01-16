@@ -1,7 +1,7 @@
   config:
     kmls: # these KMLs define the lat/longs of the regions mentioned below
-      - ../../tests/test_north_berkeley.kml
-      - ../../tests/test_north_berkeley.kml
+      - examples/88nv/regions/test_north_berkeley.kml
+      - examples/88nv/regions/test_north_berkeley.kml
 
   rules:
     # callback to update strip for aircraft inside the covered regions,

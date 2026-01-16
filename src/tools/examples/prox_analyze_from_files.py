@@ -4,11 +4,11 @@ against a nested directory structure with readsb data dumps in it.  Optionally
 perform resampling then proximity checks if --resample is specified."""
 
 import logging
-import replay
+from tools.analysis import replay
 import datetime
 from adsb_actions.adsbactions import AdsbActions
 from adsb_actions.adsb_logger import Logger
-from op_pusher.los import process_los_launch, los_gc
+from applications.airport_monitor.los import process_los_launch, los_gc
 
 logger = logging.getLogger(__name__)
 # logger.level = logging.DEBUG

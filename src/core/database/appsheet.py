@@ -24,7 +24,7 @@ import sys
 import pprint
 import requests
 from adsb_actions.adsb_logger import Logger
-from db.database_interface import DatabaseInterface
+from core.database.interface import DatabaseInterface
 
 logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG

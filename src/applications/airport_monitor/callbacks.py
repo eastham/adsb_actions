@@ -1,7 +1,7 @@
 import logging
-from los import process_los_launch, LOS
-from db_ops import add_op
-from db.database_interface import get_database
+from applications.airport_monitor.los import process_los_launch, LOS
+from applications.airport_monitor.db_ops import add_op
+from core.database.interface import get_database
 from adsb_actions.stats import Stats
 from prometheus_client import Gauge
 

@@ -1,15 +1,15 @@
-"""Integration test of the op_pusher/los.py module.  This test
+"""Integration test of the applications/airport_monitor module.  This test
 actually calls the code that can push to the database, so make changes
 with care..."""
 import logging
 import time
 import yaml
 
-from op_pusher.op_pusher_helpers import register_callbacks, enter_db_fake_mode, exit_workers
+from applications.airport_monitor.callbacks import register_callbacks, enter_db_fake_mode, exit_workers
 from adsb_actions.stats import Stats
 from adsb_actions.adsbactions import AdsbActions
 
-LOS_YAML_FILE = "src/op_pusher/rules.yaml"
+LOS_YAML_FILE = "examples/88nv/airport_monitor_rules.yaml"
 
 JSON_STRING_PLANE1_NEAR = '{"now": 1661692178, "alt_baro": 5000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}\n'
 JSON_STRING_PLANE2_NEAR = '{"now": 1661692178, "alt_baro": 5000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d2"}\n'

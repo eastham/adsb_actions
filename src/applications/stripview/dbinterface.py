@@ -12,7 +12,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Import database interface - uses NullDatabase by default if not configured
-from db.database_interface import get_database
+from core.database.interface import get_database
 
 
 class DbInterface:

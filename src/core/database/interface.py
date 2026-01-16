@@ -10,7 +10,7 @@ To create a custom database backend:
 3. Use set_database() to register your implementation
 
 Example:
-    from db.database_interface import DatabaseInterface, set_database
+    from core.database.interface import DatabaseInterface, set_database
 
     class MyDatabase(DatabaseInterface):
         def aircraft_lookup(self, tail, wholeobj=False):
@@ -197,8 +197,8 @@ def set_database(db: DatabaseInterface) -> None:
         db: A DatabaseInterface implementation instance.
 
     Example:
-        from db.database_interface import set_database
-        from db.appsheet_api import AppsheetDatabase
+        from core.database.interface import set_database
+        from core.database.appsheet import AppsheetDatabase
 
         set_database(AppsheetDatabase(use_fake_calls=False))
     """

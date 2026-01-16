@@ -7,8 +7,8 @@
 
   config:
     kmls:
-      - ../../tests/sjc.kml 
-      - ../../tests/sjc.kml
+      - examples/88nv/regions/sjc.kml
+      - examples/88nv/regions/sjc.kml
  
   rules:
     ui_update:

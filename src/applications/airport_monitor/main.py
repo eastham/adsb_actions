@@ -4,12 +4,12 @@ import argparse
 import logging
 import sys
 from adsb_actions.adsbactions import AdsbActions
-import op_pusher_helpers
+from applications.airport_monitor import callbacks
 from prometheus_client import Gauge
 from adsb_actions.adsb_logger import Logger
 
-from db.database_interface import set_database
-from db.appsheet_api import AppsheetDatabase
+from core.database.interface import set_database
+from core.database.appsheet import AppsheetDatabase
 
 logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
@@ -48,10 +48,10 @@ def run():
             json_data = myfile.read()
         adsb_actions = AdsbActions(yaml_file=args.rules, mport=args.mport)
 
-    op_pusher_helpers.register_callbacks(adsb_actions)
+    callbacks.register_callbacks(adsb_actions)
 
     adsb_actions.loop(delay=float(args.delay), string_data=json_data)
-    op_pusher_helpers.exit_workers()
+    callbacks.exit_workers()
 
 if __name__ == '__main__':
     run()
