@@ -1,3 +1,8 @@
+# Legacy airport monitor 1 configuration.
+# Simple flight status display with fixed-width font and optional TV-frame surround image.
+# Maps pilot names to tail numbers for personalized display. Designed for 88NV.
+# Usage: python monitor.py tests/test2.kml tests/test3.kml --rules monitor.yaml --testdata <testfile>
+
   monitor_config:
     surround_image: "./tv2.png"
     window_size: [650, 500]
@@ -18,8 +23,8 @@
 
   config:
     kmls:
-      - ../../tests/test2.kml 
-      - ../../tests/test3.kml
+      - tests/test2.kml
+      - tests/test3.kml
 
   rules:
     ui_update:

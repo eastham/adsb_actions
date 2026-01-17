@@ -1,6 +1,13 @@
-"""Somewhat fancier airport-terminal-like flight display.
-This one has support for variable-width fonts, and per-line
-colors, which is unfortunately not straightforward in kivy."""
+"""Legacy airport monitor 2 - Fancier airport-terminal-style flight display.
+
+An improved flight information display with variable-width font support and
+per-line colors. Shows Scenic/Arrivals/Departures in a grid layout with
+alternating row colors for better readability.
+
+This is a legacy example; see tools/stripview for the current implementation.
+
+Usage: python monitorapp.py <kml_files> --rules monitor.yaml [--ipaddr IP --port PORT | --testdata FILE]
+"""
 
 import argparse
 import logging

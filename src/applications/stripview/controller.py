@@ -194,7 +194,8 @@ def setup(focus_q, admin_q):
     json_data = None
     if not args.testdata:
         adsb_actions = AdsbActions(
-            yaml_file=args.rules, ip=args.ipaddr, port=args.port, mport=args.mport)
+            yaml_file=args.rules, ip=args.ipaddr, port=args.port,
+            expire_secs=120, mport=args.mport)
     else:
         adsb_actions = AdsbActions(yaml_file=args.rules)
 
@@ -202,7 +203,7 @@ def setup(focus_q, admin_q):
             json_data = myfile.read()
 
     assert len(adsb_actions.rules.yaml_data['config']['kmls']) == 2, \
-        "2 kmls expected in yaml"
+        "2 kmls expected in yaml, first one specifies window to put strip in, second one provides location strings"
     assert adsb_actions.rules.yaml_data['config']['kmls'][0] == args.file[0], \
         "first kml file on comamnd line must also be specified first in yaml"
     assert len(bboxes_list[0].boxes) == 4, \

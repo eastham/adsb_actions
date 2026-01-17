@@ -1,8 +1,8 @@
 <h2>adsb-actions: A package for taking actions based on live or recorded ADS-B data.</h2>
 
 This module allows you to apply conditions and actions to JSON flight
-data coming from [readsb](https://github.com/wiedehopf/readsb), or
-other ADS-B data provider.  The conditions and actions are
+data coming from [readsb](https://github.com/wiedehopf/readsb), saved historical data, or
+internet ADS-B API provider.  The conditions and actions are
 specified in a simple human-readable YAML format.
 
 These actions can then:

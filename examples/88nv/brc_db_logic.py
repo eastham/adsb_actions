@@ -1,4 +1,4 @@
-"""88NV airport-specific database logic for stripview UI.
+"""88NV airport-specific database logic for stripview (ATC tower) UI.
 
 This module contains the custom logic for interpreting AppSheet database
 results for the 88NV/BRC airport context. 
@@ -14,13 +14,7 @@ logger = logging.getLogger(__name__)
 
 def test_dict(d, key):
     """Returns True if key is in d and the value is not empty/N."""
-    if not d:
-        return False
-    if key not in d:
-        return False
-    if d[key] == '' or d[key] == 'N':
-        return False
-    return True
+    return bool(d) and d.get(key) not in (None, '', 'N')
 
 
 def brc_db_logic(db_obj, pilot_lookup_fn=None):
@@ -42,7 +36,7 @@ def brc_db_logic(db_obj, pilot_lookup_fn=None):
     pilot_label = None
     code_label = None
 
-    if not db_obj:
+    if not db_obj:  # aircraft not found in database
         note_string += "* No Reg "
         ui_warning = True
         return note_string, ui_warning, pilot_label, code_label

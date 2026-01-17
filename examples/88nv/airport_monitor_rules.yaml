@@ -1,24 +1,28 @@
+# 88NV (Black Rock City Municipal Airport) monitoring rules.
+#
+# Detects takeoffs/landings, banned aircraft, and loss-of-separation events.
+# Sends Slack/pager alerts for banned aircraft; excludes ground vehicles (N10C/N10D prefixes).
+
+# Example usage: src/applications/airport_monitor/main.py --ipaddr 127.0.0.1 --port 30006 --rules examples/88nv/airport_monitor_rules.yaml
+
   config:
     kmls:
       - examples/88nv/regions/brc_pusher_gates.kml
 
   aircraft_lists:
-    ground_vehicles: [ "N10CE", "N10CF", "N10CG", "N10CH", "N10CJ", "N10CK", "N10CL", "N10CM", "N10CN", "N10CP" ]
     banned_aircraft: [ "N1234" ]
     medevac_aircraft: [ "N12345" ]
   rules:
 #    print:
 #      conditions:
-#        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
-#        exclude_aircraft_list: ground_vehicles 
+#        exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
 #      actions:
 #        print: True
 
     takeoff:
       conditions:
         transition_regions: [ "Generic Gate Ground", "Generic Gate Air" ]
-        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
-        exclude_aircraft_list: ground_vehicles 
+        exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
 
       actions:
         print: True
@@ -29,8 +33,7 @@
     takeoff_popup:
       conditions:
         transition_regions: [ ~, "Generic Gate Air" ]
-        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
-        exclude_aircraft_list: ground_vehicles 
+        exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
       actions:
         print: True
         callback: "popup_takeoff"
@@ -39,8 +42,7 @@
     landing:
       conditions:
         transition_regions: [ "Generic Gate Air", "Generic Gate Ground" ]
-        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
-        exclude_aircraft_list: ground_vehicles 
+        exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
       actions:
         print: True
         callback: "landing"
@@ -52,8 +54,7 @@
         max_alt: 10000
         regions: [ "Generic Gate Air", "Vicinity" ]
         proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
-        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
-        exclude_aircraft_list: ground_vehicles
+        exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
       actions:
         callback: los_update_cb
 
@@ -82,8 +83,7 @@
     #    latlongring: [10, 40.7646878, -119.2271]
     #    cooldown: 30
     #    max_alt: 8000
-    #    exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
-    #    exclude_aircraft_list: ground_vehicles 
+    #    exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
     #  actions:
     #    webhook: ['slack', 'slack_nearby_webhook']
     #    print: "low flying"
@@ -94,8 +94,7 @@
     #    latlongring: [10, 40.7646878, -119.2271]
     #    cooldown: 30
     #    max_alt: 8000
-    #    exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
-    #    exclude_aircraft_list: ground_vehicles 
+    #    exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
     #  actions:
     #    webhook: ['page', 'deputy manager safety']
     #    print: "low flying"
@@ -105,8 +104,7 @@
     #    latlongring: [10, 40.7646878, -119.2271]
     #    cooldown: 60
     #    max_alt: 8000
-    #    exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
-    #    exclude_aircraft_list: ground_vehicles 
+    #    exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
     #    exclude_aircraft_list: medevac_aircraft
     #    time_ranges: [ "0100-1300" ]
     #  actions:

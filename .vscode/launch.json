@@ -5,6 +5,16 @@
     "version": "0.2.0",
     "configurations": [
       {
+        "name": "Hello World - print aircraft from database",
+        "type": "python",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/tools/examples/simple_monitor.py",
+        "args": "--directory tests/sample_readsb_data examples/hello_world_rules.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
         "name": "Python: Current File",
         "type": "python",
         "request": "launch",
@@ -18,7 +28,7 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/tools/examples/generic_analyzer.py",
-        "args": " --data tests/sample_readsb_data --callback_definitions src/tools/examples/generic_analyzer_callbacks.py examples/generic/low_altitude_alert.yaml",
+        "args": " --data tests/sample_readsb_data --callback_definitions src/tools/examples/generic_analyzer_callbacks.py examples/low_altitude_alert.yaml",
         "console": "integratedTerminal",
         "justMyCode": true
       },
@@ -28,7 +38,11 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/applications/stripview/controller.py",
-        "args": " -- --ipaddr boxone --port 30006 --rules examples/88nv/stripview_ui.yaml examples/88nv/regions/brc_large_regions.kml",
+        //"args": " -- --ipaddr boxone --port 30006 --rules examples/88nv/stripview_ui.yaml examples/88nv/regions/brc_large_regions.kml",
+        "args": " -- --ipaddr boxone --port 30006 --rules examples/sf_bay_area/stripview_ui_sjc.yaml examples/sf_bay_area/regions/sjc.kml",
+        //"args": " -- --ipaddr boxone --port 30006 --rules examples/sf_bay_area/stripview_ui_sjc.yaml examples/sf_bay_area/regions/sjc.kml",
+        //"args": " -- --ipaddr boxone --port 30006 --rules examples/sf_bay_area/stripview_ui_oak.yaml examples/sf_bay_area/regions/oak_area.kml",
+
         "console": "integratedTerminal",
         "justMyCode": true
       },
@@ -63,27 +77,27 @@
         "justMyCode": true
       },
       {
-        "name": "Replay data to port",
+        "name": "Replay saved data to port",
         "type": "python",
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/tools/analysis/replay.py",
-        "args": "--port 6666  --speed_x 1000 tests/sample_readsb_data",
+        "args": "--port 30006 --speed_x 1000 tests/sample_readsb_data",
         "console": "integratedTerminal",
         "justMyCode": true
       },
       {
-        "name": "Parse and print data from port",
+        "name": "Parse and print readsb data from port, once per flight per minute",
         "type": "python",
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/tools/examples/simple_monitor.py",
-        "args": "--ipaddr 127.0.0.1 --port 6666 examples/generic/print_all_aircraft.yaml",
+        "args": "--ipaddr boxone --port 30006 examples/hello_world_rules.yaml",
         "console": "integratedTerminal",
         "justMyCode": true
       },
       {
-        "name": "Parse all data from files",
+        "name": "Parse all data from readsb database directory",
         "type": "python",
         "request": "launch",
         "cwd": "${workspaceFolder}",
@@ -93,7 +107,7 @@
         "justMyCode": true
       },
       {
-        "name": "Do prox resampling from files",
+        "name": "Do prox resampling from readsb database directory",
         "type": "python",
         "request": "launch",
         "cwd": "${workspaceFolder}",
@@ -103,13 +117,23 @@
         "justMyCode": true
       },
       {
-        "name": "Flight info display (FIDS)",
+        "name": "Public Flight info display (FIDS)",
         "type": "python",
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/applications/flight_info_display/monitor.py",
         "args": " -- --testdata tests/20minutes.json --delay .2 --rules examples/88nv/flight_info_display_config.yaml",
         //            "args": " -- --ipaddr 192.168.87.56 --port 30006 --rules examples/88nv/flight_info_display_config.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Legacy airport monitor 1",
+        "type": "python",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "examples/legacy/airport_monitor1/monitor.py",
+        "args": " -- --testdata tests/20minutes.json --delay .2 --rules examples/legacy/airport_monitor1/monitor.yaml",
         "console": "integratedTerminal",
         "justMyCode": true
       },
@@ -134,12 +158,14 @@
         "justMyCode": true
       },
       {
-        "name": "TCP API client",
+        "name": "TCP API: connect to airplanes.live and print data",
         "type": "python",
         "request": "launch",
         "cwd": "${workspaceFolder}",
-        "program": "src/core/network/tcp_client.py",
-        "args": "examples/generic/tcp_api_webhook.yaml"
+        "program": "src/applications/tcp_api_monitor/monitor.py",
+        "args": "examples/tcp_api_webhook.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
       }
     ]
 }

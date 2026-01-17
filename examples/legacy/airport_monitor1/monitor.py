@@ -1,6 +1,16 @@
-"""Simple flight status board.  Supports a fixed-width font"""
+"""Legacy airport monitor 1 - Simple flight status board using Kivy.
+
+A basic flight information display with fixed-width font support and optional
+TV-frame surround image. Shows aircraft grouped by Scenic/Arrivals/Departures
+sections with pilot name lookups from YAML configuration.
+
+This is a legacy example; see tools/stripview for the current implementation.
+
+Usage: python monitor.py <kml_files> --rules monitor.yaml [--ipaddr IP --port PORT | --testdata FILE]
+"""
 
 import argparse
+import logging
 import threading
 import sys
 import yaml
@@ -15,12 +25,10 @@ from kivy.metrics import dp
 from adsb_actions.bboxes import Bboxes
 from adsb_actions.flight import Flight
 from adsb_actions.adsbactions import AdsbActions
+from adsb_actions.adsb_logger import Logger
 
-import adsb_logger
-from adsb_logger import Logger
-
-logger = adsb_logger.logging.getLogger(__name__)
-#logger.level = adsb_logger.logging.DEBUG
+logger = logging.getLogger(__name__)
+#logger.level = logging.DEBUG
 LOGGER = Logger()
 
 adsb_actions = None
@@ -115,7 +123,7 @@ class Monitor(App):
 def parseargs():
     parser = argparse.ArgumentParser(
         description="render a simple flight status board.")
-    parser.add_argument('file', nargs='+', help="kml files to use")
+    parser.add_argument('file', nargs='*', help="kml files to use (optional, loaded from YAML)")
     parser.add_argument('--ipaddr', help="IP address to connect to")
     parser.add_argument('--port', help="port to connect to")
     parser.add_argument(

@@ -1,3 +1,8 @@
+# North Berkeley area rules configuration.
+# Defines takeoff/landing detection using transition_regions for the Oakland area.
+# Tracks "popup" takeoffs (aircraft appearing suddenly) and loss-of-separation events.
+# Usage: Use with adsb_actions to detect and log airport operations.
+
   config:
     kmls:
       - examples/sf_bay_area/regions/test_north_berkeley.kml

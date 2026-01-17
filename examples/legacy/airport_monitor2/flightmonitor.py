@@ -1,4 +1,11 @@
-"""Represents the layout of the flight monitor screen."""
+"""Legacy airport monitor 2 - Kivy grid layout for flight display.
+
+Defines the FlightMonitor widget that arranges flight info in sections
+(Scenic, Arrivals, Departures) with header rows and alternating row colors.
+Uses custom Silkscreen font for retro terminal aesthetic.
+
+This is a legacy example; see tools/stripview for the current implementation.
+"""
 
 from kivy.app import App
 from kivy.uix.gridlayout import GridLayout

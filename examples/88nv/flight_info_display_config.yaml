@@ -1,3 +1,10 @@
+# 88NV (Black Rock City Municipal Airport) public flight info display
+# configuration.
+#
+# Example usage:
+#   python src/applications/flight_info_display/monitor.py -- --testdata tests/20minutes.json --delay .2 --rules examples/88nv/flight_info_display_config.yaml
+#
+
   monitor_config:
 #    window_size: [940, 1200]   # larger display
     window_size: [500, 700]
@@ -7,8 +14,8 @@
 
   config:
     kmls:
-      - ../../tests/test2.kml 
-      - ../../tests/test3.kml
+      - tests/test2.kml
+      - tests/test3.kml
 
   rules:
     ui_update:

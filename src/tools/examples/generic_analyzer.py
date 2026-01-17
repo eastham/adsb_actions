@@ -1,6 +1,7 @@
 """
 Basic analyzer to run rules on flight data, either live or from a saved
-set of readsb data files.
+set of readsb data files.  This also auto-loads callback definitions from
+a specified Python file.
 
 Usage: generic_analyzer.py [--ipaddr=IPADDR --port=PORT]
     [--data=DATA_DIRECTORY] [--callback_definitions=FILE.PY] [--delay=SECONDS]

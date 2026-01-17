@@ -1,5 +1,5 @@
 # This file documents all possible configuration options in the yaml rule/action
-# files.   For a more concise example, see examples/generic/basic_rules.yaml .
+# files.   For simpler examples, see examples/*.yaml .
 
   config:
     kmls:  # optional KML files that specify geographic regions.  aircraft may be in 0-1 regions per file at any time

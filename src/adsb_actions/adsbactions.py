@@ -137,9 +137,9 @@ class AdsbActions:
             last_read_return = self._flight_update_read()
             if last_read_return > 0:
                 last_read_time = last_read_return
-                logger.debug("Main loop last_read_time: %s", last_read_time)
+                logger.debug("Main loop periodic timestamp: %s", int(last_read_time))
                 if loop_ctr % 1000 == 0:
-                    logger.info("Main loop last_read_time: %s", last_read_time)
+                    logger.info("Main loop periodic timestamp: %s", int(last_read_time))
 
             if not self.flights.last_checkpoint:
                 self.flights.last_checkpoint = last_read_time
@@ -236,7 +236,7 @@ class AdsbActions:
             if self.tcp_conn:
                 line = self.tcp_conn.readline()
                 if not line:
-                    raise IOError  # File EOF or socket closed
+                    raise IOError("File EOF or socket closed")
                 jsondict = json.loads(line)
             else:
                 jsondict = next(self.data_iterator)
@@ -258,7 +258,7 @@ class AdsbActions:
                 logger.info("_flight_update_read Reconnected after disconnect/inactivity timeout")
                 return 0
             else:
-                logger.warning("_flight_update_read Exception: %s", e)
+                logger.warning("_flight_update_read Exception: %s", str(e))
                 return -1
 
         Stats.json_readlines += 1

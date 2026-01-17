@@ -1,5 +1,5 @@
 """Monitor ADS-B data from an internet API and apply adsb_actions 
-rules/actions as usual.
+rules/actions as usual.  This is currently set up for the airplanes.live API.
 
 API requests for aircraft data are made based on all "latlongring" conditions
 found in the yaml file.
@@ -71,7 +71,8 @@ class QueryState:
 
         if self.logfile:
             self.logfile.write(json_list)
-        self.adsb_actions.loop(string_data=json_list)
+        if json_list:  # Only process if we have data
+            self.adsb_actions.loop(string_data=json_list)
         self.last_checked = time.time()
 
 
@@ -113,6 +114,7 @@ class MonitorThread:
             # sleep to maintain API rate limit
             sleep_time = 1/API_RATE_LIMIT - (time.time() - start_time)
             if sleep_time > 0:
+                logger.info(f"Sleeping {sleep_time:.2f} seconds to maintain API rate limit")
                 time.sleep(sleep_time)
 
         return query_ctr
@@ -137,7 +139,7 @@ if __name__ == "__main__":
             logger.error(exc)
             sys.exit(-1)
 
-    # set up processing environment
+    # set up environment
     adsb_actions = AdsbActions(yaml_data=yaml_data, expire_secs=EXPIRE_SECS)
     monitor_thread = MonitorThread(adsb_actions)
 
@@ -147,7 +149,7 @@ if __name__ == "__main__":
     adsb_actions.register_callback("activity_cb",
                                    monitor_thread.activity_callback)
 
-    # read in API queries to run, only those with lat/long rings
+    # determine which API queries to run based on latlongring conditions in the yaml
     try:
         for rulename, rulebody in yaml_data['rules'].items():
             if 'latlongring' in rulebody['conditions']:
