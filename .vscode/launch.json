@@ -18,7 +18,7 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/tools/examples/generic_analyzer.py",
-        "args": " --data tests/sample_readsb_data --callback_definitions src/tools/examples/generic_analyzer_callbacks.py examples/generic/example_rules.yaml",
+        "args": " --data tests/sample_readsb_data --callback_definitions src/tools/examples/generic_analyzer_callbacks.py examples/generic/low_altitude_alert.yaml",
         "console": "integratedTerminal",
         "justMyCode": true
       },
@@ -78,7 +78,7 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/tools/examples/simple_monitor.py",
-        "args": "--ipaddr 127.0.0.1 --port 6666 examples/generic/basic_rules.yaml",
+        "args": "--ipaddr 127.0.0.1 --port 6666 examples/generic/print_all_aircraft.yaml",
         "console": "integratedTerminal",
         "justMyCode": true
       },
@@ -139,7 +139,7 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/core/network/tcp_client.py",
-        "args": "examples/generic/tcp_rules.yaml"
+        "args": "examples/generic/tcp_api_webhook.yaml"
       }
     ]
 }
