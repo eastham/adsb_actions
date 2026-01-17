@@ -1,6 +1,6 @@
   config:
     kmls:
-      - examples/88nv/regions/oak_area.kml
+      - examples/sf_bay_area/regions/oak_area.kml
 
   rules:
     ui_update:

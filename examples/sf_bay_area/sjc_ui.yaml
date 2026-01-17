@@ -7,14 +7,15 @@
 
   config:
     kmls:
-      - examples/88nv/regions/sjc.kml
-      - examples/88nv/regions/sjc.kml
+      - examples/sf_bay_area/regions/sjc.kml
+      - examples/sf_bay_area/regions/sjc.kml
  
   rules:
     ui_update:
       conditions:
         regions: [ "SJC Takeoff 30", "SJC Landing 30", "PAO Pattern", "Other nearby" ]
         rule_cooldown: .02  # mins
+        exclude_aircraft_substrs: ["N10C", "N10D"] 
       actions:
         callback: aircraft_update_cb
 
@@ -22,6 +23,7 @@
       conditions:
         regions: [ "Other nearby" ]
         rule_cooldown: 1  # mins
+        exclude_aircraft_substrs: ["N10C", "N10D"] 
       actions:
         callback: aircraft_update_cb
 

@@ -1,4 +1,8 @@
-"""Detect takeoffs/landings and push them to the database."""
+"""Detect takeoffs/landings and push them to the database.
+
+Example rules to go along with this application can be found in
+examples/88nv/airport_monitor_rules.yaml
+"""
 
 import argparse
 import logging

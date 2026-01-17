@@ -43,16 +43,6 @@
         "justMyCode": true
       },
       {
-        "name": "Public UI",
-        "type": "python",
-        "request": "launch",
-        "cwd": "${workspaceFolder}",
-        "program": "src/applications/stripview/public_ui.py",
-        "args": " -- --testdata tests/20minutes.json --delay .01 --rules examples/generic/public_ui.yaml tests/test2.kml",
-        "console": "integratedTerminal",
-        "justMyCode": true
-      },
-      {
         "name": "Airport monitor (push ops to appsheet)",
         "type": "python",
         "request": "launch",
@@ -118,8 +108,8 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/applications/flight_info_display/monitor.py",
-        "args": " -- --testdata tests/20minutes.json --delay .2 --rules examples/88nv/fids_config.yaml",
-        //            "args": " -- --ipaddr 192.168.87.56 --port 30006 --rules examples/88nv/fids_config.yaml",
+        "args": " -- --testdata tests/20minutes.json --delay .2 --rules examples/88nv/flight_info_display_config.yaml",
+        //            "args": " -- --ipaddr 192.168.87.56 --port 30006 --rules examples/88nv/flight_info_display_config.yaml",
         "console": "integratedTerminal",
         "justMyCode": true
       },

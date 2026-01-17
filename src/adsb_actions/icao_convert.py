@@ -37,5 +37,5 @@ def icao_to_c(hexstr : str, prefix : str, start : int,
     i3 = offset
     try:
         return prefix + ALPHABET[i1] + ALPHABET[i2] + ALPHABET[i3]
-    except:
+    except:  # pylint: disable=bare-except
         return None
