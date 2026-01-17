@@ -131,5 +131,5 @@ source .venv/bin/activate
 <h3> More things to try: </h3>
 
 1. Tests are available: `pytest -s tests/*.py`
-2. Invoke a sample UI: `python3 src/applications/stripview/controller.py --testdata tests/20minutes.json --delay .2 --rules examples/88nv/stripview_ui.yaml`
+2. Invoke a sample UI: `python3 src/applications/stripview/controller.py --testdata tests/20minutes.json --delay .2 --rules examples/88nv/stripview_ui.yaml examples/88nv/regions/brc_large_regions.kml`
 3. Command lines for other sample applications can be found in launch.json.

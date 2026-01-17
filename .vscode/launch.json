@@ -28,7 +28,7 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/applications/stripview/controller.py",
-        "args": " -- --ipaddr boxone --port 30006 --rules examples/88nv/stripview_ui.yaml",
+        "args": " -- --ipaddr boxone --port 30006 --rules examples/88nv/stripview_ui.yaml examples/88nv/regions/brc_large_regions.kml",
         "console": "integratedTerminal",
         "justMyCode": true
       },
@@ -38,7 +38,7 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/applications/stripview/controller.py",
-        "args": " -- --testdata tests/20minutes.json --delay .2 --rules examples/88nv/stripview_ui.yaml",
+        "args": " -- --testdata tests/20minutes.json --delay .2 --rules examples/88nv/stripview_ui.yaml examples/88nv/regions/brc_large_regions.kml",
         "console": "integratedTerminal",
         "justMyCode": true
       },
