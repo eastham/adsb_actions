@@ -86,17 +86,14 @@ class Rules:
 
     def conditions_match(self, flight: Flight, conditions: dict,
                          rule_name: str) -> bool:
-        """Determine if the given rule conditions match for the given 
-        flight.  Returns true on match for the specific rule given, false 
+        """Determine if the given rule conditions match for the given
+        flight.  Returns true on match for the specific rule given, false
         otherwise.
         Note: Put expensive-to-evaluate conditions toward the bottom,
         for best performance."""
 
         #logger.debug("condition_match checking rules: %s", str(conditions))
         Stats.condition_match_calls += 1
-
-        # TODO the approach below prevents us from having multiple rules of
-        # the same type.  Do we need to support that?
 
         # Check enabled condition first - cheap and can short-circuit evaluation
         if 'enabled' in conditions:
@@ -430,9 +427,8 @@ class Rules:
                 # For each proximity rule, we want to check the rule conditions
                 # here, first removing the prox part of the rule which will
                 # never match during the usual synchronous update.
-                rule_conditions = rule_body['conditions'].copy() # XXX inefficient?
-                prox_rule_element = rule_conditions['proximity']
-                altsep, latsep = prox_rule_element
+                rule_conditions = rule_body['conditions'].copy()
+                altsep, latsep = rule_conditions['proximity']
                 del rule_conditions['proximity']
 
                 if self.conditions_match(flight1, rule_conditions, rule_name):
@@ -444,8 +440,7 @@ class Rules:
                     if flight2:
                         # Also check if flight2 matches the rule conditions
                         # This ensures excluded aircraft in flight2 won't
-                        # trigger the rule.  XXX should exclude rule_cooldowns,
-                        # probably -- they will always fire on the 2nd check
+                        # trigger the rule.
                         if self.conditions_match(flight2, rule_conditions, rule_name):
                             logger.debug("Proximity match: %s %s", flight1.flight_id,
                                         flight2.flight_id)

@@ -1,8 +1,10 @@
-"""This is the main API For the library.
+"""This is the main API For the adsb_actions library.  It provides the entry 
+point to process ADS-B data from a network socket or other source, apply rules, 
+and execute actions.
 
 The following code will instantiate the library, attempt to connect to a network
 socket, and process the ADS-B data coming in:
-    adsb_actions = AdsbActions(yaml_config, ip=args.ipaddr, port=args.port, mport=args.mport)
+    adsb_actions = AdsbActions(yaml_config, ip=args.ipaddr, port=args.port)
     adsb_actions.loop()
 
 Also useful, to support rules that want to call code:
@@ -22,6 +24,8 @@ from io import StringIO
 from typing import Callable
 import yaml
 
+from prometheus_client import start_http_server
+
 from .rules import Rules
 from .flights import Flights
 from .bboxes import Bboxes
@@ -31,8 +35,6 @@ from .resampler import Resampler
 from .webhooks import register_webhook_handler
 from .page import send_slack, send_page
 
-from prometheus_client import start_http_server, Gauge
-
 from .adsb_logger import Logger
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,8 @@ LOGGER = Logger()
 
 class AdsbActions:
     """Main API for the library."""
+
+    CHECKPOINT_INTERVAL = 5  # seconds. How often to do maintenance tasks.
 
     def __init__(self, yaml_data=None, yaml_file=None, ip=None, port=None,
                  mport=None, bboxes=None, expire_secs=180, pedantic=False,
@@ -88,7 +92,7 @@ class AdsbActions:
             self.tcp_conn = self._setup_network(ip, port)
 
         if mport:
-            start_http_server(mport)
+            start_http_server(mport)    # start prometheus metrics server
 
         # Register default webhook handlers
         register_webhook_handler('slack', send_slack)
@@ -118,9 +122,6 @@ class AdsbActions:
             delay: pause for this many seconds between input lines, for testing.
                 .01-.05 is reasonable to be able to see what's going on.
         """
-        # TODO this probably should be a configurable instance variable:
-        CHECKPOINT_INTERVAL = 5 # seconds.  How often to do mainentance tasks.
-
         # Two ways to inject data for non-network cases:
         if string_data:
             self.tcp_conn = TCPConnection()
@@ -151,13 +152,13 @@ class AdsbActions:
             # injected.
             time_for_forced_checkpoint = self.pedantic
             time_for_checkpoint = not self.pedantic and last_read_return > 0 and \
-                last_read_time - self.flights.last_checkpoint >= CHECKPOINT_INTERVAL
+                last_read_time - self.flights.last_checkpoint >= self.CHECKPOINT_INTERVAL
 
             if (time_for_forced_checkpoint or time_for_checkpoint):
                 datestr = datetime.datetime.utcfromtimestamp(
                     last_read_time).strftime('%Y-%m-%d %H:%M:%S')
                 logger.debug("%ds Checkpoint: %d ops, %d callbacks, last_read_time %d %s",
-                             CHECKPOINT_INTERVAL, Stats.json_readlines,
+                             self.CHECKPOINT_INTERVAL, Stats.json_readlines,
                              Stats.callbacks_fired, last_read_time, datestr)
 
                 self.flights.expire_old(self.rules, last_read_time,
@@ -192,21 +193,21 @@ class AdsbActions:
         in the yaml instead?"""
         self.rules.webhook = url
 
-    def _load_bboxes(self, yaml: str) -> list[Bboxes]:
+    def _load_bboxes(self, yaml_arg: str) -> list[Bboxes]:
         """Load the kml files found in the yaml, and parse those kmls."""
         # Return None if there's no config section
-        if 'config' not in yaml or 'kmls' not in yaml.get('config', {}):
+        if 'config' not in yaml_arg or 'kmls' not in yaml_arg.get('config', {}):
             return None
 
         bboxes_list = []
         try:
-            for f in yaml['config']['kmls']:
+            for f in yaml_arg['config']['kmls']:
                 bboxes_list.append(Bboxes(f))
         except FileNotFoundError:
             logger.critical("File mentioned in yaml not found: %s", f)
             sys.exit(-1)
-        except Exception as e:
-            logger.critical("Other error in yaml: " + str(e))
+        except Exception as e:  # pylint: disable=broad-except
+            logger.critical("Other error in yaml: %s", str(e))
             sys.exit(-1)
         return bboxes_list
 
@@ -293,7 +294,7 @@ class TCPConnection:
             self.sock.connect((self.host, self.port))
             self.sock.settimeout(60)
             print('Successful Connection')
-        except Exception as e:
+        except Exception as e:    # pylint: disable=broad-except
             print('Connection Failed: '+str(e))
 
     def readline(self):
@@ -305,7 +306,7 @@ class TCPConnection:
                 line = self._readline_from_buffer()
                 if line:
                     return line
-                
+
                 data = self.sock.recv(4096)
                 if not data:
                     raise IOError  # File EOF or socket closed
@@ -321,5 +322,5 @@ class TCPConnection:
             return line
         return None
 
-def sigint_handler(signum, frame):
+def sigint_handler(_, __):
     sys.exit(1)

@@ -47,7 +47,7 @@ class Bboxes:
             kml_features = list(k.features)
         except Exception as e:
             logger.error("Error parsing KML file %s: %s", fn, str(e))
-            raise ValueError("KML parse error: " + str(e))
+            raise ValueError("KML parse error: " + str(e)) from e
 
         self.parse_placemarks(kml_features)
         if len(self.boxes) == 0:

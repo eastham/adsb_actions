@@ -16,7 +16,7 @@ class Config:
 
         self.private_vars = {}
         try:
-            with open(PRIVPATH, "r") as f:
+            with open(PRIVPATH, "r", encoding="utf-8") as f:
                 self.private_vars = yaml.safe_load(f)
         except Exception as e:  # pylint: disable=broad-except
             print("Note: private.yaml not found (optional - only needed for "
