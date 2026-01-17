@@ -1,7 +1,7 @@
 # 88NV (Black Rock City Municipal Airport) monitoring rules.
 #
-# Detects takeoffs/landings, banned aircraft, and loss-of-separation events.
-# Sends Slack/pager alerts for banned aircraft; excludes ground vehicles (N10C/N10D prefixes).
+# Detects takeoffs/landings, watched aircraft, and loss-of-separation events.
+# Sends Slack/pager alerts for watched aircraft; excludes ground vehicles (N10C/N10D prefixes).
 
 # Example usage: src/applications/airport_monitor/main.py --ipaddr 127.0.0.1 --port 30006 --rules examples/88nv/airport_monitor_rules.yaml
 
@@ -10,7 +10,7 @@
       - examples/88nv/regions/brc_pusher_gates.kml
 
   aircraft_lists:
-    banned_aircraft: [ "N1234" ]
+    watched_aircraft: [ "N1234" ]
     medevac_aircraft: [ "N12345" ]
   rules:
 #    print:
@@ -59,24 +59,24 @@
         callback: los_update_cb
 
 
-    # This rule will trigger a slack message when a banned aircraft is seen.
-    banned_aircraft_seen_tcp_slack:
+    # This rule will trigger a slack message when a watched aircraft is seen.
+    watched_aircraft_seen_tcp_slack:
       conditions:
-        aircraft_list: banned_aircraft  # use aircraft_list above
+        aircraft_list: watched_aircraft  # use aircraft_list above
         cooldown: 30  # minutes to wait before matching a second time for this a/c
 
       actions:
         webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
-        print: "banned aircraft seen"
+        print: "excluded aircraft seen"
 
-    banned_aircraft_seen_tcp_page:
+    watched_aircraft_seen_tcp_page:
       conditions:
-        aircraft_list: banned_aircraft  # use aircraft_list above
+        aircraft_list: watched_aircraft  # use aircraft_list above
         cooldown: 30  # minutes to wait before matching a second time for this a/c
         time_ranges: [ "1300-0100" ]
       actions:
         webhook: ['page', 'deputy manager safety']
-        print: "banned aircraft seen page"
+        print: "excluded aircraft seen"
   
     #low_flying_aircraft_prepost_slack:
     #  conditions:

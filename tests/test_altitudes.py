@@ -12,7 +12,7 @@ YAML_STRING = """
       - tests/test1.kml 
 
   aircraft_lists:
-    banned: [ "N12345" ] 
+    watched: [ "N12345" ] 
 
   rules:
     block:

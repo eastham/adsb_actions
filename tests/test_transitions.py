@@ -14,7 +14,7 @@ YAML_STRING = """
       - tests/test1.kml 
 
   aircraft_lists:
-    banned: [ "N4567", "N12345" ] 
+    watched: [ "N4567", "N12345" ] 
 
   rules:
     takeoff_popup:

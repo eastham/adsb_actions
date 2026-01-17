@@ -45,7 +45,7 @@ def brc_db_logic(db_obj, pilot_lookup_fn=None):
     if 'Arrivals' in db_obj:
         note_string += "Arrivals=%s " % db_obj['Arrivals']
 
-    # Check for banned aircraft
+    # Check for watched aircraft
     if test_dict(db_obj, 'Ban'):
         note_string += "*BANNED "
         ui_warning = True

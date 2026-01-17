@@ -13,7 +13,7 @@ config:
 
 aircraft_lists:
   # Lists of tail numbers of interest.
-  banned_aircraft: [ "N12345" ] 
+  watched_aircraft: [ "N12345" ] 
 
 rules:
   # This "latlongring" condition will trigger an API 
@@ -36,10 +36,10 @@ rules:
     actions:
       webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
 
-  # This rule will trigger a slack message when a banned aircraft is seen.
-  banned_aircraft_seen_tcp_slack:
+  # This rule will trigger a slack message when a watched aircraft is seen.
+  watched_aircraft_seen_tcp_slack:
     conditions:
-      aircraft_list: banned_aircraft  # use aircraft_list above
+      aircraft_list: watched_aircraft  # use aircraft_list above
       cooldown: 30  # minutes to wait before matching a second time for this a/c
 
     actions:
@@ -48,9 +48,9 @@ rules:
 
   # somewhat repeated rule since YAML doesn't support duplicate keys, this time
   # send a page.
-  banned_aircraft_seen_tcp_page:
+  watched_aircraft_seen_tcp_page:
     conditions:
-      aircraft_list: banned_aircraft  # use aircraft_list above
+      aircraft_list: watched_aircraft  # use aircraft_list above
       cooldown: 30  # minutes to wait before matching a second time for this a/c
 
     actions:

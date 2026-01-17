@@ -8,9 +8,8 @@ import argparse
 import logging
 import sys
 from adsb_actions.adsbactions import AdsbActions
-from applications.airport_monitor import callbacks
-from prometheus_client import Gauge
 from adsb_actions.adsb_logger import Logger
+from applications.airport_monitor import callbacks
 
 from core.database.interface import set_database
 from core.database.appsheet import AppsheetDatabase
