@@ -28,7 +28,7 @@ import socket
 import sys
 import time
 
-import readsb_parse
+from tools.analysis import readsb_parse
 
 # used to send placeholder timestamps to the client
 EMPTY_MESSAGE = {'flight': 'N/A'}

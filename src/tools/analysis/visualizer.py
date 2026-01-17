@@ -19,8 +19,8 @@ import webbrowser
 import os
 import sys
 import csv
-from visualizer_map_elements import LEGEND_HTML, STATIC_LEGEND_HTML, CoordinateDisplay
-from hotspot_analyzer import compute_hotspot_heatmap
+from tools.analysis.map_elements import LEGEND_HTML, STATIC_LEGEND_HTML, CoordinateDisplay
+from tools.analysis.hotspot_analyzer import compute_hotspot_heatmap
 
 # Corners of the map
 LL_LAT = 40.7126
