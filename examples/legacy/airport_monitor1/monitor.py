@@ -6,7 +6,7 @@ sections with pilot name lookups from YAML configuration.
 
 This is a legacy example; see tools/stripview for the current implementation.
 
-Usage: python monitor.py <kml_files> --rules monitor.yaml [--ipaddr IP --port PORT | --testdata FILE]
+Usage: python monitor.py --rules monitor.yaml [--ipaddr IP --port PORT | --testdata FILE]
 """
 
 import argparse
@@ -123,7 +123,6 @@ class Monitor(App):
 def parseargs():
     parser = argparse.ArgumentParser(
         description="render a simple flight status board.")
-    parser.add_argument('file', nargs='*', help="kml files to use (optional, loaded from YAML)")
     parser.add_argument('--ipaddr', help="IP address to connect to")
     parser.add_argument('--port', help="port to connect to")
     parser.add_argument(

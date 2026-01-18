@@ -6,7 +6,7 @@ alternating row colors for better readability.
 
 This is a legacy example; see tools/stripview for the current implementation.
 
-Usage: python monitorapp.py <kml_files> --rules monitor.yaml [--ipaddr IP --port PORT | --testdata FILE]
+Usage: python monitorapp.py --rules monitor.yaml [--ipaddr IP --port PORT | --testdata FILE]
 """
 
 import argparse
@@ -76,7 +76,6 @@ class MonitorApp(App):
 def parseargs():
     parser = argparse.ArgumentParser(
         description="render a simple flight status board.")
-    parser.add_argument('file', nargs='+', help="kml files to use")
     parser.add_argument('--ipaddr', help="IP address to connect to")
     parser.add_argument('--port', help="port to connect to")
     parser.add_argument(

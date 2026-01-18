@@ -160,7 +160,6 @@ def setup(focus_q, admin_q):
 
     parser = argparse.ArgumentParser(description="render a rack of aircraft status strips.")
     parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument('file', nargs='+', help="kml files to use")
     parser.add_argument('--ipaddr', help="IP address to connect to")
     parser.add_argument('--port', help="port to connect to")
     parser.add_argument('-m', '--mport', type=int, help="metrics port to listen on", default='9108')
@@ -175,21 +174,6 @@ def setup(focus_q, admin_q):
     if args.ipaddr and args.delay:
         logger.warning("--delay has no effect when ipaddr is given")
 
-    # Load state from kml needed to define and label the 4 strip racks.
-    # XXX Currently this same kml must also be specified in the yaml...
-    # I think we could rely on the yaml only?
-    bboxes_list = []
-    for f in args.file:
-        bboxes_list.append(Bboxes(f)) # describes the 4 racks
-
-    # UI setup
-    signal.signal(signal.SIGINT, sigint_handler)
-    signal.signal(signal.SIGTERM, sigint_handler)
-    signal.signal(signal.SIGQUIT, sigint_handler)
-
-    global controllerapp
-    controllerapp = ControllerApp(bboxes_list[0], focus_q, admin_q)
-
     # Setup flight data handling.
     json_data = None
     if not args.testdata:
@@ -202,10 +186,21 @@ def setup(focus_q, admin_q):
         with open(args.testdata, 'rt', encoding="utf-8") as myfile:
             json_data = myfile.read()
 
-    assert len(adsb_actions.rules.yaml_data['config']['kmls']) == 2, \
-        "2 kmls expected in yaml, first one specifies window to put strip in, second one provides location strings"
-    assert adsb_actions.rules.yaml_data['config']['kmls'][0] == args.file[0], \
-        "first kml file on comamnd line must also be specified first in yaml"
+    # Load KML files from YAML config to define and label the strip racks.
+    # First KML specifies which window to show each strip in,
+    # second KML provides more detailed location strings for the UI.
+    kml_files = adsb_actions.rules.yaml_data['config']['kmls']
+    assert len(kml_files) == 2, \
+        "2 kmls expected in yaml: first specifies window placement, second provides location strings"
+    bboxes_list = [Bboxes(f) for f in kml_files]
+
+    # UI setup
+    signal.signal(signal.SIGINT, sigint_handler)
+    signal.signal(signal.SIGTERM, sigint_handler)
+    signal.signal(signal.SIGQUIT, sigint_handler)
+
+    global controllerapp
+    controllerapp = ControllerApp(bboxes_list[0], focus_q, admin_q)
     assert len(bboxes_list[0].boxes) == 4, \
         "4 racks expected in first kml"  # TODO: Obviously could be generalized
 

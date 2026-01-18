@@ -3,7 +3,7 @@
 # Displays aircraft in Scenic, Gerlach Corridor, and Empire/Pattern regions.
 # Excludes ground vehicles (N10C/N10D) and includes proximity alerting for loss-of-separation.
 #
-# Usage: python -m tools.stripview examples/88nv/regions/brc_large_regions.kml --rules examples/88nv/stripview_ui.yaml
+# Usage: python -m tools.stripview --rules examples/88nv/stripview_ui.yaml
 
   config:
     kmls:
