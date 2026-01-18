@@ -55,8 +55,13 @@ class Flights:
         if not loc.tail:
             # couldn't convert ICAO code.  Try the flight name...
             loc.tail = loc.flight
-        if not loc.tail:
-            return loc.now
+        if not loc.tail or loc.tail == "N/A":
+            # Fall back to hex code to avoid all unknown aircraft being indexed
+            # under the same "N/A" key
+            if loc.hex:
+                loc.tail = loc.hex
+            else:
+                return loc.now
 
         with self.lock: # lock needed since testing can race
             flight = self.flight_dict.get(loc.tail)
