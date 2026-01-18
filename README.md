@@ -19,11 +19,14 @@ These actions can then:
 
 ⭒ Do offline analysis, for example to generate operational counts and statistics:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;<img src="screenshots/landing.png?raw=true" alt="Screenshot of landings">
+
 ⭒ Trigger Slack alerts based on arbitrary conditions
+
 ⭒ Push operations (takeoffs/landings/etc) to a database
+
 ⭒ Whatever else you can imagine!
 
-<h3>Overview</h3>
+<h2>Overview</h2>
 Each YAML rule contains ✅ <strong>conditions</strong> and ⚡ <strong>actions</strong>. 
 <p>
 
@@ -31,7 +34,7 @@ Each YAML rule contains ✅ <strong>conditions</strong> and ⚡ <strong>actions<
 <p>
 ⚡ <strong>Actions</strong> include logging, Slack, paging / JSON webhook, shell execution, and python callback.  See RULE_SCHEMA.yaml for more info.
 
-<h3>Example YAML config:</h3>
+<h2>Example rules:</h2>
 This will trigger a callback and send a slack message when an aircraft
 is seen below 2000 feet in a certain geograpic area:<p>
 
@@ -44,11 +47,11 @@ is seen below 2000 feet in a certain geograpic area:<p>
       actions:
         callback: print_aircraft_data   # call this when matched
         webhook: ['slack', 'emergency_aircraft_channel']
-'''
+```
 
-**Ready to try it?** See [GETTING_STARTED.md](GETTING_STARTED.md) for a step-by-step setup guide.
+<h2>Ready to try it?</h2> See [GETTING_STARTED.md](GETTING_STARTED.md) for a step-by-step setup guide.
 
-<h3>Prerequisites</h3>
+<h2>Prerequisites</h2>
 
 - Python 3.8 or higher
 - An ADS-B data source (readsb, dump1090, etc.) OR use included test data
