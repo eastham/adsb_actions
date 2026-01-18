@@ -54,6 +54,12 @@ def parse_readsb_json(input_dict: dict, parsed_output: dict, tp_callback = None)
             'lon':long, 'track': track, 'hex': icao_num, 'flight': flight_str,
             'flightdict': flightdict}
 
+        # Extract additional fields from flightdict if present
+        if flightdict:
+            for field in ['squawk', 'emergency', 'category', 'baro_rate', 'gs']:
+                if field in flightdict:
+                    newdict[field] = flightdict[field]
+
         if this_ts in parsed_output:
             parsed_output[this_ts].append(newdict)
         else:

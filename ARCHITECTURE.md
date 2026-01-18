@@ -19,10 +19,11 @@ src/
     └── tcp_api_monitor/    # Monitor aircraft via internet API (airplanes.live)
 
 examples/
-├── 88nv/                   # Black Rock City airport configs
-├── sf_bay_area/            # San Francisco Bay Area configs (SJC, OAK, Berkeley)
-├── generic/                # Starter templates (print_all_aircraft, low_altitude_alert)
-└── legacy/                 # Old monitor variants (reference only)
+├── 88nv/                   # Black Rock City airport monitoring
+├── sf_bay_area/            # San Francisco Bay Area monitoring (SJC, OAK)
+├── hello_world_rules.yaml  # Simplest example - print all aircraft
+├── low_altitude_alert.yaml # Example with callback
+└── legacy/                 # Old airport display examples (reference only)
 ```
 
 ## Core Concepts
@@ -54,7 +55,7 @@ ADS-B Source (readsb :30006 or API or file)
 # Print all aircraft in a 20nm ring around a point
 python3 src/tools/examples/simple_monitor.py \
   --ipaddr localhost --port 30006 \
-  examples/generic/print_all_aircraft.yaml
+  examples/hello_world_rules.yaml
 
 # Run the stripview GUI
 python3 src/applications/stripview/controller.py \
@@ -65,9 +66,9 @@ python3 src/applications/stripview/controller.py \
 
 ## Adding Your Own Config
 
-1. Copy `examples/generic/low_altitude_alert.yaml` as a starting point
+1. Copy `examples/low_altitude_alert.yaml` as a starting point
 2. Define KML regions if needed (use Google Earth to create)
 3. Add rules with conditions and actions
 4. Run with `simple_monitor.py` or build your own using the core library
 
-See [CONFIG_INSTRUCTIONS.yaml](CONFIG_INSTRUCTIONS.yaml) for all available options.
+See [RULE_SCHEMA.yaml](RULE_SCHEMA.yaml) for all available options.

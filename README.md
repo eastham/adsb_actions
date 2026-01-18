@@ -7,21 +7,21 @@ specified in a simple human-readable YAML format.
 
 These actions can then:
 
-- Drive a UI:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/stripview.png?raw=true" alt="Screenshot of Stripview"><br>
-&nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/monitor.png?raw=true" alt="Screenshot of monitor">
+⭒ Drive a UI:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<img src="screenshots/stripview.png?raw=true" alt="Screenshot of Stripview"><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<img src="screenshots/monitor.png?raw=true" alt="Screenshot of monitor">
 
-- Do real-time analysis, for example detect loss-of-separation events:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/los.png?raw=true" alt="Screenshot of LOS">
+⭒ Do real-time analysis, for example detect loss-of-separation events:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<img src="screenshots/los.png?raw=true" alt="Screenshot of LOS">
 
-- Visualize events and find hotspots:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/heatmap.png?raw=true" alt="Screenshot of hotspots">
+⭒ Visualize events and find hotspots:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<img src="screenshots/heatmap.png?raw=true" alt="Screenshot of hotspots">
 
-- Do offline analysis, for example to generate operational counts and statistics:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;<img src="misc/landing.png?raw=true" alt="Screenshot of landings">
-- Trigger Slack alerts based on arbitrary conditions
-- Push operations to a database
-- Whatever else you can imagine!
+⭒ Do offline analysis, for example to generate operational counts and statistics:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<img src="screenshots/landing.png?raw=true" alt="Screenshot of landings">
+⭒ Trigger Slack alerts based on arbitrary conditions
+⭒ Push operations (takeoffs/landings/etc) to a database
+⭒ Whatever else you can imagine!
 
 <h3>Overview</h3>
 Each YAML rule contains ✅ <strong>conditions</strong> and ⚡ <strong>actions</strong>. 
@@ -29,7 +29,7 @@ Each YAML rule contains ✅ <strong>conditions</strong> and ⚡ <strong>actions<
 
 ✅ <strong>Conditions</strong> are an ANDed set, and can include altitude ranges, location within a region specified in a KML file, movement between regions, proximity to other aircraft, and more.
 <p>
-⚡ <strong>Actions</strong> include logging, Slack, paging / JSON webhook, shell execution, and python callback.  See CONFIG_INSTRUCTIONS.yaml for more info.
+⚡ <strong>Actions</strong> include logging, Slack, paging / JSON webhook, shell execution, and python callback.  See RULE_SCHEMA.yaml for more info.
 
 <h3>Example YAML config:</h3>
 This will trigger a callback and log information to stdout when aircraft N12345 matches certain location criteria:<p>

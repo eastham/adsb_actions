@@ -49,6 +49,4 @@ src/adsb_actions/*.html
 *.joblib
 
 # Analysis directories
-analysis/
 remote/
-find_cpes_not_needed_maybe/

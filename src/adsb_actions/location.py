@@ -23,6 +23,11 @@ class Location:
     tail: Optional[str] = None  # tail number from ICAO code
     gs: Optional[float] = 0
     track: float = 0.
+    squawk: Optional[str] = None  # transponder code (4 octal digits)
+    emergency: Optional[str] = None  # ADS-B emergency status
+    category: Optional[str] = None  # emitter category (A1-A7, B1-B7, etc.)
+    baro_rate: Optional[int] = None  # vertical rate (feet/minute)
+    on_ground: bool = False  # True when alt_baro == "ground"
     flightdict: Optional[dict] = None
 
     def __post_init__(self):
@@ -40,6 +45,10 @@ class Location:
         for f in fields(Location):
             if f.name in d:
                 nd[f.name] = d[f.name]
+
+        # Detect ground state before alt_baro gets coerced to 0
+        if 'alt_baro' in d and d['alt_baro'] == "ground":
+            nd['on_ground'] = True
 
         # XXX should this be in flight?
         if "hex" in d:

@@ -72,7 +72,10 @@ class Rules:
                             'transition_regions', 'changed_regions',
                             'regions', 'latlongring',
                             'cooldown', 'rule_cooldown', 'has_attr', 'min_time',
-                            'max_time', 'time_ranges', 'enabled']
+                            'max_time', 'time_ranges', 'enabled', 'squawk',
+                            'emergency', 'category', 'min_gs', 'max_gs',
+                            'min_vertical_rate', 'max_vertical_rate',
+                            'callsign_prefix', 'on_ground']
 
         try:
             for condition in conditions.keys():
@@ -203,6 +206,93 @@ class Rules:
                 result = condition_value in flight.lastloc.flightdict
             else:
                 result = False
+            if not result:
+                return False
+
+        if 'squawk' in conditions:
+            condition_value = conditions['squawk']
+            # condition_value can be a single squawk code or a list of codes
+            if isinstance(condition_value, list):
+                squawk_list = [str(s) for s in condition_value]
+            else:
+                squawk_list = [str(condition_value)]
+            result = flight.lastloc.squawk in squawk_list
+            if not result:
+                return False
+
+        if 'emergency' in conditions:
+            condition_value = conditions['emergency']
+            if flight.lastloc.emergency is None:
+                return False
+            # "any" matches any emergency status except "none"
+            if condition_value == 'any':
+                result = flight.lastloc.emergency != 'none'
+            elif isinstance(condition_value, list):
+                result = flight.lastloc.emergency in condition_value
+            else:
+                result = flight.lastloc.emergency == condition_value
+            if not result:
+                return False
+
+        if 'category' in conditions:
+            condition_value = conditions['category']
+            if flight.lastloc.category is None:
+                return False
+            if isinstance(condition_value, list):
+                result = flight.lastloc.category in condition_value
+            else:
+                result = flight.lastloc.category == condition_value
+            if not result:
+                return False
+
+        if 'min_gs' in conditions:
+            condition_value = conditions['min_gs']
+            if flight.lastloc.gs is None:
+                return False
+            result = flight.lastloc.gs >= float(condition_value)
+            if not result:
+                return False
+
+        if 'max_gs' in conditions:
+            condition_value = conditions['max_gs']
+            if flight.lastloc.gs is None:
+                return False
+            result = flight.lastloc.gs <= float(condition_value)
+            if not result:
+                return False
+
+        if 'min_vertical_rate' in conditions:
+            condition_value = conditions['min_vertical_rate']
+            if flight.lastloc.baro_rate is None:
+                return False
+            result = flight.lastloc.baro_rate >= int(condition_value)
+            if not result:
+                return False
+
+        if 'max_vertical_rate' in conditions:
+            condition_value = conditions['max_vertical_rate']
+            if flight.lastloc.baro_rate is None:
+                return False
+            result = flight.lastloc.baro_rate <= int(condition_value)
+            if not result:
+                return False
+
+        if 'callsign_prefix' in conditions:
+            condition_value = conditions['callsign_prefix']
+            if flight.flight_id is None:
+                return False
+            if isinstance(condition_value, list):
+                result = any(flight.flight_id.startswith(prefix) for prefix in condition_value)
+            else:
+                result = flight.flight_id.startswith(condition_value)
+            if not result:
+                return False
+
+        if 'on_ground' in conditions:
+            condition_value = conditions['on_ground']
+            # on_ground: true means aircraft must be on ground
+            # on_ground: false means aircraft must be airborne
+            result = flight.lastloc.on_ground == condition_value
             if not result:
                 return False
 

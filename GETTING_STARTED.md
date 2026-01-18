@@ -41,12 +41,17 @@ If you have readsb running, add `--net-json-port 30006` to its configuration:
 Then restart readsb: `sudo systemctl restart readsb`
 
 ### Step 2: Run the simple monitor
+This just prints out every flight seen in the data.
 
 ```bash
-python3 src/tools/examples/simple_monitor.py --ipaddr localhost --port 30006 examples/generic/basic_rules.yaml
+# From a live readsb feed:
+python3 src/tools/examples/simple_monitor.py --ipaddr localhost --port 30006 examples/hello_world_rules.yaml
+
+# Or from pre-recorded data files (no hardware required):
+python3 src/tools/examples/simple_monitor.py --directory tests/sample_readsb_data examples/hello_world_rules.yaml
 ```
 
-You should see aircraft printed to the console every minute (based on the `cooldown: 1` in basic_rules.yaml).
+You should see aircraft printed to the console every minute (based on the `cooldown: 1` in hello_world_rules.yaml).
 
 ## Understanding the YAML Config
 
@@ -62,7 +67,7 @@ rules:
       print: True        # Print to console
 ```
 
-See [CONFIG_INSTRUCTIONS.yaml](CONFIG_INSTRUCTIONS.yaml) for all available conditions and actions.
+See [RULE_SCHEMA.yaml](RULE_SCHEMA.yaml) for all available conditions and actions.
 
 ## What's Optional
 
@@ -125,7 +130,7 @@ source .venv/bin/activate
 | `src/applications/flight_info_display/` | Kivy-based FIDS (Flight Info Display) |
 | `src/applications/stripview/` | Kivy-based ATC flight strip GUI |
 | `examples/88nv/` | Example configs for 88NV airport |
-| `examples/generic/` | Generic example configs |
+| `examples/` | Example configs (hello_world_rules.yaml, low_altitude_alert.yaml, etc.) |
 
 
 <h3> More things to try: </h3>
