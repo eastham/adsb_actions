@@ -5,13 +5,10 @@ This guide walks you through setting up adsb-actions from scratch. By the end, y
 ## Prerequisites
 
 - **Python 3.8 - 3.12** (check with `python3 --version`; 3.13 lacks aarch64 wheels for numpy/scipy)
-- **ADS-B data source** - either:
-  - A local [readsb](https://github.com/wiedehopf/readsb) instance, OR
-  - The included test data files for offline testing
 
 ## Quick Start (No Hardware Required)
 
-You can try adsb-actions immediately using pre-recorded test data:
+You can try adsb_actions using the airplanes.live API:
 
 ```bash
 # 1. Clone and set up
@@ -21,15 +18,15 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 
-# 2. Run with test data (analyzes a 1-hour recording)
-pytest -s tests/test_1hr.py
+# 2. Run with live data from the API (monitors aircraft near SFO)
+python3 src/applications/tcp_api_monitor/monitor.py examples/hello_world_api.yaml
 ```
 
-You should see output showing aircraft detections and rule matches.
+You should see aircraft printed to the console. Edit `hello_world_api.yaml` to change the location or radius.
 
-## Your First Live Setup
+## Using a local ADS-B receiver
 
-### Step 1: Configure readsb to expose JSON data
+#### Step 1: Configure readsb to expose JSON data
 
 If you have readsb running, add `--net-json-port 30006` to its configuration:
 
@@ -40,22 +37,18 @@ If you have readsb running, add `--net-json-port 30006` to its configuration:
 
 Then restart readsb: `sudo systemctl restart readsb`
 
-### Step 2: Run the simple monitor
-This just prints out every flight seen in the data.
+#### Step 2: Run the simple monitor
 
 ```bash
-# From a live readsb feed:
 python3 src/tools/examples/simple_monitor.py --ipaddr localhost --port 30006 examples/hello_world_rules.yaml
-
-# Or from pre-recorded data files (no hardware required):
-python3 src/tools/examples/simple_monitor.py --directory tests/sample_readsb_data examples/hello_world_rules.yaml
 ```
 
-You should see aircraft printed to the console every minute (based on the `cooldown: 1` in hello_world_rules.yaml).
+You should see aircraft printed to the console, no more than once per
+minute per aircraft.
 
 ## Understanding the YAML Config
 
-Rules have **conditions** (when to match) and **actions** (what to do):
+Rules have **conditions** (when to match) -- which are an ANDed expression -- and **actions** (what to do):
 
 ```yaml
 rules:
@@ -77,17 +70,10 @@ The core library works without any external integrations. These features are **o
 |---------|----------|---------|
 | Slack alerts | Slack webhook URL in `private.yaml` | Send notifications to Slack channels |
 | Paging | Paging service credentials in `private.yaml` | Send pages/alerts to recipients |
-| Database logging | AppSheet credentials in `private.yaml` | Log operations to a database |
+| Database integration | DB credentials in `private.yaml` | Log events to a database |
 | GUI (Stripview) | `pip install -e ".[all]"` | Visual flight strip display |
 
-If you don't need these, you don't need to configure them. The library will log a note about missing `private.yaml` and continue working.
-
-## Next Steps
-
-1. **Customize rules**: Edit the YAML to match your use case
-2. **Add KML regions**: Define geographic areas of interest
-3. **Write callbacks**: Create Python functions triggered by rules
-4. **Try the GUI**: `python3 src/applications/stripview/controller.py --help`
+If you don't need these, you don't need to configure them.
 
 ## Environment Variables
 

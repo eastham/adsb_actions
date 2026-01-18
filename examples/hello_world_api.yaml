@@ -1,0 +1,13 @@
+# Hello world for API-based monitoring (no hardware required)
+# Uses the airplanes.live API to get aircraft data for a geographic area.
+#
+# Usage: python3 src/applications/tcp_api_monitor/monitor.py examples/hello_world_api.yaml
+
+rules:
+  hello_world_query:
+    conditions:
+      latlongring: [200, 37.6213, -122.379]  # 200nm around SFO airport
+      max_alt: 60000
+      cooldown: 1     # minutes between prints
+    actions:
+      print: True

@@ -178,7 +178,7 @@ class AdsbActions:
             if delay:
                 time.sleep(delay)
 
-        logger.warning("Exiting main loop, parsed %s points.", Stats.json_readlines)
+        logger.info("Exiting main loop, parsed %s points.", Stats.json_readlines)
         self.rules.print_final_report()
 
     def register_callback(self, name: str, fn: Callable) -> None:
@@ -258,7 +258,7 @@ class AdsbActions:
                 logger.info("_flight_update_read Reconnected after disconnect/inactivity timeout")
                 return 0
             else:
-                logger.warning("_flight_update_read Exception: %s", str(e))
+                logger.info("_flight_update_read Exception: %s", str(e))
                 return -1
 
         Stats.json_readlines += 1
