@@ -1,4 +1,4 @@
-<h2>adsb-actions: A package for taking actions based on live or recorded ADS-B data.</h2>
+<h2>adsb-actions: Turn aircraft tracking data into automated actions.</h2>
 
 This module allows you to apply conditions and actions to JSON flight
 data coming from [readsb](https://github.com/wiedehopf/readsb), saved historical data, or
@@ -32,30 +32,19 @@ Each YAML rule contains ✅ <strong>conditions</strong> and ⚡ <strong>actions<
 ⚡ <strong>Actions</strong> include logging, Slack, paging / JSON webhook, shell execution, and python callback.  See RULE_SCHEMA.yaml for more info.
 
 <h3>Example YAML config:</h3>
-This will trigger a callback and log information to stdout when aircraft N12345 matches certain location criteria:<p>
+This will trigger a callback and send a slack message when an aircraft
+is seen below 2000 feet in a certain geograpic area:<p>
 
 ```
-  config:
-    kmls:  # optional KML files that specify geographic regions.
-      - tests/test3.kml 
-
-  aircraft_lists:  # optional lists of tail numbers of interest.
-    alert_aircraft: [ "N12345" ]
-
   rules:
-    nearby:
-      conditions: 
-        min_alt: 4000        # feet MSL, must be >= to match
-        max_alt: 10000       # feel MSL, must be <= to match
-        aircraft_list: alert_aircraft  # use aircraft_list above
-        latlongring: [20, 40.763537, -119.2122323]
-        regions: [ "23 upwind" ]  # region defined in KML
+    low_alt:
+      conditions:
+        max_alt: 2000
+        latlongring: [10, 40.763537, -119.2122323]
       actions:
-        callback: nearby_cb  # call a function registered under this name
-        print: True          # print info about this match to console
-```
-
-
+        callback: print_aircraft_data   # call this when matched
+        webhook: ['slack', 'emergency_aircraft_channel']
+'''
 
 **Ready to try it?** See [GETTING_STARTED.md](GETTING_STARTED.md) for a step-by-step setup guide.
 

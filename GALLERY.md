@@ -9,3 +9,4 @@ This analysis led to a 70% reduction in hazardous events. [More info](https://do
 ![LOS Reduction Chart](screenshots/LOS_reduction.png)
 
 ## Meshtastic-driven ground vehicle tracking and runway alerts
+![Vehicle on runway](screenshots/ground_map.png)
