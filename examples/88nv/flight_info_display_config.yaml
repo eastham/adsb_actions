@@ -14,8 +14,8 @@
 
   config:
     kmls:
-      - tests/test2.kml
-      - tests/test3.kml
+      - examples/88nv/regions/brc_large_regions.kml
+      - examples/88nv/regions/brc_small_regions.kml
 
   rules:
     ui_update:

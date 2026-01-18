@@ -9,7 +9,7 @@ config:
   kmls:
     # specifying a KML will add more info to the log messages about aircraft
     # location
-    - tests/test2.kml 
+    - examples/88nv/regions/brc_large_regions.kml 
 
 aircraft_lists:
   # Lists of tail numbers of interest.

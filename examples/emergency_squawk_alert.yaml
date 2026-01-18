@@ -1,5 +1,5 @@
 # Emergency squawk code detection example.
-# Triggers when aircraft transmit emergency transponder codes:
+# Sends a slack message when aircraft transmit emergency transponder codes:
 #   7500 - Hijacking
 #   7600 - Radio failure (lost communications)
 #   7700 - General emergency
@@ -18,3 +18,4 @@ rules:
       cooldown: 10      # only trigger every 10 minutes per aircraft
     actions:
       print: True                   # print to console
+      webhook: ['slack', 'emergency_aircraft_channel'] # send a message to a slack channel

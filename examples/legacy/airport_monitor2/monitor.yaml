@@ -1,12 +1,12 @@
 # Legacy airport monitor 2 configuration.
 # Minimal rules config for the fancier airport-terminal-style display.
 # Triggers UI updates when aircraft enter defined regions.
-# Usage: python monitorapp.py tests/test2.kml tests/test3.kml --rules monitor.yaml --testdata <testfile>
+# Usage: python monitorapp.py examples/88nv/regions/brc_large_regions.kml examples/88nv/regions/brc_small_regions.kml --rules monitor.yaml --testdata <testfile>
 
   config:
     kmls:
-      - ../../../tests/test2.kml 
-      - ../../../tests/test3.kml
+      - examples/88nv/regions/brc_large_regions.kml
+      - examples/88nv/regions/brc_small_regions.kml
 
   rules:
     ui_update:
