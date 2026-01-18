@@ -4,6 +4,7 @@ import datetime
 import logging
 import shlex
 import subprocess
+import sys
 from typing import Callable
 from .flight import Flight
 from .stats import Stats
@@ -408,9 +409,12 @@ class Rules:
             elif 'print' == action_name:
                 ts_utc = datetime.datetime.utcfromtimestamp(
                     flight.lastloc.now).strftime('%m/%d/%y %H:%M')
-                print(
-                    f"Print action: {ts_utc} {flight.to_str()}",
-                    f"{flight.flags.get('note', '')}")
+                note = flight.flags.get('note', '')
+                msg = f"{rule_name}: {ts_utc} {flight.to_str()} {note}"
+                if sys.stdout.isatty():
+                    print(f"\033[92m{msg}\033[0m")  # green on TTY
+                else:
+                    print(msg)
 
             elif 'callback' == action_name:
                 Stats.callbacks_fired += 1

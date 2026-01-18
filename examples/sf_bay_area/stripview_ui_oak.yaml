@@ -1,7 +1,7 @@
 # Oakland Airport (OAK) stripview UI configuration.
 # Monitors aircraft in OAK approach, tower, and east/west sectors.
 # Includes proximity detection for loss-of-separation alerts (400ft vertical, 0.3nm lateral).
-# Usage: python -m tools.stripview --rules examples/sf_bay_area/stripview_ui_oak.yaml
+# Usage: python src/applications/stripview/controller.py -- --rules examples/sf_bay_area/stripview_ui_oak.yaml
 
   config:
     kmls:

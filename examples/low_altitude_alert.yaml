@@ -1,16 +1,21 @@
 # Low altitude alert example configuration.
-# Triggers a callback and prints to console when aircraft are detected between 100-4500ft.
+# Triggers a callback when aircraft are detected between 100-4500ft.
 # Uses a 10-minute cooldown per aircraft to avoid alert spam.
 #
-# Usage w/ readsb: python3 src/tools/examples/simple_monitor.py --ipaddr localhost --port 30006 examples/low_altitude_alert.yaml
-# Usage w/ test data: python3 src/tools/examples/simple_monitor.py --directory tests/sample_readsb_data examples/low_altitude_alert.yaml
+# Usage w/ readsb:
+#   python3 src/analyzers/callback_runner.py --ipaddr localhost --port 30006 \
+#     --callback_definitions examples/low_altitude_callbacks.py examples/low_altitude_alert.yaml
+#
+# Usage w/ test data:
+#   python3 src/analyzers/callback_runner.py --data tests/sample_readsb_data \
+#     --callback_definitions examples/low_altitude_callbacks.py examples/low_altitude_alert.yaml
 
-  rules:
-    low_alt:
-      conditions:
-        min_alt: 100
-        max_alt: 4500
-        cooldown: 10      # only trigger every 10 minutes per aircraft
-      actions:
-        callback: print_aircraft_data   # call this when matched
+rules:
+  low_alt:
+    conditions:
+      min_alt: 100
+      max_alt: 4500
+      cooldown: 10      # only trigger every 10 minutes per aircraft
+    actions:
+      callback: low_altitude_alert_cb   # defined in low_altitude_callbacks.py
 

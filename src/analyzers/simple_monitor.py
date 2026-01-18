@@ -5,8 +5,9 @@ Takes ip address/port/yaml from command line and processes the data,
 or reads from a directory of readsb data files.
 
 Usage:
-    python3 src/tools/examples/simple_monitor.py --directory tests/sample_readsb_data examples/hello_world_rules.yaml
-    python3 src/tools/examples/simple_monitor.py --directory tests/sample_readsb_data examples/low_altitude_alert.yaml
+    python3 src/analyzers/simple_monitor.py --directory tests/sample_readsb_data examples/hello_world_rules.yaml
+
+For examples that use callbacks, see callback_runner.py instead.
 """
 
 from adsb_actions.adsbactions import AdsbActions
@@ -39,7 +40,7 @@ if __name__ == "__main__":
 
     if args.directory:
         # File-based replay mode
-        from tools.analysis import replay
+        from lib import replay
         print("Reading data from directory...")
         allpoints = replay.read_data(args.directory)
         allpoints_iterator = replay.yield_json_data(allpoints)

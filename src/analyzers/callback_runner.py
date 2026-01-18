@@ -16,7 +16,7 @@ import importlib.util
 import logging
 
 import yaml
-from tools.analysis import replay
+from lib import replay
 import sys
 from adsb_actions.adsbactions import AdsbActions
 from adsb_actions.adsb_logger import Logger

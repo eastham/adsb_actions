@@ -6,12 +6,11 @@
 src/
 ├── adsb_actions/           # Core library - the rule engine
 ├── core/
-│   ├── database/           # Database abstraction (AppSheet, NullDatabase)
-│   └── network/            # TCP client for API monitoring
-├── tools/
-│   ├── analysis/           # Offline analysis: replay, visualizer, hotspot detection
-│   ├── examples/           # Example scripts: simple_monitor, generic_analyzer
-│   └── injection/          # ADS-B injection tools (for testing with readsb)
+│   └── database/           # Database abstraction (AppSheet, NullDatabase)
+├── lib/                    # Core libraries: replay, readsb_parse, map_elements
+├── analyzers/              # Analysis scripts: simple_monitor, generic_analyzer
+├── postprocessing/         # Post-processing: visualizer, hotspot_analyzer
+├── tools/                  # ADS-B injection utilities
 └── applications/
     ├── airport_monitor/    # Headless service: detect takeoffs/landings/LOS, push to DB
     ├── flight_info_display/# Kivy FIDS (arrival/departure board)
@@ -22,6 +21,7 @@ examples/
 ├── 88nv/                   # Black Rock City airport monitoring
 ├── sf_bay_area/            # San Francisco Bay Area monitoring (SJC, OAK)
 ├── hello_world_rules.yaml  # Simplest example - print all aircraft
+├── hello_world_api.yaml    # API-based example (no hardware required)
 ├── low_altitude_alert.yaml # Example with callback
 └── legacy/                 # Old airport display examples (reference only)
 ```
@@ -53,15 +53,14 @@ ADS-B Source (readsb :30006 or API or file)
 
 ```bash
 # Print all aircraft in a 20nm ring around a point
-python3 src/tools/examples/simple_monitor.py \
+python3 src/analyzers/simple_monitor.py \
   --ipaddr localhost --port 30006 \
   examples/hello_world_rules.yaml
 
 # Run the stripview GUI
-python3 src/applications/stripview/controller.py \
+python3 src/applications/stripview/controller.py -- \
   --testdata tests/20minutes.json --delay .2 \
-  --rules examples/88nv/stripview_ui.yaml \
-  examples/88nv/regions/brc_large_regions.kml
+  --rules examples/88nv/stripview_ui.yaml
 ```
 
 ## Adding Your Own Config

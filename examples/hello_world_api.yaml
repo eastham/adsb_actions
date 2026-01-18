@@ -1,13 +1,24 @@
 # Hello world for API-based monitoring (no hardware required)
 # Uses the airplanes.live API to get aircraft data for a geographic area.
+# Prints when aircraft enter/exit airport zones.
 #
 # Usage: python3 src/applications/tcp_api_monitor/monitor.py examples/hello_world_api.yaml
 
+config:
+  kmls:
+    - examples/sf_bay_area/regions/bay_area_airports.kml
+
 rules:
-  hello_world_query:
+  print_all_aircraft:
     conditions:
-      latlongring: [200, 37.6213, -122.379]  # 200nm around SFO airport
-      max_alt: 60000
-      cooldown: 1     # minutes between prints
+      cooldown: 10 # only once per 10 minutes per aircraft
     actions:
       print: True
+
+  print_changed_regions:
+    conditions:
+      latlongring: [100, 37.6213, -122.379]  # 200nm around SFO airport
+      changed_regions: any
+    actions:
+      print: True
+  

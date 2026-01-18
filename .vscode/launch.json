@@ -9,7 +9,7 @@
         "type": "python",
         "request": "launch",
         "cwd": "${workspaceFolder}",
-        "program": "src/tools/examples/simple_monitor.py",
+        "program": "src/analyzers/simple_monitor.py",
         "args": "--directory tests/sample_readsb_data examples/hello_world_rules.yaml",
         "console": "integratedTerminal",
         "justMyCode": true
@@ -23,12 +23,12 @@
         "justMyCode": true
       },
       {
-        "name": "Generic analyzer -- from files",
+        "name": "Callback runner -- low altitude alert from files",
         "type": "python",
         "request": "launch",
         "cwd": "${workspaceFolder}",
-        "program": "src/tools/examples/generic_analyzer.py",
-        "args": " --data tests/sample_readsb_data --callback_definitions src/tools/examples/generic_analyzer_callbacks.py examples/low_altitude_alert.yaml",
+        "program": "src/analyzers/callback_runner.py",
+        "args": " --data tests/sample_readsb_data --callback_definitions examples/low_altitude_callbacks.py examples/low_altitude_alert.yaml",
         "console": "integratedTerminal",
         "justMyCode": true
       },
@@ -56,7 +56,7 @@
         "justMyCode": true
       },
       {
-        "name": "Airport monitor (push ops to appsheet)",
+        "name": "Airport monitoring (push ops to appsheet)",
         "type": "python",
         "request": "launch",
         "cwd": "${workspaceFolder}",
@@ -66,7 +66,7 @@
         "justMyCode": true
       },
       {
-        "name": "Airport monitor from live feed",
+        "name": "Airport monitoring from live feed",
         "type": "python",
         "request": "launch",
         "cwd": "${workspaceFolder}",
@@ -80,7 +80,7 @@
         "type": "python",
         "request": "launch",
         "cwd": "${workspaceFolder}",
-        "program": "src/tools/analysis/replay.py",
+        "program": "src/lib/replay.py",
         "args": "--port 30006 --speed_x 1000 tests/sample_readsb_data",
         "console": "integratedTerminal",
         "justMyCode": true
@@ -90,18 +90,18 @@
         "type": "python",
         "request": "launch",
         "cwd": "${workspaceFolder}",
-        "program": "src/tools/examples/simple_monitor.py",
+        "program": "src/analyzers/simple_monitor.py",
         "args": "--ipaddr boxone --port 30006 examples/hello_world_rules.yaml",
         "console": "integratedTerminal",
         "justMyCode": true
       },
       {
-        "name": "Parse all data from readsb database directory",
+        "name": "Detect ops from readsb database directory",
         "type": "python",
         "request": "launch",
         "cwd": "${workspaceFolder}",
-        "program": "src/tools/examples/analyze_from_files.py",
-        "args": "--yaml src/tools/examples/analyze_from_files.yaml /Users/eastham/adsb_data/2024/08/27",
+        "program": "src/analyzers/analyze_from_files.py",
+        "args": "--yaml examples/88nv/detect_ops_from_files.yaml /Users/eastham/adsb_data/2024/08/27",
         "console": "integratedTerminal",
         "justMyCode": true
       },
@@ -110,8 +110,8 @@
         "type": "python",
         "request": "launch",
         "cwd": "${workspaceFolder}",
-        "program": "src/tools/examples/prox_analyze_from_files.py",
-        "args": "--yaml src/tools/examples/prox_analyze_from_files.yaml /Users/eastham/adsb_data/2025/08/30 --resample",
+        "program": "src/analyzers/prox_analyze_from_files.py",
+        "args": "--yaml examples/88nv/prox_analyze_from_files.yaml /Users/eastham/adsb_data/2025/08/30 --resample",
         "console": "integratedTerminal",
         "justMyCode": true
       },
@@ -151,7 +151,7 @@
         "type": "python",
         "request": "launch",
         "cwd": "${workspaceFolder}",
-        "program": "src/tools/injection/replay_to_adsb.py",
+        "program": "src/tools/replay_to_adsb.py",
         "args": "--inject_addr boxone:30001 tests/20minutes.json --speed_x 1",
         "console": "integratedTerminal",
         "justMyCode": true
@@ -162,7 +162,7 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/applications/tcp_api_monitor/monitor.py",
-        "args": "examples/tcp_api_webhook.yaml",
+        "args": "examples/hello_world_api.yaml",
         "console": "integratedTerminal",
         "justMyCode": true
       }

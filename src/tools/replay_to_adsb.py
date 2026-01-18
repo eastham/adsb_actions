@@ -8,8 +8,8 @@ import json
 import signal
 import sys
 import time
-from tools.injection.inject_adsb import ReadsbConnection
-from tools.injection import ADSB_Encoder
+from tools.inject_adsb import ReadsbConnection
+from tools import ADSB_Encoder
 
 def inject_position(readsb, icao, lat, lon, alt):
     """Inject a position into readsb."""

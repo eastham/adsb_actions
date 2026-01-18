@@ -56,9 +56,10 @@ class Flight:
     def to_str(self):
         """String representation includes lat/long and bbox list."""
 
-        string = self.lastloc.to_str()
-
-        string += " " + str(self.inside_bboxes)
+        string = self.lastloc.to_str() + " "
+        if self.prev_inside_bboxes_valid:
+            string += str(self.prev_inside_bboxes) + "->"
+        string += str(self.inside_bboxes)
         return string
 
     def to_link(self):

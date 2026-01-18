@@ -10,7 +10,7 @@ socket, and process the ADS-B data coming in:
 
 Alternatively, you can process data from a directory of readsb trace files:
 
-    from tools.analysis import replay
+    from lib import replay
     yaml_file = "examples/hello_world_rules.yaml"
     allpoints = replay.read_data("/path/to/data/directory")
     allpoints_iterator = replay.yield_json_data(allpoints)

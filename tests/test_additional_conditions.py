@@ -11,7 +11,7 @@ import testinfra
 
 from adsb_actions.stats import Stats
 from adsb_actions.adsbactions import AdsbActions
-from tools.analysis import replay
+from lib import replay
 
 # Counters for callbacks - using dicts to track matches vs non-matches
 counters = {}

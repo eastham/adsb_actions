@@ -7,8 +7,8 @@
 # Includes a geographic filter (latlongring) for use with tcp_api_monitor.
 # Uses a 10-minute cooldown per aircraft to avoid alert spam.
 #
-# Usage w/ tcp_api_webhook: python3 src/tools/examples/tcp_api_webhook.py examples/emergency_squawk_alert.yaml
-# Usage w/ readsb: python3 src/tools/examples/simple_monitor.py --ipaddr localhost --port 30006 examples/emergency_squawk_alert.yaml
+# Usage w/ tcp_api_monitor: python3 src/applications/tcp_api_monitor/monitor.py examples/emergency_squawk_alert.yaml
+# Usage w/ readsb: python3 src/analyzers/simple_monitor.py --ipaddr localhost --port 30006 examples/emergency_squawk_alert.yaml
 
 rules:
   emergency_squawk:

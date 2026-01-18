@@ -1,9 +1,9 @@
 # 88NV (Black Rock City Municipal Airport) stripview (ATC Tower UI) configuration.
 #
-# Displays aircraft in Scenic, Gerlach Corridor, and Empire/Pattern regions.
+# Displays one "strip" per aircraft in four defined regions.
 # Excludes ground vehicles (N10C/N10D) and includes proximity alerting for loss-of-separation.
 #
-# Usage: python -m tools.stripview --rules examples/88nv/stripview_ui.yaml
+# Usage: python src/applications/stripview/controller.py -- --rules examples/88nv/stripview_ui.yaml
 
   config:
     kmls:
@@ -11,7 +11,7 @@
       - examples/88nv/regions/brc_small_regions.kml # provides more detailed location description for use in UI
 
   rules:
-    # callback to update strip for aircraft inside the covered regions,
+    # Callback to update strip for aircraft inside the covered regions,
     # for example to show a change in altitude.
     ui_update:
       conditions:
@@ -20,7 +20,7 @@
       actions:
         callback: aircraft_update_cb
 
-    # callback to hide strip for aircraft that left the covered regions
+    # Callback to hide strip for aircraft that left the covered regions
     ui_remove:
       conditions:
         exclude_aircraft_substrs: ["N10C", "N10D"]
@@ -28,7 +28,7 @@
       actions:
         callback: aircraft_remove_cb
 
-    # callback to hide strip for aircraft that is expired by the system
+    # Callback to hide strip for aircraft that is expired by the system
     # due to inactivity.
     ui_expire:
       conditions: 
@@ -36,7 +36,8 @@
       actions:
         expire_callback: aircraft_remove_cb
 
-    # callback for aircraft that are in close proximity (LOS - Loss of Separation)
+    # Callback for aircraft that are in close proximity (LOS - Loss of 
+    # Separation)
     prox:
       conditions:
         exclude_aircraft_substrs: ["N10C", "N10D"]

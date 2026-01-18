@@ -1,7 +1,7 @@
 # San Jose Airport (SJC) stripview UI configuration.
 # Similar to monitor_sjc.yaml but with aircraft exclusion filters (N10C, N10D prefixes).
 # Displays aircraft in SJC terminal area with automatic strip updates and expiration.
-# Usage: python -m tools.stripview --rules examples/sf_bay_area/stripview_ui_sjc.yaml
+# Usage: python src/applications/stripview/controller.py -- --rules examples/sf_bay_area/stripview_ui_sjc.yaml
 
   monitor_config:
 #    window_size: [970, 1200]   # larger display

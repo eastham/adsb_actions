@@ -1,9 +1,9 @@
-# TCP API webhook example configuration (by default, reads from airplanes.live API)
+# Airport monitor API rules (by default, reads from airplanes.live API)
 #
 # Sends Slack messages and pager alerts when specific aircraft are detected in a
 # given area.
 #
-# Usage: python3 src/applications/tcp_api_monitor/monitor.py examples/tcp_api_webhook.yaml
+# Usage: python3 src/applications/tcp_api_monitor/monitor.py examples/88nv/airport_monitor_api_rules.yaml
 
 config:
   kmls:

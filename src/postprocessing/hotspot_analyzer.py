@@ -2,7 +2,7 @@
 Hotspot analysis for LOS (Loss of Separation) events.
 
 Provides kernel density estimation (KDE) and clustering algorithms
-to identify spatial concentrations of proximity violations.
+to identify spatial concentrations of events based on a list of event lat/longs.
 """
 
 from typing import List, Tuple, Optional

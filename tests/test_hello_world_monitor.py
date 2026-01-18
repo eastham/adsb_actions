@@ -10,7 +10,7 @@ def test_simple_monitor_directory():
     result = subprocess.run(
         [
             sys.executable,
-            "src/tools/examples/simple_monitor.py",
+            "src/analyzers/simple_monitor.py",
             "--directory", "tests/sample_readsb_data",
             "examples/hello_world_rules.yaml"
         ],

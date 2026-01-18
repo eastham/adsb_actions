@@ -40,7 +40,7 @@ Then restart readsb: `sudo systemctl restart readsb`
 #### Step 2: Run the simple monitor
 
 ```bash
-python3 src/tools/examples/simple_monitor.py --ipaddr localhost --port 30006 examples/hello_world_rules.yaml
+python3 src/analyzers/simple_monitor.py --ipaddr localhost --port 30006 examples/hello_world_rules.yaml
 ```
 
 You should see aircraft printed to the console, no more than once per
@@ -58,6 +58,8 @@ rules:
       cooldown: 5        # Don't repeat for same aircraft within 5 minutes
     actions:
       print: True        # Print to console
+      webhook: ['slack', 'slack_channel']  # send a message to a slack 
+      shell: "echo 'Aircraft {flight_id}'" # run a shell command
 ```
 
 See [RULE_SCHEMA.yaml](RULE_SCHEMA.yaml) for all available conditions and actions.
@@ -110,8 +112,10 @@ source .venv/bin/activate
 | `src/adsb_actions/` | Core library - rule engine, flight tracking |
 | `src/core/database/` | Database abstraction layer |
 | `src/core/network/` | Network utilities (TCP client) |
-| `src/tools/analysis/` | Analysis tools - replay, visualization, hotspot detection |
-| `src/tools/examples/` | Example scripts - simple_monitor, generic_analyzer |
+| `src/lib/` | Core libraries - replay, parsing |
+| `src/analyzers/` | Analysis scripts - simple_monitor, generic_analyzer |
+| `src/postprocessing/` | Post-processing tools - visualization, hotspot detection |
+| `src/tools/` | ADS-B injection utilities |
 | `src/applications/airport_monitor/` | Headless airport monitoring service |
 | `src/applications/flight_info_display/` | Kivy-based FIDS (Flight Info Display) |
 | `src/applications/stripview/` | Kivy-based ATC flight strip GUI |
@@ -122,5 +126,7 @@ source .venv/bin/activate
 <h3> More things to try: </h3>
 
 1. Tests are available: `pytest -s tests/*.py`
-2. Invoke a sample UI: `python3 src/applications/stripview/controller.py --testdata tests/20minutes.json --delay .2 --rules examples/88nv/stripview_ui.yaml examples/88nv/regions/brc_large_regions.kml`
+2. Invoke a sample UI: 
+- `pip install -e ".[all]"`
+- `python3 src/applications/stripview/controller.py  -- --testdata tests/20minutes.json --delay .2 --rules examples/88nv/stripview_ui.yaml`
 3. Command lines for other sample applications can be found in launch.json.

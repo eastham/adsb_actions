@@ -1,8 +1,7 @@
 <h2>adsb-actions: Turn aircraft tracking data into automated actions.</h2>
 
 This module allows you to apply conditions and actions to JSON flight
-data coming from [readsb](https://github.com/wiedehopf/readsb), saved historical data, or
-internet ADS-B API provider.  The conditions and actions are
+data coming from [readsb](https://github.com/wiedehopf/readsb), API provider, or saved historical data. The conditions and actions are
 specified in a simple human-readable YAML format.
 
 These actions can then:
