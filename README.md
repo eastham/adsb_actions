@@ -49,9 +49,4 @@ is seen below 2000 feet in a certain geograpic area:<p>
         webhook: ['slack', 'emergency_aircraft_channel']
 ```
 
-<h2>Ready to try it?</h2> See [GETTING_STARTED.md](GETTING_STARTED.md) for a step-by-step setup guide.
-
-<h2>Prerequisites</h2>
-
-- Python 3.8 or higher
-- An ADS-B data source (readsb, dump1090, etc.) OR use included test data
+<h2>Ready to try it?</h2> See <a href="GETTING_STARTED.md">GETTING_STARTED.md</a> for a step-by-step setup guide.
