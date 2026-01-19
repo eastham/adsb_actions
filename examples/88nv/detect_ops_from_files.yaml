@@ -1,6 +1,6 @@
   config:
     kmls:
-      - detection_gates.kml
+      - examples/88nv/regions/detection_gates.kml
 
   rules:
     takeoff:

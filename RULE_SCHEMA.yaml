@@ -44,6 +44,7 @@
         max_vertical_rate: -2000  # maximum descent rate in feet/minute (negative = descending)
         callsign_prefix: [UAL, DAL]  # match if callsign starts with any of these prefixes
         on_ground: true      # true = on ground, false = airborne
+        military: true       # true = military aircraft -- only works in API mode
       actions:
         # what should we do when triggered?  NOTE: only one action per type will fire.
         callback: ground_cb  # call a function as specified by AdsbActions.register_callback()

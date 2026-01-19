@@ -55,6 +55,9 @@ class Location:
             tail = icao_to_n_or_c(d["hex"])
             if tail:
                 nd["tail"] = tail
+
+        # Store the original dict for access to fields not explicitly parsed
+        nd["flightdict"] = d
         return Location(**nd)
 
     def to_str(self):

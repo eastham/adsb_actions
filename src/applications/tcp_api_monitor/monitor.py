@@ -25,9 +25,9 @@ logger = logging.getLogger(__name__)
 logger.level = logging.DEBUG
 LOGGER = Logger()
 
-API_ENDPOINT = "https://api.airplanes.live/v2/point/"
-API_ENDPOINT = "https://api.adsb.one/v2/point/"
-API_RATE_LIMIT = 1/2      # requests per second
+API_ENDPOINT = "https://api.airplanes.live/v2/point/" # has a 10s rate limit
+API_ENDPOINT = "https://api.adsb.one/v2/point/"     # has a 1s rate limit
+API_RATE_LIMIT = 1/5      # requests per second
 EXPIRE_SECS = 31  # expire aircraft from database not seen in this many seconds
 
 class QueryState:

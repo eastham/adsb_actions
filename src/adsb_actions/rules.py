@@ -76,7 +76,7 @@ class Rules:
                             'max_time', 'time_ranges', 'enabled', 'squawk',
                             'emergency', 'category', 'min_gs', 'max_gs',
                             'min_vertical_rate', 'max_vertical_rate',
-                            'callsign_prefix', 'on_ground']
+                            'callsign_prefix', 'on_ground', 'military']
 
         try:
             for condition in conditions.keys():
@@ -295,6 +295,21 @@ class Rules:
             # on_ground: false means aircraft must be airborne
             result = flight.lastloc.on_ground == condition_value
             if not result:
+                return False
+
+        if 'military' in conditions:
+            condition_value = conditions['military']
+            # military: true means aircraft must have military dbFlags
+            # military: false means aircraft must NOT have military dbFlags
+            # NOTE: dbFlags is NOT transmitted via ADS-B. It's a database lookup
+            # performed by tracking services (airplanes.live, adsbexchange) that
+            # cross-reference the aircraft's ICAO hex code against known military
+            # registrations. Local readsb feeds won't have this field.
+            if flight.lastloc.flightdict and 'dbFlags' in flight.lastloc.flightdict:
+                is_military = flight.lastloc.flightdict['dbFlags'] == 1
+            else:
+                is_military = False
+            if is_military != condition_value:
                 return False
 
         if 'min_time' in conditions:

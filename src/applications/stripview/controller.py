@@ -1,4 +1,10 @@
-"""Main module to start and build the UI."""
+"""Main module to start and build the UI.
+
+Supports three data sources:
+  1. Network socket (--ipaddr/--port): Live readsb data
+  2. Test file (--testdata): Pre-recorded JSON for testing
+  3. Public API (--api): Polls airplanes.live/adsb.one API (no hardware needed)
+"""
 
 import os
 import signal
@@ -6,6 +12,10 @@ import threading
 import argparse
 import sys
 import logging
+import time
+import json
+import requests
+import yaml
 from adsb_actions.adsb_logger import Logger
 from adsb_actions.bboxes import Bboxes
 from adsb_actions.adsbactions import AdsbActions
@@ -13,6 +23,10 @@ from adsb_actions.adsbactions import AdsbActions
 logger = logging.getLogger(__name__)
 # logger.level = logging.DEBUG
 LOGGER = Logger()
+
+# API configuration
+API_ENDPOINT = "https://api.adsb.one/v2/point/"
+API_RATE_LIMIT = 1/2  # requests per second (max 0.5 Hz)
 
 os.environ['KIVY_LOG_MODE'] = 'PYTHON'  # inhibit Kivy's custom log format
 import kivy
@@ -28,6 +42,67 @@ from kivymd.app import MDApp
 from flightstrip import FlightStrip
 
 controllerapp = None
+
+
+class APIPoller:
+    """Polls the public ADS-B API and feeds data to adsb_actions."""
+
+    def __init__(self, adsb_actions, lat, lon, radius_nm):
+        self.adsb_actions = adsb_actions
+        self.lat = lat
+        self.lon = lon
+        self.radius_nm = radius_nm
+        self.running = True
+        self.thread = None
+
+    def start(self):
+        self.thread = threading.Thread(target=self._poll_loop, daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        self.running = False
+        if self.thread:
+            self.thread.join(timeout=5)
+
+    def _poll_loop(self):
+        """Main polling loop - fetches from API and feeds to adsb_actions."""
+        while self.running:
+            start_time = time.time()
+
+            try:
+                self._fetch_and_process()
+            except Exception as e:
+                logger.error(f"Error in API poll: {e}")
+
+            # Rate limit
+            elapsed = time.time() - start_time
+            sleep_time = (1 / API_RATE_LIMIT) - elapsed
+            if sleep_time > 0 and self.running:
+                time.sleep(sleep_time)
+
+    def _fetch_and_process(self):
+        """Fetch data from API and process through adsb_actions."""
+        url = f"{API_ENDPOINT}{self.lat}/{self.lon}/{self.radius_nm}"
+
+        response = requests.get(url, timeout=10)
+        json_data = response.json()
+
+        ac_count = len(json_data.get('ac', []))
+        logger.info(f"API returned {ac_count} aircraft")
+
+        if ac_count == 0:
+            return
+
+        # Convert API format to newline-delimited JSON
+        json_list = ""
+        for line in json_data['ac']:
+            line['now'] = json_data['now'] / 1000
+            json_list += json.dumps(line) + "\n"
+
+        # Feed to adsb_actions
+        if json_list:
+            self.adsb_actions.loop(string_data=json_list)
+
 
 class ControllerApp(MDApp):
     def __init__(self, bboxes, focus_q, admin_q):
@@ -146,43 +221,85 @@ class Controller(FloatLayout):
 def sigint_handler(signum, frame):
     exit(1)
 
-def shutdown_adsb_actions(_, adsb_actions, read_thread):
+def shutdown_adsb_actions(_, adsb_actions, data_thread, api_poller=None):
     logger.warning("Shutting down adsb_actions")
 
+    if api_poller:
+        api_poller.stop()
     adsb_actions.exit_loop_flag = True
-    read_thread.join()
+    if data_thread:
+        data_thread.join()
 
     logger.warning("adsb_actions shutdown complete")
     sys.exit(0)
 
+
 def setup(focus_q, admin_q):
     logger.info('System started.')
 
-    parser = argparse.ArgumentParser(description="render a rack of aircraft status strips.")
+    parser = argparse.ArgumentParser(
+        description="Render a rack of aircraft status strips.",
+        epilog="Data source: specify ONE of --ipaddr/--port, --testdata, or --api")
     parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument('--ipaddr', help="IP address to connect to")
-    parser.add_argument('--port', help="port to connect to")
+    parser.add_argument('--ipaddr', help="IP address to connect to (readsb)")
+    parser.add_argument('--port', help="port to connect to (readsb)")
     parser.add_argument('-m', '--mport', type=int, help="metrics port to listen on", default='9108')
     parser.add_argument('--rules', help="YAML file that describes UI behavior", required=True)
     parser.add_argument('--testdata', help="JSON flight tracks, for testing")
     parser.add_argument('--delay', help="Seconds of delay between reads, for testing", default=0)
+    parser.add_argument('--api', action='store_true',
+                        help="Use public API (api.adsb.one) - requires latlongring in rules")
     args = parser.parse_args()
 
-    if not bool(args.testdata) != bool(args.ipaddr and args.port):
-        logger.fatal("Either ipaddr/port OR testdata must be provided.")
+    # Validate mutually exclusive data source options
+    sources = sum([
+        bool(args.ipaddr and args.port),
+        bool(args.testdata),
+        bool(args.api)
+    ])
+    if sources != 1:
+        logger.fatal("Exactly one data source required: --ipaddr/--port, --testdata, or --api")
         sys.exit(1)
     if args.ipaddr and args.delay:
         logger.warning("--delay has no effect when ipaddr is given")
 
-    # Setup flight data handling.
+    # Load YAML
+    with open(args.rules, 'r') as f:
+        yaml_data = yaml.safe_load(f)
+
+    api_poller = None
+    read_thread = None
     json_data = None
-    if not args.testdata:
+
+    # Setup flight data handling based on source
+    if args.api:
+        # API mode - find latlongring condition in rules (consistent with tcp_api_monitor)
+        latlongring = None
+        for rulename, rulebody in yaml_data.get('rules', {}).items():
+            conditions = rulebody.get('conditions', {})
+            if 'latlongring' in conditions:
+                latlongring = conditions['latlongring']
+                logger.info(f"Using latlongring from rule '{rulename}'")
+                break
+
+        if not latlongring:
+            logger.fatal("--api requires a rule with 'latlongring' condition: [radius_nm, lat, lon]")
+            sys.exit(1)
+
+        radius_nm, lat, lon = latlongring
+        logger.info(f"API mode: querying {lat}, {lon} radius {radius_nm}nm")
+        adsb_actions = AdsbActions(yaml_data=yaml_data, expire_secs=120)
+        api_poller = APIPoller(adsb_actions, lat, lon, radius_nm)
+
+    elif args.ipaddr and args.port:
+        # Network mode
         adsb_actions = AdsbActions(
             yaml_file=args.rules, ip=args.ipaddr, port=args.port,
             expire_secs=120, mport=args.mport)
-    else:
-        adsb_actions = AdsbActions(yaml_file=args.rules)
 
+    else:
+        # Test data mode
+        adsb_actions = AdsbActions(yaml_file=args.rules)
         with open(args.testdata, 'rt', encoding="utf-8") as myfile:
             json_data = myfile.read()
 
@@ -211,17 +328,21 @@ def setup(focus_q, admin_q):
     adsb_actions.register_callback(
         "los_update_cb", controllerapp.annotate_strip)
 
-    read_thread = threading.Thread(target=adsb_actions.loop,
-        kwargs={'string_data': json_data, 'delay': float(args.delay)})
+    # Setup data thread (not used for API mode)
+    if not args.api:
+        read_thread = threading.Thread(target=adsb_actions.loop,
+            kwargs={'string_data': json_data, 'delay': float(args.delay)})
 
     # Handling for orderly exit when the user closes the window manually.
-    # Default args bind the local variables to the lambda.
-    close_callback = lambda controller, actions=adsb_actions, thread=read_thread: \
-        shutdown_adsb_actions(controller, actions, thread) # pylint: disable=unnecessary-lambda-assignment
+    close_callback = lambda controller, actions=adsb_actions, thread=read_thread, poller=api_poller: \
+        shutdown_adsb_actions(controller, actions, thread, poller)
     controllerapp.register_close_callback(close_callback)
 
     # Don't update the UI before it's drawn...
-    Clock.schedule_once(lambda x: read_thread.start(), 2)
+    if args.api:
+        Clock.schedule_once(lambda x: api_poller.start(), 2)
+    else:
+        Clock.schedule_once(lambda x: read_thread.start(), 2)
 
     # TODO probably cleaner to put this method+state in a class.
     # we need to return both, derivative UIs will want to play

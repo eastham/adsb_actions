@@ -43,7 +43,7 @@ Then restart readsb: `sudo systemctl restart readsb`
 python3 src/analyzers/simple_monitor.py --ipaddr localhost --port 30006 examples/hello_world_rules.yaml
 ```
 
-You should see aircraft printed to the console, no more than once per
+You should see local aircraft printed to the console, no more than once per
 minute per aircraft.
 
 ## Understanding the YAML Config
@@ -77,17 +77,6 @@ The core library works without any external integrations. These features are **o
 
 If you don't need these, you don't need to configure them.
 
-## Environment Variables
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `ADSB_PRIVATE_PATH` | `private.yaml` (project root) | Path to credentials file |
-
-Example:
-```bash
-export ADSB_PRIVATE_PATH=/etc/adsb-actions/private.yaml
-python3 main.py ...
-```
 
 ## Troubleshooting
 
@@ -105,28 +94,12 @@ Make sure you've activated the virtual environment:
 source .venv/bin/activate
 ```
 
-## Project Structure
-
-| Directory | Description |
-|-----------|-------------|
-| `src/adsb_actions/` | Core library - rule engine, flight tracking |
-| `src/core/database/` | Database abstraction layer |
-| `src/core/network/` | Network utilities (TCP client) |
-| `src/lib/` | Core libraries - replay, parsing |
-| `src/analyzers/` | Analysis scripts - simple_monitor, generic_analyzer |
-| `src/postprocessing/` | Post-processing tools - visualization, hotspot detection |
-| `src/tools/` | ADS-B injection utilities |
-| `src/applications/airport_monitor/` | Headless airport monitoring service |
-| `src/applications/flight_info_display/` | Kivy-based FIDS (Flight Info Display) |
-| `src/applications/stripview/` | Kivy-based ATC flight strip GUI |
-| `examples/88nv/` | Example configs for 88NV airport |
-| `examples/` | Example configs (hello_world_rules.yaml, low_altitude_alert.yaml, etc.) |
-
 
 <h3> More things to try: </h3>
 
-1. Tests are available: `pytest -s tests/*.py`
-2. Invoke a sample UI: 
+1. Check out other applications in the examples directory
+2. Invoke a sample UI based on recorded data: 
 - `pip install -e ".[all]"`
 - `python3 src/applications/stripview/controller.py  -- --testdata tests/20minutes.json --delay .2 --rules examples/88nv/stripview_ui.yaml`
 3. Command lines for other sample applications can be found in launch.json.
+1. Tests are available: `pytest -s tests/*.py`
