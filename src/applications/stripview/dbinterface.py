@@ -12,7 +12,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Import database interface - uses NullDatabase by default if not configured
-from core.database.interface import get_database
+from core.database.interface import get_database, NullDatabase
 
 
 class DbInterface:
@@ -59,6 +59,10 @@ class DbInterface:
                 # Use custom logic to interpret the database result
                 note_string, ui_warning, pilot_label, code_label = \
                     self.custom_logic_cb(db_obj, db.pilot_lookup)
+            elif isinstance(db, NullDatabase):
+                # No database configured - don't show warning (green strip)
+                note_string = ""
+                ui_warning = False
             else:
                 # Default logic: just show if aircraft was found
                 if db_obj:

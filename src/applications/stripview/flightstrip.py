@@ -175,9 +175,11 @@ class FlightStrip:
         if location and bboxes_list:
             bbox_2nd_level = flight.get_bbox_at_level(1)
 
-            # XXX hack to keep string from wrapping...not sure how to get kivy
-            # to do this
-            cliplen = 23 - len(flight.flight_id.strip()) - len(extratail)
+            # Calculate max characters that fit on first line based on strip width
+            # and font size. Approximate char width is ~0.6 * font_size for most fonts.
+            char_width_estimate = self.font_size * 0.6
+            max_chars = int(self.main_button.width / dp(char_width_estimate))
+            cliplen = max_chars - len(flight.flight_id.strip()) - len(extratail) - 1
             if cliplen < 0: cliplen = 0
             self.loc_string = bbox_2nd_level[0:cliplen] if bbox_2nd_level else ""
 
