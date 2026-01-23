@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__)
 LOGGER = Logger()
 
 # API configuration
-API_ENDPOINT = "https://api.adsb.one/v2/point/"
+#API_ENDPOINT = "https://api.adsb.one/v2/point/"
+API_ENDPOINT = "https://api.airplanes.live/v2/point/"
 API_RATE_LIMIT = 1/2  # requests per second (max 0.5 Hz)
 
 os.environ['KIVY_LOG_MODE'] = 'PYTHON'  # inhibit Kivy's custom log format
@@ -248,7 +249,7 @@ def setup(focus_q, admin_q):
     parser.add_argument('--testdata', help="JSON flight tracks, for testing")
     parser.add_argument('--delay', help="Seconds of delay between reads, for testing", default=0)
     parser.add_argument('--api', action='store_true',
-                        help="Use public API (api.adsb.one) - requires latlongring in rules")
+                        help="Use public API - requires latlongring in rules")
     args = parser.parse_args()
 
     # Validate mutually exclusive data source options
