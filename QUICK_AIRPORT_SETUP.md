@@ -4,7 +4,7 @@ Want to monitor traffic at your local airport? This script generates all the con
 
 ![Landing Detection](screenshots/landing.png)
 
-![ATC Tower Display](screenshots/88NV_tower.png)
+![Strip View](screenshots/stripview.png)
 
 ## Usage
 
