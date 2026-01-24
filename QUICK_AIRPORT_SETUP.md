@@ -1,6 +1,6 @@
 # Quick Airport Setup
 
-Want to monitor traffic at your local airport? This script generates all the config files you need in one step.
+Want to monitor traffic at your local airport? This script generates all the config files you need in one step.  (But follow the [installation instructions](GETTING_STARTED.md) first)
 
 ![Landing Detection](screenshots/landing.png)
 
