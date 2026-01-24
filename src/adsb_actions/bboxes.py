@@ -65,7 +65,7 @@ class Bboxes:
         """
         for feature in document:
             if isinstance(feature, features.Placemark):
-                re_result = re.search(r"^([^:]+):\s*(\d+)-(\d+)\s+(\d+)-(\d+)",
+                re_result = re.search(r"^([^:]+):\s*(-?\d+)-(-?\d+)\s+(\d+)-(\d+)",
                     feature.name)
                 if not re_result:
                     raise ValueError("KML feature name parse error: " +

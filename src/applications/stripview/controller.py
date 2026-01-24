@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 LOGGER = Logger()
 
 # API configuration
-API_ENDPOINT = "https://api.adsb.one/v2/point/"
+#API_ENDPOINT = "https://api.adsb.one/v2/point/" # lower rate limit but is offline sometimes
 API_ENDPOINT = "https://api.airplanes.live/v2/point/"
 API_RATE_LIMIT = 1/2  # requests per second (max 0.5 Hz)
 

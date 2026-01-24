@@ -165,7 +165,7 @@ class FlightStrip:
     def update(self, flight, location, bboxes_list):
         """ Re-build strip strings, changes show up on-screen automatically """
         logger.debug(f"strip.update for {flight.flight_id}, {bboxes_list}")
-        if (flight.flight_id.strip() != flight.other_id and flight.other_id):
+        if (flight.other_id and flight.flight_id.strip() != flight.other_id.strip()):
             extratail = flight.other_id
         else:
             extratail = ""

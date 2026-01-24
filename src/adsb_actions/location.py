@@ -56,6 +56,11 @@ class Location:
             if tail:
                 nd["tail"] = tail
 
+        # Use the "r" (registration) field from the API if available and we
+        # don't already have a tail from ICAO conversion
+        if "r" in d and d["r"] and "tail" not in nd:
+            nd["tail"] = d["r"]
+
         # Store the original dict for access to fields not explicitly parsed
         nd["flightdict"] = d
         return Location(**nd)

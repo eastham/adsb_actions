@@ -10,7 +10,7 @@ These actions can then:
 &nbsp;&nbsp;&nbsp;&nbsp;<img src="screenshots/stripview.png?raw=true" alt="Screenshot of Stripview"><br>
 &nbsp;&nbsp;&nbsp;&nbsp;<img src="screenshots/monitor.png?raw=true" alt="Screenshot of monitor">
 
-⭒ Do real-time analysis, for example detect loss-of-separation events:<br>
+⭒ <a href="QUICK_AIRPORT_SETUP.md">Analyze traffic at your local airport</a> in real-time / detect loss-of-separation events / track operations <br>
 &nbsp;&nbsp;&nbsp;&nbsp;<img src="screenshots/los.png?raw=true" alt="Screenshot of LOS">
 
 ⭒ Visualize events and find hotspots:<br>
@@ -23,7 +23,7 @@ These actions can then:
 
 ⭒ Push operations (takeoffs/landings/etc) to a database
 
-⭒ Whatever else you can imagine!
+⭒ Whatever else you can imagine!  Check the <a href="GALLERY.md">gallery</a> for more ideas.
 
 <h2>Overview</h2>
 Each YAML rule contains ✅ <strong>conditions</strong> and ⚡ <strong>actions</strong>. 

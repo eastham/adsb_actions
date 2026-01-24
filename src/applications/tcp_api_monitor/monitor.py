@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 logger.level = logging.DEBUG
 LOGGER = Logger()
 
-#API_ENDPOINT = "https://api.adsb.one/v2/point/"
+# API_ENDPOINT = "https://api.adsb.one/v2/point/"  # lower rate limit but is offline sometimes
 API_ENDPOINT = "https://api.airplanes.live/v2/point/"
 API_RATE_LIMIT = 1/5      # requests per second
 EXPIRE_SECS = 31  # expire aircraft from database not seen in this many seconds
@@ -56,7 +56,26 @@ class QueryState:
         # Issue query
         try:
             response = requests.get(url, timeout=10)
+            response.raise_for_status()
             json_data = response.json()
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 429:
+                logger.error(f"API rate limit exceeded (HTTP 429). Try reducing query frequency.")
+            else:
+                logger.error(f"API returned HTTP {response.status_code}: {e}")
+            return
+        except requests.exceptions.Timeout:
+            logger.error(f"API request timed out. The server may be overloaded.")
+            return
+        except requests.exceptions.ConnectionError:
+            logger.error(f"Could not connect to API at {API_ENDPOINT}. Check your internet connection.")
+            return
+        except json.JSONDecodeError:
+            # Empty or invalid response - often indicates rate limiting or server issues
+            logger.error(f"API returned invalid response (not JSON). "
+                        f"This often indicates rate limiting or server issues. "
+                        f"HTTP status: {response.status_code}")
+            return
         except Exception as e:      # pylint: disable=broad-except
             logger.error(f"Error in API query: {str(e)}")
             return

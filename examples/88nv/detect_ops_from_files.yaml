@@ -9,7 +9,6 @@
       actions:
         print: True
         track: True
-        callback: "takeoff"
         note: "saw_takeoff"
 
     takeoff_popup:
@@ -18,7 +17,6 @@
       actions:
         print: True
         track: True
-        callback: "takeoff"
         note: "saw_takeoff"
 
     landing:
@@ -27,5 +25,4 @@
       actions:
         print: True
         track: True
-        callback: "landing"
         note: ~       # clear note

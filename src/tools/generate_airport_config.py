@@ -27,12 +27,15 @@ DEPARTURE_LENGTH_NM = 3.0
 APPROACH_LENGTH_NM = 5.0
 DEPARTURE_HEADING_RANGE = 25  # ±25° from runway heading
 APPROACH_HEADING_RANGE = 30   # ±30° from runway heading
-GROUND_RADIUS_NM = 1.5
 VICINITY_RADIUS_NM = 10.0
+GROUND_BUFFER_NM = 0.3  # Buffer added to ground radius to close lateral gap with app/dep wedges
+# Ground region radius = (runway length / 2) + buffer
 
 # Altitude offsets from field elevation (feet)
+GROUND_MIN_ALT_OFFSET = -500  # Below field elevation to handle pressure altitude variations
 GROUND_ALT_OFFSET = 500
-DEP_APP_MIN_ALT_OFFSET = 50  # Departure/approach floor (above field elevation)
+# Departure/approach floor matches ground min to avoid altitude gaps during transitions
+DEP_APP_MIN_ALT_OFFSET = GROUND_MIN_ALT_OFFSET
 DEPARTURE_ALT_OFFSET = 3000
 APPROACH_ALT_OFFSET = 5000
 VICINITY_ALT_OFFSET = 10000
@@ -147,6 +150,18 @@ def get_runway_end_data(runway: dict, end_ident: str) -> dict | None:
     }
 
 
+def get_opposite_runway_end(runway: dict, end_ident: str) -> str | None:
+    """Get the identifier of the opposite runway end."""
+    le_ident = runway.get('le_ident', '')
+    he_ident = runway.get('he_ident', '')
+
+    if end_ident.upper() == le_ident.upper():
+        return he_ident
+    elif end_ident.upper() == he_ident.upper():
+        return le_ident
+    return None
+
+
 def nm_to_deg_lat(nm: float) -> float:
     """Convert nautical miles to degrees latitude."""
     return nm / 60.0
@@ -217,21 +232,35 @@ def polygon_to_kml_coords(polygon: list[tuple[float, float]]) -> str:
 
 
 def generate_kml(icao: str, airport_name: str, field_elevation: float,
-                 runway_end: dict, runway_length_ft: float,
+                 runway_end: dict, opposite_end: dict, runway_length_ft: float,
                  center_lat: float, center_lon: float) -> str:
-    """Generate complete KML file content."""
+    """Generate complete KML file content.
+
+    Args:
+        runway_end: The selected runway end (e.g., 09L) - this is the approach end
+        opposite_end: The opposite runway end (e.g., 27R) - this is the departure end
+    """
 
     ident = runway_end['ident']
     heading = runway_end['heading']
-    threshold_lat = runway_end['lat']
-    threshold_lon = runway_end['lon']
+    runway_width_ft = runway_end.get('width_ft', 75)
+    # Approach threshold - where aircraft land (selected runway end)
+    approach_lat = runway_end['lat']
+    approach_lon = runway_end['lon']
+    # Departure threshold - where aircraft take off (opposite end of runway)
+    departure_lat = opposite_end['lat']
+    departure_lon = opposite_end['lon']
+
+    # Approach base width = 4x runway width (narrower at threshold)
+    approach_base_nm = (runway_width_ft * 4) / 6076
 
     # Calculate MSL altitudes
+    ground_min = int(field_elevation + GROUND_MIN_ALT_OFFSET)
     ground_max = int(field_elevation + GROUND_ALT_OFFSET)
     dep_app_min = int(field_elevation + DEP_APP_MIN_ALT_OFFSET)
     dep_max = int(field_elevation + DEPARTURE_ALT_OFFSET)
     app_max = int(field_elevation + APPROACH_ALT_OFFSET)
-    vic_min = int(field_elevation + GROUND_ALT_OFFSET)
+    vic_min = dep_app_min  # Same floor as departure/approach
     vic_max = int(field_elevation + VICINITY_ALT_OFFSET)
 
     # Calculate heading ranges
@@ -239,21 +268,24 @@ def generate_kml(icao: str, airport_name: str, field_elevation: float,
     dep_hdg_start, dep_hdg_end = format_heading_range(heading, DEPARTURE_HEADING_RANGE)
     app_hdg_start, app_hdg_end = format_heading_range(heading, APPROACH_HEADING_RANGE)
 
-    # Reciprocal heading for approach polygon (extends opposite direction from threshold)
+    # Reciprocal heading for approach polygon (extends opposite direction from approach threshold)
     recip_heading = (heading + 180) % 360
 
     # Generate polygons
-    ground_poly = generate_circle_polygon(center_lat, center_lon, GROUND_RADIUS_NM)
+    # Ground region radius = (runway length / 2) + buffer
+    ground_radius_nm = (runway_length_ft / 6076) / 2 + GROUND_BUFFER_NM
+    ground_poly = generate_circle_polygon(center_lat, center_lon, ground_radius_nm)
 
-    # Departure extends outward from threshold in direction of heading
-    dep_poly = generate_wedge_polygon(threshold_lat, threshold_lon,
+    # Departure extends outward from departure end (opposite end) in direction of heading
+    dep_poly = generate_wedge_polygon(departure_lat, departure_lon,
                                       heading, DEPARTURE_LENGTH_NM,
                                       0.15, 0.75)  # base ~900ft, far ~0.75nm
 
-    # Approach extends outward (aircraft approaching from that direction)
-    app_poly = generate_wedge_polygon(threshold_lat, threshold_lon,
+    # Approach extends outward from approach threshold (selected end)
+    # Base width = 2x runway width at threshold
+    app_poly = generate_wedge_polygon(approach_lat, approach_lon,
                                       recip_heading, APPROACH_LENGTH_NM,
-                                      0.15, 1.0)  # base ~900ft, far ~1nm
+                                      approach_base_nm, 1.0)  # base = 2x runway width, far ~1nm
 
     vicinity_poly = generate_circle_polygon(center_lat, center_lon, VICINITY_RADIUS_NM)
 
@@ -310,7 +342,7 @@ def generate_kml(icao: str, airport_name: str, field_elevation: float,
         </Placemark>
 
         <Placemark>
-            <name>Ground: 0-{ground_max} 0-360</name>
+            <name>Ground: {ground_min}-{ground_max} 0-360</name>
             <styleUrl>#groundStyle</styleUrl>
             <Polygon>
                 <tessellate>1</tessellate>
@@ -365,23 +397,31 @@ rules:
       transition_regions: ["Ground", "RWY{runway_ident} Departure"]
     actions:
       print: True
-      callback: "takeoff"
-      note: "saw_takeoff"
 
   takeoff_popup:
     conditions:
-      transition_regions: [~, "RWY{runway_ident} Departure"]
+      transition_regions: ["Ground", ~]
     actions:
       print: True
-      callback: "popup_takeoff"
-      note: "saw_takeoff"
 
   landing:
     conditions:
       transition_regions: ["RWY{runway_ident} Approach", "Ground"]
     actions:
       print: True
-      callback: "landing"
+
+  vicinity_traffic:
+    conditions:
+      regions: ["RWY{runway_ident} Departure", "RWY{runway_ident} Approach", "Vicinity", "Ground"]
+      cooldown: 10
+    actions:
+      print: True
+
+  region_change:
+    conditions:
+      changed_regions: strict
+    actions:
+      print: True
 
   prox:
     conditions:
@@ -390,7 +430,7 @@ rules:
       regions: ["Vicinity"]
       proximity: [400, .3]
     actions:
-      callback: los_update_cb
+      print: True
 '''
 
 
@@ -503,13 +543,20 @@ def main():
     runway_length_ft = float(selected_runway.get('length_ft') or 5000)
     print(f"  Using runway: {runway_end_ident} (length: {runway_length_ft:.0f} ft)")
 
-    # Get runway end data
+    # Get runway end data for both ends
     runway_end = get_runway_end_data(selected_runway, runway_end_ident)
     if not runway_end:
         print(f"Error: Could not get data for runway end {runway_end_ident}.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"  Threshold: {runway_end['lat']:.4f}, {runway_end['lon']:.4f}")
+    opposite_end_ident = get_opposite_runway_end(selected_runway, runway_end_ident)
+    opposite_end = get_runway_end_data(selected_runway, opposite_end_ident)
+    if not opposite_end:
+        print(f"Error: Could not get data for opposite runway end {opposite_end_ident}.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"  Approach end: {runway_end['lat']:.4f}, {runway_end['lon']:.4f}")
+    print(f"  Departure end: {opposite_end['lat']:.4f}, {opposite_end['lon']:.4f}")
     print(f"  Heading: {runway_end['heading']:.0f}°")
 
     # Output paths - go up to project root (src/tools -> src -> project root)
@@ -532,7 +579,7 @@ def main():
     print("\nGenerating files...")
 
     kml_content = generate_kml(icao, airport_name, field_elevation,
-                               runway_end, runway_length_ft,
+                               runway_end, opposite_end, runway_length_ft,
                                center_lat, center_lon)
     with open(kml_path, 'w', encoding='utf-8') as f:
         f.write(kml_content)
