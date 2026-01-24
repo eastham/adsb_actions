@@ -1,6 +1,10 @@
 # Project-specific
 private.yaml
 
+# Auto-generated airport configs
+examples/generated/
+src/tools/.cache/
+
 # venv
 .venv
 .env
