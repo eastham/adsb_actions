@@ -232,24 +232,29 @@ def polygon_to_kml_coords(polygon: list[tuple[float, float]]) -> str:
 
 
 def generate_kml(icao: str, airport_name: str, field_elevation: float,
-                 runway_end: dict, opposite_end: dict, runway_length_ft: float,
+                 app_end: dict, dep_end: dict, dep_liftoff_end: dict,
+                 runway_length_ft: float,
                  center_lat: float, center_lon: float) -> str:
     """Generate complete KML file content.
 
     Args:
-        runway_end: The selected runway end (e.g., 09L) - this is the approach end
-        opposite_end: The opposite runway end (e.g., 27R) - this is the departure end
+        app_end: The approach runway end (where aircraft land, threshold they cross)
+        dep_end: The departure runway designation (for heading and naming)
+        dep_liftoff_end: The opposite end of dep runway (where aircraft lift off/climb out)
     """
 
-    ident = runway_end['ident']
-    heading = runway_end['heading']
-    runway_width_ft = runway_end.get('width_ft', 75)
-    # Approach threshold - where aircraft land (selected runway end)
-    approach_lat = runway_end['lat']
-    approach_lon = runway_end['lon']
-    # Departure threshold - where aircraft take off (opposite end of runway)
-    departure_lat = opposite_end['lat']
-    departure_lon = opposite_end['lon']
+    app_ident = app_end['ident']
+    dep_ident = dep_end['ident']
+    app_heading = app_end['heading']
+    dep_heading = dep_end['heading']
+    runway_width_ft = app_end.get('width_ft', 75)
+
+    # Approach threshold - where aircraft land
+    approach_lat = app_end['lat']
+    approach_lon = app_end['lon']
+    # Departure liftoff point - the far end of the departure runway where aircraft climb out
+    departure_lat = dep_liftoff_end['lat']
+    departure_lon = dep_liftoff_end['lon']
 
     # Approach base width = 4x runway width (narrower at threshold)
     approach_base_nm = (runway_width_ft * 4) / 6076
@@ -263,29 +268,28 @@ def generate_kml(icao: str, airport_name: str, field_elevation: float,
     vic_min = dep_app_min  # Same floor as departure/approach
     vic_max = int(field_elevation + VICINITY_ALT_OFFSET)
 
-    # Calculate heading ranges
-    # Both departure and approach use the runway heading (aircraft flying toward/away from runway)
-    dep_hdg_start, dep_hdg_end = format_heading_range(heading, DEPARTURE_HEADING_RANGE)
-    app_hdg_start, app_hdg_end = format_heading_range(heading, APPROACH_HEADING_RANGE)
+    # Calculate heading ranges - each uses its own runway's heading
+    dep_hdg_start, dep_hdg_end = format_heading_range(dep_heading, DEPARTURE_HEADING_RANGE)
+    app_hdg_start, app_hdg_end = format_heading_range(app_heading, APPROACH_HEADING_RANGE)
 
     # Reciprocal heading for approach polygon (extends opposite direction from approach threshold)
-    recip_heading = (heading + 180) % 360
+    app_recip_heading = (app_heading + 180) % 360
 
     # Generate polygons
     # Ground region radius = (runway length / 2) + buffer
     ground_radius_nm = (runway_length_ft / 6076) / 2 + GROUND_BUFFER_NM
     ground_poly = generate_circle_polygon(center_lat, center_lon, ground_radius_nm)
 
-    # Departure extends outward from departure end (opposite end) in direction of heading
+    # Departure extends outward from departure end in direction of departure heading
     dep_poly = generate_wedge_polygon(departure_lat, departure_lon,
-                                      heading, DEPARTURE_LENGTH_NM,
+                                      dep_heading, DEPARTURE_LENGTH_NM,
                                       0.15, 0.75)  # base ~900ft, far ~0.75nm
 
-    # Approach extends outward from approach threshold (selected end)
-    # Base width = 2x runway width at threshold
+    # Approach extends outward from approach threshold (opposite direction aircraft is flying)
+    # Base width = 4x runway width at threshold
     app_poly = generate_wedge_polygon(approach_lat, approach_lon,
-                                      recip_heading, APPROACH_LENGTH_NM,
-                                      approach_base_nm, 1.0)  # base = 2x runway width, far ~1nm
+                                      app_recip_heading, APPROACH_LENGTH_NM,
+                                      approach_base_nm, 1.0)  # base = 4x runway width, far ~1nm
 
     vicinity_poly = generate_circle_polygon(center_lat, center_lon, VICINITY_RADIUS_NM)
 
@@ -316,7 +320,7 @@ def generate_kml(icao: str, airport_name: str, field_elevation: float,
         <name>{icao} Monitoring Regions</name>
 
         <Placemark>
-            <name>RWY{ident} Departure: {dep_app_min}-{dep_max} {dep_hdg_start}-{dep_hdg_end}</name>
+            <name>RWY{dep_ident} Departure: {dep_app_min}-{dep_max} {dep_hdg_start}-{dep_hdg_end}</name>
             <styleUrl>#depStyle</styleUrl>
             <Polygon>
                 <tessellate>1</tessellate>
@@ -329,7 +333,7 @@ def generate_kml(icao: str, airport_name: str, field_elevation: float,
         </Placemark>
 
         <Placemark>
-            <name>RWY{ident} Approach: {dep_app_min}-{app_max} {app_hdg_start}-{app_hdg_end}</name>
+            <name>RWY{app_ident} Approach: {dep_app_min}-{app_max} {app_hdg_start}-{app_hdg_end}</name>
             <styleUrl>#appStyle</styleUrl>
             <Polygon>
                 <tessellate>1</tessellate>
@@ -374,7 +378,7 @@ def generate_kml(icao: str, airport_name: str, field_elevation: float,
     return kml
 
 
-def generate_rules_yaml(icao: str, field_elevation: float, runway_ident: str,
+def generate_rules_yaml(icao: str, field_elevation: float, app_ident: str, dep_ident: str,
                         center_lat: float, center_lon: float) -> str:
     """Generate rules YAML for LOS and takeoff/landing detection."""
 
@@ -394,7 +398,7 @@ rules:
   takeoff:
     conditions:
       latlongring: [{VICINITY_RADIUS_NM}, {center_lat}, {center_lon}]
-      transition_regions: ["Ground", "RWY{runway_ident} Departure"]
+      transition_regions: ["Ground", "RWY{dep_ident} Departure"]
     actions:
       print: True
 
@@ -406,13 +410,13 @@ rules:
 
   landing:
     conditions:
-      transition_regions: ["RWY{runway_ident} Approach", "Ground"]
+      transition_regions: ["RWY{app_ident} Approach", "Ground"]
     actions:
       print: True
 
   vicinity_traffic:
     conditions:
-      regions: ["RWY{runway_ident} Departure", "RWY{runway_ident} Approach", "Vicinity", "Ground"]
+      regions: ["RWY{dep_ident} Departure", "RWY{app_ident} Approach", "Vicinity", "Ground"]
       cooldown: 10
     actions:
       print: True
@@ -434,7 +438,7 @@ rules:
 '''
 
 
-def generate_stripview_yaml(icao: str, field_elevation: float, runway_ident: str,
+def generate_stripview_yaml(icao: str, field_elevation: float, app_ident: str, dep_ident: str,
                             center_lat: float, center_lon: float) -> str:
     """Generate stripview UI YAML."""
 
@@ -455,7 +459,7 @@ rules:
   ui_update:
     conditions:
       latlongring: [{VICINITY_RADIUS_NM}, {center_lat}, {center_lon}]
-      regions: ["Ground", "RWY{runway_ident} Departure", "RWY{runway_ident} Approach", "Vicinity"]
+      regions: ["Ground", "RWY{dep_ident} Departure", "RWY{app_ident} Approach", "Vicinity"]
     actions:
       callback: aircraft_update_cb
 
@@ -464,6 +468,12 @@ rules:
       regions: []
     actions:
       callback: aircraft_remove_cb
+
+  ui_expire:
+    conditions:
+      latlongring: [{VICINITY_RADIUS_NM}, {center_lat}, {center_lon}]
+    actions:
+      expire_callback: aircraft_remove_cb
 
   prox:
     conditions:
@@ -483,6 +493,8 @@ def main():
     )
     parser.add_argument('icao', help="ICAO airport code (e.g., KSQL, KOAK)")
     parser.add_argument('--runway', help="Runway end identifier (e.g., 12, 30L). Default: lower-numbered end of longest runway")
+    parser.add_argument('--apprunway', help="Approach runway (if different from departure). Overrides --runway for approaches.")
+    parser.add_argument('--deprunway', help="Departure runway (if different from approach). Overrides --runway for departures.")
     parser.add_argument('--force', action='store_true', help="Overwrite existing files")
     args = parser.parse_args()
 
@@ -517,47 +529,101 @@ def main():
 
     print(f"  Runways: {len(runways)}")
 
-    # Select runway
-    if args.runway:
-        # Find matching runway
-        selected_runway = None
+    # Helper to normalize runway identifier (handle leading zeros: 1L -> 01L)
+    def normalize_runway_ident(ident: str) -> str:
+        ident = ident.upper()
+        # Extract numeric part and suffix (L/R/C)
+        num_part = ''.join(c for c in ident if c.isdigit())
+        suffix = ''.join(c for c in ident if c.isalpha())
+        if num_part:
+            # Pad to 2 digits (runway numbers are 01-36)
+            num_part = num_part.zfill(2)
+        return num_part + suffix
+
+    # Helper to find runway by identifier
+    def find_runway_by_ident(ident: str) -> tuple[dict, str] | None:
+        normalized = normalize_runway_ident(ident)
         for rwy in runways:
-            if (rwy.get('le_ident', '').upper() == args.runway.upper() or
-                rwy.get('he_ident', '').upper() == args.runway.upper()):
-                selected_runway = rwy
-                break
+            le = rwy.get('le_ident', '').upper()
+            he = rwy.get('he_ident', '').upper()
+            if le == normalized:
+                return rwy, le
+            if he == normalized:
+                return rwy, he
+        return None
 
-        if not selected_runway:
-            available = []
-            for rwy in runways:
-                available.extend([rwy.get('le_ident', ''), rwy.get('he_ident', '')])
-            print(f"Error: Runway '{args.runway}' not found. Available: {', '.join(filter(None, available))}", file=sys.stderr)
+    # List available runways for error messages
+    available_rwys = []
+    for rwy in runways:
+        available_rwys.extend([rwy.get('le_ident', ''), rwy.get('he_ident', '')])
+    available_rwys = list(filter(None, available_rwys))
+
+    # Determine approach runway
+    if args.apprunway:
+        result = find_runway_by_ident(args.apprunway)
+        if not result:
+            print(f"Error: Approach runway '{args.apprunway}' not found. Available: {', '.join(available_rwys)}", file=sys.stderr)
             sys.exit(1)
-
-        runway_end_ident = args.runway.upper()
+        app_runway, app_ident = result
+    elif args.runway:
+        result = find_runway_by_ident(args.runway)
+        if not result:
+            print(f"Error: Runway '{args.runway}' not found. Available: {', '.join(available_rwys)}", file=sys.stderr)
+            sys.exit(1)
+        app_runway, app_ident = result
     else:
-        # Use longest runway, lower-numbered end
-        selected_runway = get_longest_runway(runways)
-        runway_end_ident = get_lower_runway_end(selected_runway)
+        app_runway = get_longest_runway(runways)
+        app_ident = get_lower_runway_end(app_runway)
 
-    runway_length_ft = float(selected_runway.get('length_ft') or 5000)
-    print(f"  Using runway: {runway_end_ident} (length: {runway_length_ft:.0f} ft)")
+    # Determine departure runway
+    if args.deprunway:
+        result = find_runway_by_ident(args.deprunway)
+        if not result:
+            print(f"Error: Departure runway '{args.deprunway}' not found. Available: {', '.join(available_rwys)}", file=sys.stderr)
+            sys.exit(1)
+        dep_runway, dep_ident = result
+    elif args.runway:
+        # Use opposite end of the specified runway for departure
+        result = find_runway_by_ident(args.runway)
+        dep_runway, _ = result
+        dep_ident = get_opposite_runway_end(dep_runway, args.runway.upper())
+    else:
+        # Use opposite end of approach runway for departure
+        dep_runway = app_runway
+        dep_ident = get_opposite_runway_end(app_runway, app_ident)
 
-    # Get runway end data for both ends
-    runway_end = get_runway_end_data(selected_runway, runway_end_ident)
-    if not runway_end:
-        print(f"Error: Could not get data for runway end {runway_end_ident}.", file=sys.stderr)
+    # Get runway end data
+    app_end = get_runway_end_data(app_runway, app_ident)
+    if not app_end:
+        print(f"Error: Could not get data for approach runway {app_ident}.", file=sys.stderr)
         sys.exit(1)
 
-    opposite_end_ident = get_opposite_runway_end(selected_runway, runway_end_ident)
-    opposite_end = get_runway_end_data(selected_runway, opposite_end_ident)
-    if not opposite_end:
-        print(f"Error: Could not get data for opposite runway end {opposite_end_ident}.", file=sys.stderr)
+    dep_end = get_runway_end_data(dep_runway, dep_ident)
+    if not dep_end:
+        print(f"Error: Could not get data for departure runway {dep_ident}.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"  Approach end: {runway_end['lat']:.4f}, {runway_end['lon']:.4f}")
-    print(f"  Departure end: {opposite_end['lat']:.4f}, {opposite_end['lon']:.4f}")
-    print(f"  Heading: {runway_end['heading']:.0f}°")
+    # For departure wedge position: aircraft departing runway XX lift off and fly over
+    # the OPPOSITE end of that runway. So we need the opposite end's coordinates.
+    dep_opposite_ident = get_opposite_runway_end(dep_runway, dep_ident)
+    dep_liftoff_end = get_runway_end_data(dep_runway, dep_opposite_ident)
+    if not dep_liftoff_end:
+        print(f"Error: Could not get data for departure liftoff point {dep_opposite_ident}.", file=sys.stderr)
+        sys.exit(1)
+
+    runway_length_ft = float(app_runway.get('length_ft') or 5000)
+
+    # Check if using split runway operations
+    split_ops = (app_ident != get_opposite_runway_end(dep_runway, dep_ident))
+
+    if split_ops:
+        print(f"  Approach runway: {app_ident} (heading: {app_end['heading']:.0f}°)")
+        print(f"  Departure runway: {dep_ident} (heading: {dep_end['heading']:.0f}°)")
+    else:
+        print(f"  Using runway: {app_ident}/{dep_ident} (length: {runway_length_ft:.0f} ft)")
+        print(f"  Approach end: {app_end['lat']:.4f}, {app_end['lon']:.4f}")
+        print(f"  Departure end: {dep_end['lat']:.4f}, {dep_end['lon']:.4f}")
+        print(f"  Heading: {app_end['heading']:.0f}°")
 
     # Output paths - go up to project root (src/tools -> src -> project root)
     output_dir = Path(__file__).parent.parent.parent / "examples" / "generated"
@@ -579,19 +645,19 @@ def main():
     print("\nGenerating files...")
 
     kml_content = generate_kml(icao, airport_name, field_elevation,
-                               runway_end, opposite_end, runway_length_ft,
+                               app_end, dep_end, dep_liftoff_end, runway_length_ft,
                                center_lat, center_lon)
     with open(kml_path, 'w', encoding='utf-8') as f:
         f.write(kml_content)
     print(f"  {kml_path}")
 
-    rules_content = generate_rules_yaml(icao, field_elevation, runway_end_ident,
+    rules_content = generate_rules_yaml(icao, field_elevation, app_ident, dep_ident,
                                         center_lat, center_lon)
     with open(rules_path, 'w', encoding='utf-8') as f:
         f.write(rules_content)
     print(f"  {rules_path}")
 
-    stripview_content = generate_stripview_yaml(icao, field_elevation, runway_end_ident,
+    stripview_content = generate_stripview_yaml(icao, field_elevation, app_ident, dep_ident,
                                                 center_lat, center_lon)
     with open(stripview_path, 'w', encoding='utf-8') as f:
         f.write(stripview_content)

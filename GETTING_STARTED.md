@@ -20,11 +20,17 @@ pip install -e .
 
 # 2. Run with live data from the API (monitors aircraft near SFO)
 python3 src/applications/tcp_api_monitor/monitor.py examples/hello_world_api.yaml
+
+# 3. Show a UI and live map of aircraft at your airport of choice 
+pip install -e '.[gui]'
+python3 src/tools/airport_quickstart.py KSJC
 ```
 
 You should see aircraft printed to the console. Edit `hello_world_api.yaml` to change the location or radius.
 
 ## Using a local ADS-B receiver
+
+If you want to use local ADS-B hardware, here's how to get that going:
 
 #### Step 1: Configure readsb to expose JSON data
 
@@ -95,11 +101,9 @@ source .venv/bin/activate
 ```
 
 
-<h3> More things to try: </h3>
+<h3> Other notes: </h3>
 
 1. Check out other applications in the examples directory
-2. Invoke a sample UI based on recorded data: 
-- `pip install -e ".[all]"`
-- `python3 src/applications/stripview/controller.py  -- --testdata tests/20minutes.json --delay .2 --rules examples/88nv/stripview_ui.yaml`
-3. Command lines for other sample applications can be found in launch.json.
-1. Tests are available: `pytest -s tests/*.py`
+2. Command lines for more complex applications can be found in launch.json.
+3. Some tools are in src/tools
+4. Tests are available: `pytest -s tests/`
