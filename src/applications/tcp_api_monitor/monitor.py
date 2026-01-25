@@ -179,5 +179,13 @@ if __name__ == "__main__":
     except Exception as ex:      # pylint: disable=broad-except
         logger.error("error in yaml file: " + str(ex))
 
+    # Check if any queries were registered
+    if not monitor_thread.queries:
+        logger.error("No 'latlongring' conditions found in yaml file. "
+                     "tcp_api_monitor requires at least one rule with a latlongring "
+                     "condition to query the API. Either add a latlongring to your config, "
+                     "or use simple_monitor.py with a readsb feed instead.")
+        sys.exit(1)
+
     # start monitoring thread
     monitor_thread.run()
