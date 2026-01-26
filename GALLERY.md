@@ -14,6 +14,6 @@ Using ![mesh_adsb](https://github.com/eastham/mesh_adsb), ground vehicle locatio
 can be injected into the readsb data stream, allowing them to be visualized and
 analyzed with tar1090 and all the tools in this project.
 ![Vehicle on runway](screenshots/ground_map.png)
-![Mesh box closed](screenshots/mesh_closed.png)
-![Mesh box open](screenshots/mesh_open.png)
+![Mesh box closed](screenshots/mesh_closed.jpg)
+![Mesh box open](screenshots/mesh_open.jpg)
 
