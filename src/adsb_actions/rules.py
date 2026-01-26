@@ -359,7 +359,7 @@ class Rules:
     def actions_valid(self, actions: dict):
         """Check for invalid or unknown actions, return True if valid."""
         VALID_ACTIONS = ['webhook', 'print', 'callback', 'note', 'track',
-                         'expire_callback', 'shell']
+                         'expire_callback', 'shell', 'print_csv']
 
         for action in actions.keys():
             if action not in VALID_ACTIONS:
@@ -471,6 +471,36 @@ class Rules:
             elif 'track' == action_name:
                 # statistics gathering.
                 pass # handled after execution is complete
+
+            elif 'print_csv' == action_name:
+                # Output CSV line compatible with visualizer.py
+                # Format: timestamp,_,datestr,lat,lon,altitude,tail1,tail2,_,link,interp,audio,type,phase,_,distance,altsep
+                ts = flight.lastloc.now
+                datestring = datetime.datetime.utcfromtimestamp(ts)
+                altdatestring = datestring.strftime("%Y-%m-%d-%H:%M")
+                lat = flight.lastloc.lat or 0
+                lon = flight.lastloc.lon or 0
+                alt = flight.lastloc.alt_baro or 0
+                tail1 = flight.flight_id.strip() if flight.flight_id else ""
+
+                # For proximity events, cb_arg has the second flight
+                tail2 = cb_arg.flight_id.strip() if cb_arg and cb_arg.flight_id else ""
+
+                # Build replay link
+                replay_time = datestring.strftime("%Y-%m-%d-%H:%M")
+                link = f"https://globe.adsbexchange.com/?replay={replay_time}&lat={lat}&lon={lon}&zoom=12"
+
+                # Event type from action_value or rule name
+                event_type = action_value if isinstance(action_value, str) and action_value is not True else rule_name
+
+                # CSV fields: timestamp,_,datestr,lat,lon,alt,tail1,tail2,_,link,interp,audio,type,phase,_,latdist,altdist
+                csv_line = (
+                    f"CSV OUTPUT FOR POSTPROCESSING: {ts},"
+                    f"{datestring},{altdatestring},{lat},{lon},"
+                    f"{alt},{tail1},{tail2},,"
+                    f"{link},,,{event_type},,,,"
+                )
+                logger.info(csv_line)
 
             else:
                 logger.warning("Unmatched action: %s", action_name)

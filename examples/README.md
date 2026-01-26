@@ -18,7 +18,7 @@ Configuration files and examples demonstrating how to use the ADSB Actions monit
   python src/analyzers/simple_monitor.py --ipaddr 127.0.0.1 --port 30006 examples/hello_world_rules.yaml
   ```
 
-- **low_altitude_alert.yaml** / **low_altitude_callbacks.py** - Detects aircraft at 100-4500 feet with custom Python callback implementation.
+- **low_altitude_alert.yaml** / **low_altitude_callbacks.py** - Detects aircraft at 100-4500 feet with custom Python callback implementation.  From pre-saved data:
   ```bash
   python src/analyzers/callback_runner.py --data tests/sample_readsb_data --callback_definitions examples/low_altitude_callbacks.py examples/low_altitude_alert.yaml
   ```

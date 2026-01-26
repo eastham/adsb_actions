@@ -40,6 +40,7 @@ var/
 *.csv
 *.kml
 *.out
+*.html
 
 # Analysis-generated HTML and maps
 src/tools/analysis/*.html

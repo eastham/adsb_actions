@@ -1,4 +1,4 @@
-# Just print info about all aircraft seen below 60000 feet, maximum of one 
+# Just print info about all aircraft seen below 60000 feet, maximum of one
 # print per aircraft per minute.
 
 # Usage w/ readsb: python3 src/analyzers/simple_monitor.py --ipaddr localhost --port 30006 examples/hello_world_rules.yaml

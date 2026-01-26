@@ -1,0 +1,14 @@
+# Print aircraft and output CSV for visualizer.py
+# Detects all aircraft below 60000 feet, once per minute per aircraft.
+#
+# Usage: python3 src/analyzers/simple_monitor.py --directory tests/sample_readsb_data examples/hello_world_csv.yaml 2>&1 | python src/postprocessing/visualizer.py
+
+  rules:
+    print_all_aircraft:
+      conditions:
+        max_alt: 60000  # feet
+        cooldown: 1     # minutes between prints
+
+      actions:
+        print: True     # print aircraft data to console
+        print_csv: True # output CSV for visualizer.py (uses rule name as event type)

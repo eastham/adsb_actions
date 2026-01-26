@@ -23,7 +23,7 @@ Core analysis engines that process ADS-B flight data from various sources (live 
   python src/analyzers/simple_monitor.py --ipaddr 127.0.0.1 --port 30006 examples/hello_world_rules.yaml
   ```
 
-- **prox_analyze_from_files.py** - Proximity analysis tool for detecting nearby aircraft interactions from file-based historical data.
+- **prox_analyze_from_files.py** - Proximity analysis tool for detecting nearby aircraft interactions from file-based historical data.  Data comes from a readsb data directory.
   ```bash
   python src/analyzers/prox_analyze_from_files.py --yaml examples/88nv/prox_analyze_from_files.yaml tests/sample_readsb_data --resample
   ```

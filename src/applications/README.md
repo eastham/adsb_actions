@@ -20,7 +20,7 @@ Complete, runnable applications for real-world airport monitoring and flight tra
 
 - **stripview/** - Advanced Kivy MD GUI providing interactive flight strips with aircraft details, admin functions, FlightAware links, and database integration for enriched displays.
   ```bash
-  # From API (no hardware needed)
+  # From API - KSJC traffic (no hardware needed)
   python src/applications/stripview/controller.py -- --api --rules examples/sf_bay_area/stripview_ui_sjc_api.yaml
 
   # From saved data

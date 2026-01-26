@@ -57,6 +57,7 @@
         webhook: ['page', 'pager1 pager2']  # send a message to two pagers
         webhook: ['custom', 'recipient']    # use a custom webhook handler registered via register_webhook_handler()
         shell: "echo 'Aircraft {flight_id}'"  # run a shell command (see below for variables)
+        print_csv: "event_type"  # output CSV line for visualizer.py (event_type label is optional)
 
 # Shell action variable substitution:
 # The shell action supports these variables (all sanitized with shlex.quote for security):

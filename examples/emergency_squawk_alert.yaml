@@ -14,7 +14,7 @@ rules:
   emergency_squawk:
     conditions:
       squawk: [7500, 7600, 7700]
-      #latlongring: [250, 39.5580794, -120.0156502]
+      #latlongring: [250, 39.5580794, -120.0156502] # tells API where to monitor too
       cooldown: 10      # only trigger every 10 minutes per aircraft
     actions:
       print: True                   # print to console

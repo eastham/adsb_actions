@@ -324,6 +324,13 @@ if __name__ == "__main__":
             print(f"Parse error on row: {row} " + str(e) )
 
     print(f"Visualizing {ctr} points.")
+    if ctr == 0:
+        print("Error: No CSV points found in input. Check that:", file=sys.stderr)
+        print("  1. Your rules file exists and has valid YAML syntax", file=sys.stderr)
+        print("  2. Your rules include 'print_csv' actions", file=sys.stderr)
+        print("  3. The analyzer matched some flights (check stderr for errors)", file=sys.stderr)
+        print("  4. Input contains 'CSV OUTPUT FOR POSTPROCESSING:' lines", file=sys.stderr)
+        sys.exit(1)
     visualizer.visualize(
         vectorlist=None,
         map_image=args.map_image,
