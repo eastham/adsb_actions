@@ -8,7 +8,7 @@ These actions can then:
 
 ⭒ <a href="QUICK_AIRPORT_SETUP.md">Drive a UI</a>:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;<img src="screenshots/stripview.png?raw=true" alt="Screenshot of Stripview"><br>
-&nbsp;&nbsp;&nbsp;&nbsp;<img src="screenshots/monitor.png?raw=true" alt="Screenshot of monitor">
+<!--&nbsp;&nbsp;&nbsp;&nbsp;<img src="screenshots/monitor.png?raw=true" alt="Screenshot of monitor">-->
 
 ⭒ Analyze traffic at your local airport in real-time / detect loss-of-separation events / track operations <br>
 &nbsp;&nbsp;&nbsp;&nbsp;<img src="screenshots/los.png?raw=true" alt="Screenshot of LOS">
