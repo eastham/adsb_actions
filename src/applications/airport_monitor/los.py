@@ -4,6 +4,7 @@ expired, so that the minimum distance is logged."""
 
 import copy
 import logging
+import os
 import threading
 import time
 import datetime
@@ -17,6 +18,10 @@ logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
 LOGGER = Logger()
 
+# Default output directory for generated animations
+ANIMATION_OUTPUT_DIR = os.path.join(os.path.dirname(__file__),
+                                     "../../../examples/generated")
+
 class LOS:
     """
     Track LOS (Loss of Separation) events.  These are pushed to the server
@@ -24,11 +29,14 @@ class LOS:
     and re-pushed to the server with the final stats once the event is gc'ed.
     """
     current_los_events = {}
+    finalized_los_events = {}  # Stores finalized events for post-processing
     current_los_lock: threading.Lock = threading.Lock()
     LOS_GC_TIME = 60        # seconds to wait before finalizing LOS
     LOS_GC_LOOP_DELAY = 1   # seconds between GC checks
     gc_thread = None
     quit = False
+    animator = None  # Set by caller to enable animation generation
+    animation_output_dir = ANIMATION_OUTPUT_DIR
 
     def __init__(self, flight1, flight2, latdist, altdist, create_time):
         # Keep flight1/flight2 in a universal order to enforce lock ordering
@@ -72,7 +80,8 @@ class LOS:
         return key
 
 def process_los_launch(flight1, flight2, do_threading=True):
-    """Saw an LOS event, start a thread to process (so as not to block the caller).
+    """Saw an LOS event -- in streaming mode, start a thread to 
+    keep an eye on it as the event progresses.
 
     Args:
         do_threading: If True, process in background thread and start GC thread
@@ -121,25 +130,38 @@ def process_los(flight1, flight2):
             los.id = add_los(flight1, flight2, lateral_distance,
                                alt_distance)
 
-def log_csv_record(flight1, flight2, los, datestring, altdatestring):
-    """Put a CSV record in the log, with replay link for post-processing."""
+def log_csv_record(flight1, flight2, los, datestring, altdatestring,
+                   animation_path=None):
+    """Put a CSV record in the log, with replay link for post-processing.
+
+    Args:
+        flight1, flight2: Flight objects
+        los: LOS object with event details
+        datestring: Human-readable date string
+        altdatestring: Alternate date format for replay link
+        animation_path: Optional path to generated animation HTML file
+    """
     meanloc = Location.meanloc(los.first_loc_1, los.first_loc_2)
     replay_time = datetime.datetime.utcfromtimestamp(
         flight1.lastloc.now
     ).strftime("%Y-%m-%d-%H:%M")
     link = (
-        f"https://globe.airplanes.live/" # TODO make configurable 
+        f"https://globe.airplanes.live/" # TODO make configurable
         f"?replay={replay_time}&lat={meanloc.lat}&lon={meanloc.lon}"
         f"&zoom=12'"
     )
+    animation_field = f"file://{os.path.abspath(animation_path)}" if animation_path else ""
     csv_line = (
         f"CSV OUTPUT FOR POSTPROCESSING: {flight1.lastloc.now},"
         f"{datestring},{altdatestring},{meanloc.lat},{meanloc.lon},"
         f"{meanloc.alt_baro},{flight1.flight_id.strip()},"
         f"{flight2.flight_id.strip()},notused,"
-        f"{link},interp,audio,type,phase,,{los.min_latdist},{los.min_altdist}"
+        f"{link},{animation_field},interp,audio,type,phase,,{los.min_latdist},{los.min_altdist},"
     )
+
     logger.info(csv_line)
+    logger.info("LOS visualization: %s", animation_field if animation_field else link)
+
 
 def gc_loop():
     """Run in a separate thread to periodically check for LOS events.
@@ -154,6 +176,39 @@ def gc_loop():
         los_gc(time.time())
         if LOS.quit:
             return
+
+
+def _generate_animation(los):
+    """Generate an animation HTML file for an LOS event.
+
+    Args:
+        los: LOS object with flight1, flight2, create_time
+
+    Returns:
+        Path to the generated HTML file, or None if generation failed
+    """
+    if not LOS.animator:
+        return None
+
+    # Ensure output directory exists
+    os.makedirs(LOS.animation_output_dir, exist_ok=True)
+
+    # Generate filename based on tails and timestamp
+    tail1 = los.flight1.flight_id.strip()
+    tail2 = los.flight2.flight_id.strip()
+    timestamp = datetime.datetime.utcfromtimestamp(los.create_time)
+    filename = f"los_{tail1}_{tail2}_{timestamp.strftime('%Y%m%d_%H%M%S')}.html"
+    output_path = os.path.join(LOS.animation_output_dir, filename)
+
+    try:
+        result = LOS.animator.animate_from_los_object(los, output_file=output_path)
+        if result:
+            return result
+    except Exception as e:
+        logger.error("Failed to generate animation for %s vs %s: %s",
+                    tail1, tail2, e)
+
+    return None
 
 def los_gc(ts):
     """Check if any LOS events are ready to be finalized (i.e. final stats recorded)"""
@@ -180,10 +235,19 @@ def los_gc(ts):
             # do database update
             update_los(flight1, flight2, los.min_latdist, los.min_altdist,
                        los.create_time, los.id)
+
+            # Generate animation if animator is available
+            animation_path = None
+            if LOS.animator:
+                animation_path = _generate_animation(los)
+
             try:
+                # Move to finalized events for post-processing (e.g., animation)
+                LOS.finalized_los_events[los.get_key()] = los
                 del LOS.current_los_events[los.get_key()]
             except KeyError:
                 logger.error("Didn't find key in current_los_events")
 
-            # print CSV record
-            log_csv_record(flight1, flight2, los, datestring, altdatestring)
+            # print CSV record (includes animation path if generated)
+            log_csv_record(flight1, flight2, los, datestring, altdatestring,
+                          animation_path)

@@ -55,3 +55,6 @@ src/adsb_actions/*.html
 
 # Analysis directories
 remote/
+traces/
+acas/
+heatmap/

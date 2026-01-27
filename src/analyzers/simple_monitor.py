@@ -11,9 +11,10 @@ For examples that use callbacks, see callback_runner.py instead.
 """
 
 from adsb_actions.adsbactions import AdsbActions
-
 from adsb_actions import adsb_logger
 from adsb_actions.adsb_logger import Logger
+from lib import replay
+
 logger = adsb_logger.logging.getLogger(__name__)
 #logger.level = adsb_logger.logging.DEBUG
 LOGGER = Logger()
@@ -34,13 +35,21 @@ if __name__ == "__main__":
     parser.add_argument('--ipaddr', help="IP address to connect to")
     parser.add_argument('--port', help="port to connect to")
     parser.add_argument('--directory', help="directory of readsb data files to read from")
+    parser.add_argument(
+        '--sorted-file', help='Path to time-sorted JSONL file (.json, .jsonl, or .gz)')
     parser.add_argument('-m', '--mport', type=int, help="metrics port to listen on", default=None)
     parser.add_argument('yaml', help='Path to the YAML file')
     args = parser.parse_args()
 
-    if args.directory:
+    if args.sorted_file:
+        print(f"Streaming from sorted file: {args.sorted_file}")
+        allpoints_iterator = replay.yield_from_sorted_file(args.sorted_file)
+        adsb_actions = AdsbActions(yaml_file=args.yaml, mport=args.mport)
+        adsb_actions.register_callback(
+            "print_aircraft_data", print_aircraft_data)
+        adsb_actions.loop(iterator_data=allpoints_iterator)
+    elif args.directory:
         # File-based replay mode
-        from lib import replay
         print("Reading data from directory...")
         allpoints = replay.read_data(args.directory)
         allpoints_iterator = replay.yield_json_data(allpoints)
@@ -54,5 +63,5 @@ if __name__ == "__main__":
         adsb_actions.register_callback("print_aircraft_data", print_aircraft_data)
         adsb_actions.loop()
     else:
-        parser.error("Either --directory or both --ipaddr and --port are required")
+        parser.error("Either --directory, --sorted-file, or both --ipaddr and --port are required")
  

@@ -4,7 +4,7 @@
     proximity_alert:
       conditions:
         #latlongring: [20, 36.9357325,-121.7896375]  # 20nm radius around KWVI
-        min_alt: 0
+        min_alt: 300
         max_alt: 4000
         proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
       actions:

@@ -11,10 +11,11 @@ from .adsb_logger import Logger
 from .flights import Flights
 
 logger = logging.getLogger(__name__)
-logger.level = logging.INFO
+logger.level = logging.DEBUG
 LOGGER = Logger()
 
 MAX_INTERPOLATE_SECS = 60 # max seconds that we'll interpolate over.
+EXPIRE_TIME = 20 # seconds to keep stale position reports around for interpolation.
 MIN_ALTITUDE = 0  # optimization: minimum altitude for resampling
 MAX_ALTITUDE = 10000  # optimization: maximum altitude for resampling
 
@@ -108,9 +109,8 @@ class Resampler:
             return
 
         self.total_added_ctr += 1
-        if self.total_added_ctr <= 10:
-            logger.debug("Adding location: %s at %.4f, %.4f, %d ft, ts=%d",
-                        tail, location.lat, location.lon, location.alt_baro, int(now))
+        logger.debug("Adding location: %s at %.4f, %.4f, %d ft, ts=%d",
+                    tail, location.lat, location.lon, location.alt_baro, int(now))
 
         # --- Assign unique flight_id per flight per tail ---
         # If this is the first time seeing this tail, start counter at 1
@@ -119,7 +119,7 @@ class Resampler:
             self.flight_counters[tail] = 1
             self.last_time_seen[tail] = now
         else:
-            # If time gap is large (EXPIRE_TIME), increment flight counter
+            # If time gap is large, increment flight counter
             if now - self.last_time_seen[tail] > MAX_INTERPOLATE_SECS:
                 self.flight_counters[tail] += 1
             self.last_time_seen[tail] = now
@@ -136,7 +136,7 @@ class Resampler:
                 prev_location = prev_locations[-1]
 
                 # Only interpolate if:
-                # 1. Gap is less than EXPIRE_TIME (don't interpolate across large gaps)
+                # 1. Gap is not huge (i.e. separate flight)
                 # 2. Gap is greater than 1 second (need at least 2+ second gap to interpolate)
                 time_gap = now - prev_location.now
                 if time_gap <= MAX_INTERPOLATE_SECS and time_gap > 1:
@@ -149,11 +149,9 @@ class Resampler:
                         if interp_location:
                             self.locations_by_time[t].append(interp_location)
                             self.resample_ctr += 1
-                            #if "FEMG_2" in flight_id:
-                            #    logger.debug("Interpolated location at %s: %s ts %d",
-                            #    interp_location.to_str(), flight_id, t)
-                            #logger.debug("Prev location was %s",
-                            #             prev_location.to_str())
+                        logger.debug("Resampled location for %s at ts=%d / %s",
+                                     flight_id, t, 
+                                     datetime.datetime.fromtimestamp(t, datetime.UTC))
         
         # Add the current (real, not resampled) location to the histories
         if flight_id not in self.locations_by_flight_id:
@@ -197,6 +195,7 @@ class Resampler:
         sorted_times = sorted(self.locations_by_time.keys())
         min_time = sorted_times[0]
         max_time = sorted_times[-1]
+        all_times = [t for t in range(min_time, max_time + 1)]
 
         logger.info("=== Starting Proximity Checks ===")
         logger.info("  Time range: %s to %s",
@@ -209,7 +208,8 @@ class Resampler:
         prox_rules = rules.get_rules_with_condition("proximity")
         logger.info("  Proximity rules found: %d", len(prox_rules))
         for rule_name, rule_body in prox_rules:
-            logger.info("    Rule '%s': %s", rule_name, rule_body.get("conditions", {}).get("proximity"))
+            logger.info("    Rule '%s': %s", rule_name, 
+                        rule_body.get("conditions", {}).get("proximity"))
 
         flights = Flights(bboxes, ignore_unboxed_flights=ignore_unboxed_flights)
         found_prox_events = []
@@ -217,7 +217,7 @@ class Resampler:
         prox_check_ctr = 0
 
         # Iterate through time range using only existing timestamps
-        for current_time in sorted_times:
+        for current_time in all_times:
             if (current_time - min_time) % sample_interval != 0:
                 continue
 
@@ -229,7 +229,7 @@ class Resampler:
             # Build up the correct system state to detect proximity at current_time.
             # Allows re-use of existing proximity handling code.  Will result in
             # callbacks being fired if conditions are met.
-            for loc in self.locations_by_time[current_time]:
+            for loc in self.locations_by_time.get(current_time, []):
                 flights.add_location(loc, rules)
                 #logger.debug("Adding location %s to flights at %s",
                 #            loc.to_str(), utc_time)
@@ -248,8 +248,9 @@ class Resampler:
                 logger.debug("Prox check #%d at %s: %d active flights",
                             prox_check_ctr, utc_time, active_count)
 
-            # Clear out recently-unseen locations
-            flights.expire_old(rules, current_time, MAX_INTERPOLATE_SECS)
+            # Clear out recently-unseen locations...TODO final points will remain
+            # stationary unless we continue their motion vector somehow...
+            flights.expire_old(rules, current_time, EXPIRE_TIME)
 
             if gc_callback:
                 gc_callback(current_time)
@@ -307,7 +308,6 @@ class Resampler:
                 callback_count += 1
                 if callback_count % 10000 == 0:
                     logger.info("Processed %d callbacks so far.", callback_count)
-            
 
         for flight_id, count in flight_ctrs.items():
             logger.info("for_each_resampled_point: flight %s saw %d total points", flight_id, count)

@@ -11,7 +11,7 @@ import logging
 from lib import replay
 from adsb_actions.adsbactions import AdsbActions
 from adsb_actions.adsb_logger import Logger
-from applications.airport_monitor.los import process_los_launch, los_gc
+from applications.airport_monitor.los import process_los_launch, los_gc, LOS
 
 logger = logging.getLogger(__name__)
 # logger.level = logging.DEBUG
@@ -43,11 +43,12 @@ if __name__ == "__main__":
     parser.add_argument('--yaml', help='Path to the YAML file', default=YAML_FILE)
     parser.add_argument('--resample', action="store_true", help='Enable resampling and proximity checks')
     parser.add_argument('--sorted-file', help='Path to time-sorted JSONL file (.json, .jsonl, or .gz)')
+    parser.add_argument('--animate-los', action="store_true", help='Generate animated HTML maps for each LOS event')
     parser.add_argument('directory', nargs='?', help='Path to the data (not needed if --sorted-file used)')
     args = parser.parse_args()
 
     if args.sorted_file:
-        # Stream from preprocessed sorted file (low memory)
+        # Stream from preprocessed sorted file
         print(f"Streaming from sorted file: {args.sorted_file}")
         allpoints_iterator = replay.yield_from_sorted_file(args.sorted_file)
     elif args.directory:
@@ -68,4 +69,12 @@ if __name__ == "__main__":
 
     if args.resample:
         RESAMPLING_STARTED = True
+
+        # Set up animator before proximity checks so animations are generated
+        # during los_gc() finalization and included in CSV output
+        if args.animate_los:
+            from postprocessing.los_animator import LOSAnimator
+            LOS.animator = LOSAnimator(adsb_actions.resampler)
+            print(f"Animation generation enabled, output to: {LOS.animation_output_dir}")
+
         prox_events = adsb_actions.do_resampled_prox_checks(los_gc)

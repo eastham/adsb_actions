@@ -88,8 +88,8 @@ class Flights:
                     rules.do_expire(flight)
                     del self.flight_dict[f]
                     count += 1
-
-        logger.debug("Expire_old removed %d flights", count)
+                    logger.debug("Expired flight %s last seen at %d, now %d",
+                                 flight.flight_id, flight.lastloc.now, last_read_time)
 
     def find_nearby_flight(self, flight2, altsep, latsep, last_read_time) -> Flight:
         """Returns maximum of one nearby flight within the given separation, 
