@@ -48,7 +48,7 @@ class AdsbActions:
 
     def __init__(self, yaml_data=None, yaml_file=None, ip=None, port=None,
                  mport=None, bboxes=None, expire_secs=180, pedantic=False,
-                 resample=False):
+                 resample=False, resample_bbox_filter=False):
         """Main API for the library.  You can provide network port info in the
         constructor here, or specify local data sources in the subsequent call to
         loop().  Either yaml_data or yaml_file must be specified.
@@ -63,10 +63,13 @@ class AdsbActions:
                 overriding anything specified in the yaml.
             expire_secs: how long to keep flights around after last observed
             pedantic: if True, enable strict behavior: checkpoints after each
-                observation, and all rule checks apply even if aircraft are 
+                observation, and all rule checks apply even if aircraft are
                 not in known bounding boxes.
             resample: if True, enable resampling to detect proximity events
                 between position updates.
+            resample_bbox_filter: if True and resample is True, filter resampled
+                data to only include points within configured bboxes. This is a
+                memory optimization for large global datasets.
         """
 
         assert yaml_data or yaml_file, "Must provide yaml or yaml_file"
@@ -85,8 +88,13 @@ class AdsbActions:
         self.enable_resample = resample
 
         # Initialize location history for resampling
+        # Pass bboxes/latlongrings to resampler for spatial filtering (memory optimization)
+        # only if explicitly requested via resample_bbox_filter
         if resample:
-            self.resampler = Resampler()
+            resampler_bboxes = self.flights.bboxes if resample_bbox_filter else None
+            resampler_latlongrings = self._extract_latlongrings(yaml_data) if resample_bbox_filter else None
+            self.resampler = Resampler(bboxes=resampler_bboxes,
+                                       latlongrings=resampler_latlongrings)
 
         if ip and port:
             self.tcp_conn = self._setup_network(ip, port)
@@ -210,6 +218,34 @@ class AdsbActions:
             logger.critical("Other error in yaml: %s", str(e))
             sys.exit(-1)
         return bboxes_list
+
+    def _extract_latlongrings(self, yaml_data: dict) -> list:
+        """Extract all latlongring conditions from rules for spatial filtering.
+
+        Args:
+            yaml_data: The parsed YAML configuration
+
+        Returns:
+            List of [radius_nm, lat, lon] tuples, or None if none found
+        """
+        if 'rules' not in yaml_data:
+            return None
+
+        latlongrings = []
+        for rule_name, rule_body in yaml_data['rules'].items():
+            if not isinstance(rule_body, dict):
+                continue
+            conditions = rule_body.get('conditions', {})
+            if not isinstance(conditions, dict):
+                continue
+            if 'latlongring' in conditions:
+                ring = conditions['latlongring']
+                if isinstance(ring, list) and len(ring) == 3:
+                    latlongrings.append(ring)
+                    logger.debug("Extracted latlongring from rule %s: %s",
+                                rule_name, ring)
+
+        return latlongrings if latlongrings else None
 
     def _setup_network(self, ipaddr : str, port : int,
                        retry_conn : bool = True):

@@ -117,6 +117,16 @@
         "justMyCode": true
       },
       {
+        "name": "Analyze WVI: detect LOS events from pre-saved data, with resampling.  (there are none in the default dataset)",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/analyzers/prox_analyze_from_files.py",
+        "args": "--yaml examples/KWVI/prox_analyze_from_files.yaml --sorted-file examples/KWVI/1213.wvi5nm.gz --resample",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
         "name": "Public Flight info display (FIDS)",
         "type": "debugpy",
         "request": "launch",

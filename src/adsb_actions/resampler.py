@@ -15,33 +15,68 @@ logger.level = logging.INFO
 LOGGER = Logger()
 
 MAX_INTERPOLATE_SECS = 60 # max seconds that we'll interpolate over.
-MIN_ALTITUDE = 3000  # optimization: minimum altitude for resampling
-MAX_ALTITUDE = 12000  # optimization: maximum altitude for resampling
+MIN_ALTITUDE = 0  # optimization: minimum altitude for resampling
+MAX_ALTITUDE = 10000  # optimization: maximum altitude for resampling
 
 class Resampler:
     """Stores / resamples locations, then can check for proximity events.
     """
 
-    def __init__(self):
+    def __init__(self, bboxes=None, latlongrings=None):
+        """Initialize the resampler.
+
+        Args:
+            bboxes: Optional list of Bboxes objects for spatial filtering.
+                If provided, only locations within at least one bbox polygon
+                will be stored (ignoring altitude/heading constraints).
+                This dramatically reduces memory usage for global datasets.
+            latlongrings: Optional list of [radius_nm, lat, lon] tuples for
+                circular spatial filtering. Points within any circle are kept.
+        """
         # Mapping from flight_id to a list of location samples.
         # Resampled locations are not added here.
         self.locations_by_flight_id: Dict[str, List[Location]] = {}
 
         # Mapping from timestamp to list of locations.  Resampled and real locations
         # are combined here.
-        # Note: Keys are int (1-second granularity).  Multiple locations within 
+        # Note: Keys are int (1-second granularity).  Multiple locations within
         # the same second will be stored in the same list.
         self.locations_by_time: Dict[int, List[Location]] = {}
 
         # These help rename each flight with a sequence number: flight_id_N,
-        # where N is the Nth contiguous track from that flight_id.  This is 
+        # where N is the Nth contiguous track from that flight_id.  This is
         # not strictly needed in this code but is sometimes useful for other
         # downstream analysis.
         self.flight_counters: Dict[str, int] = {} # tail_number -> flight count
         self.last_time_seen: Dict[str, int] = {} # tail_number -> last seen timestamp
 
+        # Bboxes for spatial filtering (optional)
+        self.bboxes = bboxes
+
+        # Latlongrings for circular spatial filtering (optional)
+        # Each entry is [radius_nm, lat, lon]
+        self.latlongrings = latlongrings or []
+
         # Just for stats/logging:
         self.resample_ctr = 0
+        self.filtered_ctr = 0  # count of locations filtered out by bbox
+        self.altitude_filtered_ctr = 0  # count filtered by altitude
+        self.no_tail_ctr = 0  # count filtered by missing tail
+        self.total_added_ctr = 0  # total locations successfully added
+
+    def _in_any_bbox(self, lat: float, lon: float) -> bool:
+        """Check if a point is within any bbox polygon or latlongring circle.
+
+        Args:
+            lat: Latitude
+            lon: Longitude
+
+        Returns:
+            True if point is in at least one bbox polygon or latlongring circle,
+            or if no spatial filters are configured
+        """
+        from .bboxes import point_in_any_bbox
+        return point_in_any_bbox(lat, lon, self.bboxes, self.latlongrings)
 
     def add_location(self, location: Location) -> None:
         """Add a location to the history, and resample for this aircraft
@@ -52,12 +87,30 @@ class Resampler:
             location: The location to add
         """
         if not location.tail:
+            self.no_tail_ctr += 1
             return  # Skip locations without a tail number
 
         tail = location.tail
         now = location.now
         if not MIN_ALTITUDE <= location.alt_baro <= MAX_ALTITUDE:
+            self.altitude_filtered_ctr += 1
+            if self.altitude_filtered_ctr <= 5:
+                logger.debug("Altitude filter: %s at %d ft (limits: %d-%d)",
+                            tail, location.alt_baro, MIN_ALTITUDE, MAX_ALTITUDE)
             return
+
+        # Spatial filtering: skip if not in any bbox (memory optimization)
+        if not self._in_any_bbox(location.lat, location.lon):
+            self.filtered_ctr += 1
+            if self.filtered_ctr <= 5:
+                logger.debug("Bbox filter: %s at %.4f, %.4f",
+                            tail, location.lat, location.lon)
+            return
+
+        self.total_added_ctr += 1
+        if self.total_added_ctr <= 10:
+            logger.debug("Adding location: %s at %.4f, %.4f, %d ft, ts=%d",
+                        tail, location.lat, location.lon, location.alt_baro, int(now))
 
         # --- Assign unique flight_id per flight per tail ---
         # If this is the first time seeing this tail, start counter at 1
@@ -145,11 +198,23 @@ class Resampler:
         min_time = sorted_times[0]
         max_time = sorted_times[-1]
 
-        logger.debug("Analyzing resampled time range: %.1f to %.1f",
-                     min_time, max_time)
+        logger.info("=== Starting Proximity Checks ===")
+        logger.info("  Time range: %s to %s",
+                    datetime.datetime.fromtimestamp(min_time, datetime.UTC),
+                    datetime.datetime.fromtimestamp(max_time, datetime.UTC))
+        logger.info("  Total timestamps: %d", len(sorted_times))
+        logger.info("  Sample interval: %d sec", sample_interval)
+        logger.info("  Unique flights in resampler: %d", len(self.locations_by_flight_id))
+
+        prox_rules = rules.get_rules_with_condition("proximity")
+        logger.info("  Proximity rules found: %d", len(prox_rules))
+        for rule_name, rule_body in prox_rules:
+            logger.info("    Rule '%s': %s", rule_name, rule_body.get("conditions", {}).get("proximity"))
+
         flights = Flights(bboxes, ignore_unboxed_flights=ignore_unboxed_flights)
         found_prox_events = []
         location_ctr = 0
+        prox_check_ctr = 0
 
         # Iterate through time range using only existing timestamps
         for current_time in sorted_times:
@@ -166,14 +231,22 @@ class Resampler:
             # callbacks being fired if conditions are met.
             for loc in self.locations_by_time[current_time]:
                 flights.add_location(loc, rules)
-                logger.debug("Adding location %s to flights at %s",
-                            loc.to_str(), utc_time)
+                #logger.debug("Adding location %s to flights at %s",
+                #            loc.to_str(), utc_time)
                 location_ctr += 1
 
             # Process proximity rules
             found = rules.handle_proximity_conditions(flights, current_time)
+            prox_check_ctr += 1
             if found:
                 found_prox_events.append(found)
+                #logger.info("Proximity event found at %s: %s", utc_time, found)
+
+            # Log active flight count periodically
+            if prox_check_ctr <= 5 or prox_check_ctr % 1000 == 0:
+                active_count = len(flights.flight_dict)
+                logger.debug("Prox check #%d at %s: %d active flights",
+                            prox_check_ctr, utc_time, active_count)
 
             # Clear out recently-unseen locations
             flights.expire_old(rules, current_time, MAX_INTERPOLATE_SECS)
@@ -181,7 +254,12 @@ class Resampler:
             if gc_callback:
                 gc_callback(current_time)
 
-        print(f"Processed {location_ctr} resampled events.")
+        logger.info("=== Proximity Check Summary ===")
+        logger.info("  Locations processed: %d", location_ctr)
+        logger.info("  Proximity checks performed: %d", prox_check_ctr)
+        logger.info("  Proximity events found: %d", len(found_prox_events))
+        logger.info("  Final active flights: %d", len(flights.flight_dict))
+        print(f"Processed {location_ctr} resampled events, {len(found_prox_events)} proximity events found.")
         return found_prox_events
 
     def report_resampling_stats(self):
@@ -190,6 +268,23 @@ class Resampler:
         logger.info("Resampling counter: %d", self.resample_ctr)
         logger.info("Timehistory locations after resampling: %d", sum(len(loc)
                     for loc in self.locations_by_time.values()))
+        # Filtering stats
+        logger.info("=== Resampler Filtering Stats ===")
+        logger.info("  Total locations added: %d", self.total_added_ctr)
+        logger.info("  Filtered by missing tail: %d", self.no_tail_ctr)
+        logger.info("  Filtered by altitude (%d-%d ft): %d",
+                    MIN_ALTITUDE, MAX_ALTITUDE, self.altitude_filtered_ctr)
+        logger.info("  Filtered by bbox/latlongring: %d", self.filtered_ctr)
+        logger.info("  Unique flights tracked: %d", len(self.locations_by_flight_id))
+        logger.info("  Unique timestamps: %d", len(self.locations_by_time))
+        if self.bboxes:
+            logger.info("  Bbox filtering: ENABLED (%d bbox groups)", len(self.bboxes))
+        else:
+            logger.info("  Bbox filtering: DISABLED")
+        if self.latlongrings:
+            logger.info("  Latlongring filtering: ENABLED (%d rings)", len(self.latlongrings))
+        else:
+            logger.info("  Latlongring filtering: DISABLED")
 
     def for_each_resampled_point(self, callback):
         """

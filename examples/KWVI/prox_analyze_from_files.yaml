@@ -1,0 +1,21 @@
+
+
+  rules:
+    proximity_alert:
+      conditions:
+        #latlongring: [20, 36.9357325,-121.7896375]  # 20nm radius around KWVI
+        min_alt: 0
+        max_alt: 4000
+        proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
+      actions:
+        callback: los_update_cb
+        #print_csv: "proximity"
+
+
+    # print:
+    #   conditions:
+    #     latlongring: [20, 36.9357325,-121.7896375]  # 20nm radius around KWVI
+    #     max_alt: 4000
+    #   actions:
+    #     print: True
+    #     print_csv: "print"

@@ -73,8 +73,13 @@ class LOS:
 
 def process_los_launch(flight1, flight2, do_threading=True):
     """Saw an LOS event, start a thread to process (so as not to block the caller).
-    NOTE: if not using threading, implementor must call los_gc() periodically,
-    best to do it with a rule_cooldown rule."""
+
+    Args:
+        do_threading: If True, process in background thread and start GC thread
+            that uses wall-clock time (for real-time analysis only).
+            If False, process synchronously; caller must call los_gc(timestamp)
+            periodically with simulation timestamps (for offline analysis).
+    """
     if do_threading:
         t = threading.Thread(target=process_los, args=[flight1, flight2])
         t.start()
@@ -89,10 +94,12 @@ def process_los(flight1, flight2):
     """Handle a single LOS event.  Could be new, or just an update to one that's
     already underway.  Push to external database if new."""
 
-    logger.info("process_los " + flight1.flight_id + " " + flight2.flight_id)
 
     lateral_distance = flight1.lastloc - flight2.lastloc
     alt_distance = abs(flight1.lastloc.alt_baro - flight2.lastloc.alt_baro)
+    logger.info("process_los %s %s lateral dist %.2fnm %d MSL",
+                flight1.flight_id, flight2.flight_id, lateral_distance, alt_distance)
+
     now = flight1.lastloc.now
     # always create a new LOS at least to get flight1/flight2 ordering right
     los = LOS(flight1, flight2, lateral_distance, alt_distance, now)
@@ -121,7 +128,7 @@ def log_csv_record(flight1, flight2, los, datestring, altdatestring):
         flight1.lastloc.now
     ).strftime("%Y-%m-%d-%H:%M")
     link = (
-        f"https://globe.adsbexchange.com/"
+        f"https://globe.airplanes.live/" # TODO make configurable 
         f"?replay={replay_time}&lat={meanloc.lat}&lon={meanloc.lon}"
         f"&zoom=12'"
     )
@@ -135,12 +142,18 @@ def log_csv_record(flight1, flight2, los, datestring, altdatestring):
     logger.info(csv_line)
 
 def gc_loop():
-    """Run in a separate thread to periodically check for LOS events that are
-    ready to be finalized."""
+    """Run in a separate thread to periodically check for LOS events.
+
+    NOTE: This uses wall-clock time, so it only works for real-time analysis.
+    For offline/historical analysis, use do_threading=False and pass los_gc
+    as a callback to do_resampled_prox_checks(), which will call it with
+    simulation timestamps.
+    """
     while True:
         time.sleep(LOS.LOS_GC_LOOP_DELAY)
         los_gc(time.time())
-        if LOS.quit: return
+        if LOS.quit:
+            return
 
 def los_gc(ts):
     """Check if any LOS events are ready to be finalized (i.e. final stats recorded)"""

@@ -34,6 +34,7 @@ dependencies = [
     "requests >= 2.31.0",
     "prometheus_client >= 0.20.0",
     "pytest >= 8.1.1",
+    "orjson >= 3.9.0",
 ]
 
 [project.optional-dependencies]

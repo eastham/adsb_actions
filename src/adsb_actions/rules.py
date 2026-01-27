@@ -423,7 +423,7 @@ class Rules:
 
             elif 'print' == action_name:
                 ts_utc = datetime.datetime.utcfromtimestamp(
-                    flight.lastloc.now).strftime('%m/%d/%y %H:%M')
+                    flight.lastloc.now).strftime('%m/%d/%y %H:%M:%S')
                 note = flight.flags.get('note', '')
                 msg = f"{rule_name}: {ts_utc} {flight.to_str()} {note}"
                 if sys.stdout.isatty():

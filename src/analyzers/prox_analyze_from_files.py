@@ -1,7 +1,10 @@
 #!/usr/bin/python3
 """Run the rules specified on the command line (default analyze_from_files.yaml)
 against a nested directory structure with readsb data dumps in it.  Optionally
-perform resampling then proximity checks if --resample is specified."""
+perform resampling then proximity checks if --resample is specified.
+
+For large datasets, use --sorted-file with a preprocessed file from convert_traces.py
+to stream data with minimal memory usage."""
 
 import datetime
 import logging
@@ -14,7 +17,7 @@ logger = logging.getLogger(__name__)
 # logger.level = logging.DEBUG
 LOGGER = Logger()
 RESAMPLING_STARTED = False
-YAML_FILE = "./analyze_from_files.yaml"
+YAML_FILE = "./analyze_from_files.yaml" # XXX???
 
 def los_cb(flight1, flight2):
     """LOS = Loss of Separation -- two airplanes in close proximity"""
@@ -39,15 +42,24 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--debug", action="store_true") # XXX not implemented
     parser.add_argument('--yaml', help='Path to the YAML file', default=YAML_FILE)
     parser.add_argument('--resample', action="store_true", help='Enable resampling and proximity checks')
-    parser.add_argument('directory', help='Path to the data')
+    parser.add_argument('--sorted-file', help='Path to time-sorted JSONL file (.json, .jsonl, or .gz)')
+    parser.add_argument('directory', nargs='?', help='Path to the data (not needed if --sorted-file used)')
     args = parser.parse_args()
 
-    print("Reading data...")
-    allpoints = replay.read_data(args.directory)
-    allpoints_iterator = replay.yield_json_data(allpoints)
+    if args.sorted_file:
+        # Stream from preprocessed sorted file (low memory)
+        print(f"Streaming from sorted file: {args.sorted_file}")
+        allpoints_iterator = replay.yield_from_sorted_file(args.sorted_file)
+    elif args.directory:
+        # Original behavior: load all into memory
+        print("Reading data...")
+        allpoints = replay.read_data(args.directory)
+        allpoints_iterator = replay.yield_json_data(allpoints)
+    else:
+        parser.error("Either directory or --sorted-file is required")
 
     print("Processing...")
-    adsb_actions = AdsbActions(yaml_file=args.yaml, pedantic=False, resample=args.resample)
+    adsb_actions = AdsbActions(yaml_file=args.yaml, pedantic=True, resample=args.resample)
 
     # ad-hoc analysis callbacks from yaml config defined here:
     adsb_actions.register_callback("los_update_cb", los_cb)

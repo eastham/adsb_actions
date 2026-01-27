@@ -133,3 +133,43 @@ def point_in_polygon(x, y, polygon_coords):
             inside = not inside
         j = i
     return inside
+
+
+def point_in_any_bbox(lat: float, lon: float, bboxes_list: list,
+                      latlongrings: list = None) -> bool:
+    """Check if a point is within any bbox polygon or latlongring circle.
+
+    This is a utility function for spatial filtering that ignores altitude
+    and heading constraints - it only checks if the point is geographically
+    within any defined region.
+
+    Args:
+        lat: Latitude of the point
+        lon: Longitude of the point
+        bboxes_list: List of Bboxes objects (each containing multiple Bbox)
+        latlongrings: Optional list of [radius_nm, center_lat, center_lon] tuples
+
+    Returns:
+        True if point is in at least one region, or if no filters configured
+    """
+    if not bboxes_list and not latlongrings:
+        return True  # No filtering if nothing configured
+
+    # Check polygon bboxes
+    if bboxes_list:
+        for bbox_container in bboxes_list:
+            for box in bbox_container.boxes:
+                if point_in_polygon(lon, lat, box.polygon_coords):
+                    return True
+
+    # Check circular latlongrings
+    if latlongrings:
+        from geopy.distance import geodesic
+        for ring in latlongrings:
+            radius_nm, center_lat, center_lon = ring
+            dist_km = geodesic((lat, lon), (center_lat, center_lon)).kilometers
+            dist_nm = dist_km / 1.852
+            if dist_nm <= radius_nm:
+                return True
+
+    return False
