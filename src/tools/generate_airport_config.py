@@ -377,6 +377,22 @@ def generate_kml(icao: str, airport_name: str, field_elevation: float,
 '''
     return kml
 
+def generate_prox_yaml(icao: str, top: int, bottom: int,
+                       altsep: int=400, latsep: float=.3) -> str:
+    """Generate proximity analysis YAML configuration."""
+
+    return f'''# {icao} Proximity Analysis Configuration
+# Auto-generated - analyzes LOS events within specified altitude range
+rules:
+    prox_analysis:
+        conditions:
+            min_alt: {bottom}
+            max_alt: {top}
+            proximity: [ {altsep}, {latsep} ] # alt sep in MSL, lateral sep in nm
+        actions:
+            callback: los_update_cb
+'''
+
 
 def generate_rules_yaml(icao: str, field_elevation: float, app_ident: str, dep_ident: str,
                         center_lat: float, center_lon: float) -> str:

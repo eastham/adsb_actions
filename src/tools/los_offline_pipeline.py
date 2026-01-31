@@ -9,6 +9,8 @@ import generate_airport_config
 
 DATA_DIR = "data"
 BASE_DIR = "examples/generated"
+FT_ABOVE_AIRPORT = 4000
+FT_BELOW_AIRPORT = -200 # negative to ignore ground events
 
 def validate_date(date_text):
     try:
@@ -29,11 +31,12 @@ def load_airport(airport_icao):
         field_elevation = float(airport.get('elevation_ft') or 0)
         center_lat = float(airport.get('latitude_deg') or 0)
         center_lon = float(airport.get('longitude_deg') or 0)
+        field_alt = int(airport.get('elevation_ft'))
     except (ValueError, TypeError):
         print("Error: Could not parse airport coordinates.", file=sys.stderr)
         sys.exit(1)
 
-    return center_lat, center_lon
+    return center_lat, center_lon, field_alt
 
 def setup_pipeline(args):
     date_obj = args.date
@@ -49,8 +52,23 @@ def setup_pipeline(args):
     airport_dir = base_dir / airport_icao
     airport_dir.mkdir(parents=True, exist_ok=True)
     
-    trace_gz = airport_dir / f"{date_compact}_{airport_icao.lower()}.gz"
+    trace_gz = airport_dir / f"{date_compact}_{airport_icao}.gz"
     file_prefix = f"v{date_iso}-planes-readsb-prod-0"
+
+    # --- STAGE 1: Generate Airport yaml if needed --- TODO TODO
+    lat, lon, field_alt = load_airport(airport_icao)
+
+    airport_yaml = base_dir / airport_icao / f"prox_analyze_from_files.yaml"
+    if not airport_yaml.exists():
+        print(f"⚙️ Generating airport YAML at {airport_yaml}...")
+        yaml_text = generate_airport_config.generate_prox_yaml(airport_icao,
+                                                    field_alt + FT_ABOVE_AIRPORT,
+                                                    field_alt - FT_BELOW_AIRPORT)
+        os.makedirs (base_dir / airport_icao, exist_ok=True)
+        with open(airport_yaml, 'w') as f:
+            f.write(yaml_text)
+    else:
+        print(f"✅ {airport_yaml} exists. Skipping generation.")
 
     # --- STAGE 4: Download (.tar.aa / .tar.ab) ---
     for ext in ['aa', 'ab']:
@@ -79,11 +97,10 @@ def setup_pipeline(args):
         archive_pattern = data_dir / f"{file_prefix}.tar.a*"
         run_command(f"cat {archive_pattern} | tar --options read_concatenated_archives -xf -")
     else:
-        print("✅ {trace_gz.name} directory exists. Skipping extraction.")
+        print(f"✅ {trace_gz.name} directory exists. Skipping extraction.")
 
     # --- STAGE 6: Convert Traces (.gz file) ---
     if not trace_gz.exists() or args.force_extract:
-        lat, lon = load_airport(airport_icao)
         print(f"⚙️ Converting traces to {trace_gz.name}...")
         run_command(f"python src/tools/convert_traces.py traces -o {trace_gz} "
                     f"--lat {lat} --lon {lon} --radius 5 --progress 100")
@@ -97,14 +114,15 @@ def setup_pipeline(args):
 
     # --- STAGE 7/8: Analysis (Always runs to reflect config changes) ---
     analysis_out = trace_gz.with_suffix('.out')
-    csv_final = base_dir / f"{airport_icao}{date_compact}.csv.out"
-    
+    csv_final = base_dir / f"{date_compact}_{airport_icao}.csv.out"
     print("📊 Running Analysis...")
     run_command(f"python3 src/analyzers/prox_analyze_from_files.py "
-                f"--yaml examples/{airport_icao}/prox_analyze_from_files.yaml "
+                f"--yaml {base_dir}/{airport_icao}/prox_analyze_from_files.yaml "
                 f"--resample --sorted-file {trace_gz} --animate-los > {analysis_out} 2>&1")
 
     run_command(f"grep CSV {analysis_out} > {csv_final}")
+    print("✅ CSV output written to:", csv_final)
+    print("✅ Visualization of individual events:")
     run_command(f"grep 'LOS visualization' {analysis_out}")
     # Debug/Visualizer
     #all_points_csv = airport_dir / f"{date_compact}_{airport_icao.lower()}.all.csv"
