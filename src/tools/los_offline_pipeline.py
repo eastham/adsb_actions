@@ -1,3 +1,59 @@
+"""Offline LOS (Loss of Separation) analysis pipeline for a single airport and date.
+
+Downloads global ADS-B data from adsb.lol, extracts and converts traces,
+then runs proximity analysis to detect LOS events near an airport.
+
+Data at each stage:
+
+  Stage 1 - YAML generation:
+    Generates a per-airport prox_analyze_from_files.yaml with altitude bounds
+    (field elevation +/- configured offsets) and proximity thresholds.
+    Output: examples/generated/<ICAO>/prox_analyze_from_files.yaml
+
+  Stage 2 - Download (~3 GB):
+    Two split tar archives from GitHub: v<YYYY.MM.DD>-planes-readsb-prod-0.tar.aa/ab
+    These contain global ADS-B traces for one full day.
+    Output: data/<prefix>.tar.aa, data/<prefix>.tar.ab
+
+  Stage 3 - Extraction:
+    Concatenated tar extraction produces per-aircraft gzipped JSON trace files.
+    Each file contains one aircraft's full day of positions:
+      {"icao": "a1b2c3", "r": "N12345", "timestamp": <epoch>,
+       "trace": [[offset_sec, lat, lon, alt, gs, track, ...], ...]}
+    Output: traces/*.json.gz (one file per aircraft, ~15 GB uncompressed total)
+
+  Stage 4 - Trace conversion (convert_traces.py):
+    Reads per-aircraft traces, spatially filters to --radius nm around airport,
+    then external merge-sorts all points by timestamp into a single JSONL stream.
+    Each line is one position report:
+      {"now": <epoch>, "lat": 40.76, "lon": -119.21, "alt_baro": 1500,
+       "flight": "N12345", "hex": "a1b2c3", "gscp": 120, "track": 101, ...}
+    Output: examples/generated/<ICAO>/<MMDDYY>_<ICAO>.gz (gzipped sorted JSONL)
+
+  Stage 5 - LOS analysis (prox_analyze_from_files.py --resample --sorted-file):
+    Streams the time-sorted JSONL, resamples to 1-second intervals, and detects
+    proximity violations between aircraft pairs. For each LOS event, generates
+    an animated HTML map showing both aircraft trajectories.
+    Output: <MMDDYY>_<ICAO>.out  (full log with CSV lines)
+            <MMDDYY>_<ICAO>.csv.out  (grep'd CSV lines for postprocessing)
+            los_<tail1>_<tail2>_<timestamp>.html  (per-event animation)
+
+  Stage 6 - Visualization (visualizer.py):
+    Reads CSV output and plots all LOS events on a Folium map centered on the
+    airport, with optional heatmap overlay.
+    Output: airport_map.html
+
+Note: Stages 3-4 (extract + convert) are the bottleneck for multi-airport batch
+processing. The traces/ directory contains global data, so extracting once and
+running convert_traces.py multiple times with different --lat/--lon centers
+would avoid redundant downloads and extractions.
+
+Usage:
+    python src/tools/los_offline_pipeline.py 01/15/26 KSQL
+    python src/tools/los_offline_pipeline.py 01/15/26 KSQL --no-cleanup --ft-above 3000
+"""
+
+import math
 import os
 import subprocess
 import requests
@@ -11,6 +67,26 @@ DATA_DIR = "data"
 BASE_DIR = "examples/generated"
 FT_ABOVE_AIRPORT = 4000
 FT_BELOW_AIRPORT = -200 # negative to ignore ground events
+ANALYSIS_RADIUS_NM = 5  # Radius around airport for trace filtering
+
+
+def compute_bounds(center_lat: float, center_lon: float, radius_nm: float) -> tuple:
+    """Compute SW and NE corners from center point and radius in nautical miles.
+
+    Returns:
+        Tuple of (sw_lat, sw_lon, ne_lat, ne_lon)
+    """
+    # 1 degree latitude = 60 nm
+    lat_offset = radius_nm / 60.0
+    # 1 degree longitude = 60 nm * cos(latitude)
+    lon_offset = radius_nm / (60.0 * math.cos(math.radians(center_lat)))
+
+    sw_lat = center_lat - lat_offset
+    sw_lon = center_lon - lon_offset
+    ne_lat = center_lat + lat_offset
+    ne_lon = center_lon + lon_offset
+
+    return sw_lat, sw_lon, ne_lat, ne_lon
 
 def validate_date(date_text):
     try:
@@ -137,12 +213,15 @@ def setup_pipeline(args):
     print("✅ CSV output written to:", csv_final)
     print("✅ Visualization of individual events:")
     run_command(f"grep 'LOS visualization' {analysis_out}")
-    # Debug/Visualizer
+
+    # Debug/Visualizer - compute bounds centered on airport
     all_points_csv = airport_dir / f"{date_compact}_{airport_icao.lower()}.all.csv"
+    sw_lat, sw_lon, ne_lat, ne_lon = compute_bounds(lat, lon, ANALYSIS_RADIUS_NM)
     #run_command(f"python3 src/analyzers/simple_monitor.py examples/print_csv.yaml "
     #            f"--sorted-file {trace_gz} > {all_points_csv} 2>&1")
-    
-    run_command(f"cat {all_points_csv} | python3 src/postprocessing/visualizer.py")
+
+    run_command(f"cat {all_points_csv} | python3 src/postprocessing/visualizer.py "
+                f"--sw {sw_lat},{sw_lon} --ne {ne_lat},{ne_lon}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ADSB.lol Optimized Pipeline")

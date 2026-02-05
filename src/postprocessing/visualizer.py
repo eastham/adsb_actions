@@ -100,7 +100,7 @@ class MapVisualizer:
     def visualize(self, vectorlist=None, output_file="airport_map.html",
                   open_in_browser=True, map_image=None, overlay_image=None,
                   geojson_file=None,
-                  enable_heatmap=False, heatmap_bandwidth=None,
+                  enable_heatmap=False, native_heatmap=False, heatmap_bandwidth=None,
                   heatmap_radius=20, heatmap_blur=25, heatmap_min_opacity=0.3):
         """
         Generate and save the visualization map.
@@ -208,12 +208,125 @@ class MapVisualizer:
 
             print(f"GeoJSON features loaded from: {geojson_file}")
 
-        # Plot points with annotations
-        for (lat, lon), annotation in zip(self.points, self.annotations):
+        # Plot points with annotations and hide functionality
+        # Create a feature group to hold all point markers
+        points_group = folium.FeatureGroup(name="LOS Points")
+
+        for idx, ((lat, lon), annotation) in enumerate(zip(self.points, self.annotations)):
             color = self._get_point_color(annotation)
-            folium.Circle(location=[lat, lon], radius=85, color=color,
-                        fill=True, fill_color=color, popup=annotation).add_to(m)
+            # Add hide link to annotation
+            hide_link = f'<br><a href="#" onclick="hidePoint({idx}); return false;" style="color:gray;font-size:11px;">Hide this point</a>'
+            popup_html = annotation + hide_link
+
+            circle = folium.Circle(
+                location=[lat, lon],
+                radius=85,
+                color=color,
+                fill=True,
+                fill_color=color,
+                popup=folium.Popup(popup_html, max_width=400)
+            )
+            # Store index as a property for JavaScript access
+            circle._name = f"point_{idx}"
+            circle.add_to(points_group)
+
+        points_group.add_to(m)
         print("Points plotted.")
+
+        # Add JavaScript for hiding points
+        # Build point data array for native heatmap
+        points_json = [[p[0], p[1]] for p in self.points]
+        # Get the Folium map's JavaScript variable name
+        map_name = m.get_name()
+
+        hide_script = f"""
+        <script>
+        var hiddenPoints = [];
+        var allPoints = {points_json};
+        var nativeHeatmapLayer = null;
+
+        function getMap() {{
+            // Folium map variable name is known
+            return {map_name};
+        }}
+
+        function rebuildNativeHeatmap() {{
+            var map = getMap();
+            if (!map || !nativeHeatmapLayer) return;
+
+            // Get visible points (exclude hidden)
+            var visiblePoints = allPoints.filter(function(_, idx) {{
+                return hiddenPoints.indexOf(idx) === -1;
+            }});
+
+            // Remove old heatmap
+            map.removeLayer(nativeHeatmapLayer);
+
+            // Create new heatmap with visible points only
+            if (visiblePoints.length > 0) {{
+                nativeHeatmapLayer = L.heatLayer(visiblePoints, {{
+                    radius: {heatmap_radius},
+                    blur: {heatmap_blur},
+                    minOpacity: {heatmap_min_opacity},
+                    gradient: {{0.0: 'blue', 0.3: 'cyan', 0.5: 'lime', 0.7: 'yellow', 0.9: 'orange', 1.0: 'red'}}
+                }});
+                nativeHeatmapLayer.addTo(map);
+                console.log('Rebuilt heatmap with ' + visiblePoints.length + ' points');
+            }}
+        }}
+
+        function hidePoint(idx) {{
+            var map = getMap();
+            if (!map) {{
+                console.error('Could not find map');
+                return;
+            }}
+
+            var found = false;
+            map.eachLayer(function(layer) {{
+                // Check multiple ways popup content might be stored
+                var content = null;
+                if (layer._popup) {{
+                    var popupContent = layer._popup._content;
+                    // Content might be a DOM element or string
+                    if (popupContent) {{
+                        if (typeof popupContent === 'string') {{
+                            content = popupContent;
+                        }} else if (popupContent.innerHTML) {{
+                            content = popupContent.innerHTML;
+                        }} else if (popupContent.outerHTML) {{
+                            content = popupContent.outerHTML;
+                        }}
+                    }}
+                }}
+                if (content && content.includes('hidePoint(' + idx + ')')) {{
+                    map.removeLayer(layer);
+                    hiddenPoints.push(idx);
+                    found = true;
+                    console.log('Hidden point ' + idx);
+                }}
+            }});
+
+            if (!found) {{
+                console.log('Point ' + idx + ' not found in layers');
+            }}
+
+            // Rebuild native heatmap if it exists
+            if (nativeHeatmapLayer) {{
+                rebuildNativeHeatmap();
+            }}
+
+            // Close any open popup
+            map.closePopup();
+        }}
+
+        function showAllPoints() {{
+            // Reload the page to restore all points
+            location.reload();
+        }}
+        </script>
+        """
+        m.get_root().html.add_child(folium.Element(hide_script))
 
         # Add overlay image if provided
         if overlay_image:
@@ -257,6 +370,49 @@ class MapVisualizer:
                 folium.LayerControl().add_to(m)
                 print(f"Heatmap layer added with {len(heatmap_data)} points")
 
+        # Add native heatmap if enabled (uses raw points, recomputes on hide)
+        if native_heatmap:
+            # Add a HeatMap to force Folium to include the Leaflet.heat library
+            # We create it with the actual data - it will be our initial heatmap
+            HeatMap(
+                [[p[0], p[1]] for p in self.points],
+                name="Dynamic Heatmap",
+                radius=heatmap_radius,
+                blur=heatmap_blur,
+                min_opacity=heatmap_min_opacity,
+                gradient={
+                    '0.0': 'blue',
+                    '0.3': 'cyan',
+                    '0.5': 'lime',
+                    '0.7': 'yellow',
+                    '0.9': 'orange',
+                    '1.0': 'red'
+                }
+            ).add_to(m)
+
+            # Add JavaScript to find and track the heatmap layer for rebuilding on hide
+            native_heatmap_script = f"""
+            <script>
+            document.addEventListener('DOMContentLoaded', function() {{
+                // Wait for map to be ready
+                setTimeout(function() {{
+                    var map = getMap();
+                    if (map) {{
+                        // Find the existing heatmap layer created by Folium
+                        map.eachLayer(function(layer) {{
+                            if (layer._heat) {{
+                                nativeHeatmapLayer = layer;
+                                console.log('Found native heatmap layer with ' + allPoints.length + ' points');
+                            }}
+                        }});
+                    }}
+                }}, 500);
+            }});
+            </script>
+            """
+            m.get_root().html.add_child(folium.Element(native_heatmap_script))
+            print(f"Native heatmap enabled with {len(self.points)} points (updates on hide)")
+
         # Add a legend to the map
         m.get_root().html.add_child(folium.Element(self.legend_html))
 
@@ -286,6 +442,8 @@ if __name__ == "__main__":
                         help="Path to a GeoJSON file with polygons, lines, and/or labels to overlay")
     parser.add_argument("--enable-heatmap", action="store_true",
                         help="Enable KDE-based heatmap overlay showing LOS hotspots")
+    parser.add_argument("--native-heatmap", action="store_true",
+                        help="Enable native Folium heatmap that updates when points are hidden")
     parser.add_argument("--heatmap-bandwidth", type=float, default=None,
                         help="KDE bandwidth in degrees (default: auto using Scott's rule)")
     parser.add_argument("--heatmap-radius", type=int, default=20,
@@ -294,34 +452,84 @@ if __name__ == "__main__":
                         help="Heatmap blur amount (default: 25)")
     parser.add_argument("--heatmap-opacity", type=float, default=0.3,
                         help="Heatmap minimum opacity 0.0-1.0 (default: 0.3)")
+    parser.add_argument("--sw", type=str, default=None,
+                        help="Southwest corner as 'lat,lon' (e.g., '37.0,-122.5')")
+    parser.add_argument("--ne", type=str, default=None,
+                        help="Northeast corner as 'lat,lon' (e.g., '37.5,-122.0')")
     args = parser.parse_args()
 
     # Convert percentage to 0.0-1.0 range
     opacity = max(0.0, min(100.0, args.map_opacity)) / 100.0
 
-    # Create visualizer instance
-    visualizer = MapVisualizer(map_type=args.map_type, map_opacity=opacity)
-
-    # accept on stdin a csv with rows that look like:
-    # timestamp,lat,long,altidude,tail1,tail2
-    csv_reader = csv.reader(sys.stdin)
-
-    # Parse the CSV
-    ctr = 0
-    for row in csv_reader:
-        if len(row) < 6:
-            continue  # Skip rows with insufficient data
+    # Parse coordinate bounds if provided
+    ll_lat, ur_lat, ll_lon, ur_lon = LL_LAT, UR_LAT, LL_LON, UR_LON
+    if args.sw and args.ne:
         try:
-            #timestamp, _, datestr, lat, lon, altitude, tail1, tail2, _, _, distance, altsep, link, interp, audio, type, phase = row
-            timestamp, _, datestr, lat, lon, altitude, tail1, tail2, _, link, interp, audio, type, phase, _, distance, altsep, = row
+            sw_lat, sw_lon = map(float, args.sw.split(','))
+            ne_lat, ne_lon = map(float, args.ne.split(','))
+            ll_lat, ll_lon = sw_lat, sw_lon
+            ur_lat, ur_lon = ne_lat, ne_lon
+            print(f"Using bounds: SW=({ll_lat}, {ll_lon}) NE=({ur_lat}, {ur_lon})")
+        except ValueError:
+            print(f"Warning: Could not parse --sw/--ne coordinates, using defaults", file=sys.stderr)
 
-            annotation = f"{datestr} {tail1}/{tail2} <b>Alt:</b> {altitude} <b>type:</b> {type} <b>phase:</b> {phase}"
-            annotation += f" <b>Interp:</b> {interp} <b><a href='{link}' target='_blank'>REPLAY LINK</a></b> <b>ATC audio:</b> {audio}<br>"
-            visualizer.add_point((float(lat), float(lon)), annotation)
-            print(f"Read point {ctr} at {lat} {lon} alt: {altitude} datestr:{datestr}")
-            ctr += 1
-        except ValueError as e:
-            print(f"Parse error on row: {row} " + str(e) )
+    # Create visualizer instance
+    visualizer = MapVisualizer(
+        ll_lat=ll_lat, ur_lat=ur_lat, ll_lon=ll_lon, ur_lon=ur_lon,
+        map_type=args.map_type, map_opacity=opacity
+    )
+
+    # accept on stdin lines containing "CSV OUTPUT FOR POSTPROCESSING:"
+    # Format from los.py:
+    # CSV OUTPUT FOR POSTPROCESSING: timestamp,datestring,altdatestring,lat,lon,
+    #   alt,flight1,flight2,notused,link,animation,interp,audio,type,phase,,latdist,altdist,
+    ctr = 0
+    for line in sys.stdin:
+        # Strip the "CSV OUTPUT FOR POSTPROCESSING:" prefix and any filename prefix from grep
+        if "CSV OUTPUT FOR POSTPROCESSING:" not in line:
+            continue
+        csv_part = line.split("CSV OUTPUT FOR POSTPROCESSING:")[1].strip()
+
+        # Parse as CSV
+        reader = csv.reader([csv_part])
+        for row in reader:
+            if len(row) < 10:
+                print(f"Skipping short row: {row}")
+                continue
+            try:
+                # Fields: timestamp,datestr,altdatestr,lat,lon,alt,flight1,flight2,notused,link,animation,interp,audio,type,phase,,latdist,altdist,
+                timestamp = row[0]
+                datestr = row[1]
+                lat = row[3]
+                lon = row[4]
+                altitude = row[5]
+                tail1 = row[6]
+                tail2 = row[7]
+                link = row[9]
+                animation = row[10] if len(row) > 10 else ""
+                los_type = row[13] if len(row) > 13 else ""
+                phase = row[14] if len(row) > 14 else ""
+                latdist = row[16] if len(row) > 16 else ""
+                altdist = row[17] if len(row) > 17 else ""
+
+                annotation = f"{datestr} {tail1}/{tail2} <b>Alt:</b> {altitude}"
+                if los_type:
+                    annotation += f" <b>type:</b> {los_type}"
+                if phase:
+                    annotation += f" <b>phase:</b> {phase}"
+                if latdist:
+                    annotation += f" <b>lat sep:</b> {float(latdist):.2f}nm"
+                if altdist:
+                    annotation += f" <b>alt sep:</b> {altdist}ft"
+                annotation += f" <b><a href='{link}' target='_blank'>REPLAY</a></b>"
+                if animation:
+                    annotation += f" <b><a href='{animation}' target='_blank'>ANIMATION</a></b>"
+
+                visualizer.add_point((float(lat), float(lon)), annotation)
+                print(f"Read point {ctr} at {lat} {lon} alt: {altitude} datestr:{datestr}")
+                ctr += 1
+            except (ValueError, IndexError) as e:
+                print(f"Parse error on row: {row} - {e}")
 
     print(f"Visualizing {ctr} points.")
     if ctr == 0:
@@ -337,6 +545,7 @@ if __name__ == "__main__":
         overlay_image=args.overlay_image,
         geojson_file=args.geojson,
         enable_heatmap=args.enable_heatmap,
+        native_heatmap=args.native_heatmap,
         heatmap_bandwidth=args.heatmap_bandwidth,
         heatmap_radius=args.heatmap_radius,
         heatmap_blur=args.heatmap_blur,
