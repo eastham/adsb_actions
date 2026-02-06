@@ -59,6 +59,7 @@ class LOS:
         self.altdist = self.min_altdist = altdist
 
         self.create_time = self.last_time = create_time
+        self.cpa_time = create_time
         self.id = None
 
     def update(self, latdist, altdist, last_time, flight1, flight2,
@@ -67,9 +68,13 @@ class LOS:
         self.altdist = altdist
         self.last_time = last_time
 
-        if latdist <= self.min_latdist or altdist <= self.min_altdist:
+        if latdist < self.min_latdist or altdist < self.min_altdist:
+            logger.info("LOS update: new minimum for %s vs %s: %.2f nm, %d MSL at %s",
+                         flight1.flight_id, flight2.flight_id, latdist, altdist,
+                         datetime.datetime.utcfromtimestamp(last_time)) 
             self.min_latdist = latdist
             self.min_altdist = altdist
+            self.cpa_time = last_time
             if update_loc_at_closest_approach:
                 self.first_loc_1 = copy.deepcopy(flight1.lastloc)
                 self.first_loc_2 = copy.deepcopy(flight2.lastloc)
@@ -103,13 +108,24 @@ def process_los(flight1, flight2):
     """Handle a single LOS event.  Could be new, or just an update to one that's
     already underway.  Push to external database if new."""
 
+    # Check if either flight's data is stale relative to the other.
+    # If timestamps differ significantly, one aircraft stopped reporting
+    # and we shouldn't trust the distance calculation.
+    MIN_FRESH = 10  # seconds - must match flights.py
+    now1 = flight1.lastloc.now
+    now2 = flight2.lastloc.now
+    if abs(now1 - now2) > MIN_FRESH:
+        logger.debug("process_los skipped: timestamps too far apart (%s: %.0f, %s: %.0f)",
+                     flight1.flight_id, now1, flight2.flight_id, now2)
+        return
 
     lateral_distance = flight1.lastloc - flight2.lastloc
     alt_distance = abs(flight1.lastloc.alt_baro - flight2.lastloc.alt_baro)
     logger.info("process_los %s %s lateral dist %.2fnm %d MSL",
                 flight1.flight_id, flight2.flight_id, lateral_distance, alt_distance)
 
-    now = flight1.lastloc.now
+    # Use the more recent timestamp as "now" for the LOS event
+    now = max(now1, now2)
     # always create a new LOS at least to get flight1/flight2 ordering right
     los = LOS(flight1, flight2, lateral_distance, alt_distance, now)
 
@@ -143,16 +159,16 @@ def log_csv_record(flight1, flight2, los, datestring, altdatestring,
     """
     meanloc = Location.meanloc(los.first_loc_1, los.first_loc_2)
     replay_time = datetime.datetime.utcfromtimestamp(
-        flight1.lastloc.now
+        los.create_time  # Use event start time, not end time
     ).strftime("%Y-%m-%d-%H:%M")
     link = (
         f"https://globe.airplanes.live/" # TODO make configurable
         f"?replay={replay_time}&lat={meanloc.lat}&lon={meanloc.lon}"
         f"&zoom=12'"
     )
-    animation_field = f"file://{os.path.abspath(animation_path)}" if animation_path else ""
+    animation_field = os.path.basename(animation_path) if animation_path else ""
     csv_line = (
-        f"CSV OUTPUT FOR POSTPROCESSING: {flight1.lastloc.now},"
+        f"CSV OUTPUT FOR POSTPROCESSING: {los.first_loc_1.now},"
         f"{datestring},{altdatestring},{meanloc.lat},{meanloc.lon},"
         f"{meanloc.alt_baro},{flight1.flight_id.strip()},"
         f"{flight2.flight_id.strip()},notused,"
@@ -223,7 +239,7 @@ def los_gc(ts):
 
         if ts - los.last_time > LOS.LOS_GC_TIME:
             # No updates to this LOS for a while, finalize to database and remove.
-            datestring = datetime.datetime.utcfromtimestamp(los.last_time)
+            datestring = datetime.datetime.utcfromtimestamp(los.cpa_time)
             altdatestring = datestring.strftime("%Y-%m-%d-%H:%M")
 
             logger.info("LOS final update: %s %s - minimum separation: %f nm %d MSL. Last seen: %s",
