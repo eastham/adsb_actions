@@ -102,11 +102,11 @@ def load_airport_list(filepath: str, max_airports: int = None) -> list[str]:
 
 
 def cleanup_traces():
-    """Remove temporary trace directories."""
+    """Remove temporary trace directories from examples/generated/."""
     for folder in ['traces', 'acas', 'heatmap']:
-        path = Path(folder)
+        path = BASE_DIR / folder
         if path.exists():
-            print(f"🧹 Cleaning up {folder}/...")
+            print(f"🧹 Cleaning up {path}/...")
             shutil.rmtree(path)
 
 
@@ -200,7 +200,7 @@ def download_tar_parts(date_obj: datetime, force: bool = False) -> bool:
 
 
 def extract_traces(date_obj: datetime) -> bool:
-    """Extract trace archives to traces/ directory.
+    """Extract trace archives to examples/generated/ directory.
 
     Returns True on success.
     """
@@ -208,14 +208,16 @@ def extract_traces(date_obj: datetime) -> bool:
     file_prefix = f"v{date_iso}-planes-readsb-prod-0"
 
     # Clean old trace data before extract
+    extract_base = BASE_DIR  # examples/generated
     for folder in ['traces', 'acas', 'heatmap']:
-        if Path(folder).exists():
-            shutil.rmtree(folder)
+        folder_path = extract_base / folder
+        if folder_path.exists():
+            shutil.rmtree(folder_path)
 
     archive_pattern = DATA_DIR / f"{file_prefix}.tar.a*"
-    print("📦 Extracting tar archives...")
+    print(f"📦 Extracting tar archives to {extract_base}/...")
     result = run_command(
-        f"cat {archive_pattern} | tar --options read_concatenated_archives -xf -")
+        f"cat {archive_pattern} | tar --options read_concatenated_archives -xf - -C {extract_base} --exclude='License*.txt'")
     return result == 0
 
 
@@ -235,8 +237,9 @@ def convert_traces_global(date_obj: datetime) -> Path:
     network_final = DATA_DIR / f"global_{date_compact}.gz"
 
     print(f"⚙️ Converting traces to {local_temp} (local temp)...")
+    traces_dir = BASE_DIR / "traces"
     result = run_command(
-        f"python src/tools/convert_traces.py traces -o {local_temp} --progress 100")
+        f"python src/tools/convert_traces.py {traces_dir} -o {local_temp} --progress 100")
     if result != 0:
         raise RuntimeError(f"convert_traces.py failed for {date_compact}")
 
