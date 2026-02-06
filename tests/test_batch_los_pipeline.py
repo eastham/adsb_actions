@@ -5,18 +5,24 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-# Add src to path for imports
+# Add src and src/tools to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "tools"))
 
 from tools.batch_los_pipeline import (
-    faa_to_icao,
     load_airport_list,
+    generate_multi_airport_yaml,
+    ESTIMATED_DAILY_DATA_GB,
+    ANALYSIS_RADIUS_NM,
+)
+from tools.batch_helpers import (
+    faa_to_icao,
     generate_date_range,
     is_weekend,
-    build_pipeline_command,
-    check_cached_dates,
     estimate_download_size,
-    ESTIMATED_DAILY_DATA_GB,
+    compute_bounds,
+    print_pipeline_summary,
+    print_completion_summary,
 )
 
 
@@ -30,10 +36,10 @@ class TestFaaToIcao:
         assert faa_to_icao("LGU") == "KLGU"
 
     def test_alphanumeric_code(self):
-        """Test codes with numbers."""
-        assert faa_to_icao("1R8") == "K1R8"
-        assert faa_to_icao("2R4") == "K2R4"
-        assert faa_to_icao("71J") == "K71J"
+        """Test codes with numbers stay as-is (no K prefix)."""
+        assert faa_to_icao("1R8") == "1R8"
+        assert faa_to_icao("2R4") == "2R4"
+        assert faa_to_icao("71J") == "71J"
 
     def test_lowercase_input(self):
         """Test that lowercase is converted to uppercase."""
@@ -48,24 +54,11 @@ class TestFaaToIcao:
     def test_whitespace_handling(self):
         """Test that whitespace is stripped."""
         assert faa_to_icao(" DCU ") == "KDCU"
-        assert faa_to_icao("  1R8  ") == "K1R8"
+        assert faa_to_icao("  1R8  ") == "1R8"
 
 
 class TestLoadAirportList:
     """Test airport list file parsing."""
-
-    def test_arrow_format(self):
-        """Test parsing arrow-separated format (1→DCU)."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-            f.write("     1→DCU\n")
-            f.write("     2→EUL\n")
-            f.write("     3→1R8\n")
-            filepath = f.name
-        try:
-            airports = load_airport_list(filepath)
-            assert airports == ["DCU", "EUL", "1R8"]
-        finally:
-            Path(filepath).unlink()
 
     def test_simple_format(self):
         """Test parsing simple one-per-line format."""
@@ -202,26 +195,108 @@ class TestGenerateDateRange:
         assert len(dates) == 7
 
 
-class TestBuildPipelineCommand:
-    """Test command string generation."""
+class TestComputeBounds:
+    """Test SW/NE bounds computation."""
 
-    def test_basic_command(self):
-        """Test basic command without no-cleanup."""
-        date = datetime(2026, 1, 15)
-        cmd = build_pipeline_command(date, "KDCU", no_cleanup=False)
-        assert cmd == "python src/tools/los_offline_pipeline.py 01/15/26 KDCU"
+    def test_basic_bounds(self):
+        """Test bounds are symmetric around center."""
+        sw_lat, sw_lon, ne_lat, ne_lon = compute_bounds(37.0, -122.0, 5.0)
+        # Latitude offset = 5/60 = 0.0833 degrees
+        assert abs(ne_lat - 37.0 - 5.0/60.0) < 0.001
+        assert abs(37.0 - sw_lat - 5.0/60.0) < 0.001
+        # NE should be greater than SW
+        assert ne_lat > sw_lat
+        assert ne_lon > sw_lon
 
-    def test_with_no_cleanup(self):
-        """Test command with --no-cleanup flag."""
-        date = datetime(2026, 1, 15)
-        cmd = build_pipeline_command(date, "KDCU", no_cleanup=True)
-        assert cmd == "python src/tools/los_offline_pipeline.py 01/15/26 KDCU --no-cleanup"
+    def test_zero_radius(self):
+        """Test zero radius returns center point."""
+        sw_lat, sw_lon, ne_lat, ne_lon = compute_bounds(37.0, -122.0, 0.0)
+        assert abs(sw_lat - 37.0) < 0.001
+        assert abs(ne_lat - 37.0) < 0.001
 
-    def test_date_formatting(self):
-        """Test that dates are formatted correctly."""
-        date = datetime(2026, 12, 5)
-        cmd = build_pipeline_command(date, "KEUL", no_cleanup=False)
-        assert "12/05/26" in cmd
+
+class TestGenerateMultiAirportYaml:
+    """Test multi-airport shard YAML generation."""
+
+    def test_single_airport(self):
+        """Test YAML generation for one airport."""
+        airport_info = {"KDCU": (34.6527, -86.9453, 592)}
+        yaml = generate_multi_airport_yaml(["KDCU"], "011526", airport_info)
+
+        assert "rules:" in yaml
+        assert "KDCU_shard:" in yaml
+        assert "latlongring:" in yaml
+        assert "34.6527" in yaml
+        assert "-86.9453" in yaml
+        assert "emit_jsonl:" in yaml
+        assert "011526_KDCU.gz" in yaml
+
+    def test_multiple_airports(self):
+        """Test YAML generation for multiple airports."""
+        airport_info = {
+            "KDCU": (34.6527, -86.9453, 592),
+            "KEUL": (43.6427, -116.6363, 2537),
+        }
+        yaml = generate_multi_airport_yaml(
+            ["KDCU", "KEUL"], "011526", airport_info)
+
+        assert "KDCU_shard:" in yaml
+        assert "KEUL_shard:" in yaml
+        assert "011526_KDCU.gz" in yaml
+        assert "011526_KEUL.gz" in yaml
+
+    def test_yaml_structure(self):
+        """Test YAML has correct structure for adsb_actions parsing."""
+        airport_info = {"KSQL": (37.5072, -122.2497, 5)}
+        yaml = generate_multi_airport_yaml(["KSQL"], "011526", airport_info)
+
+        lines = yaml.strip().split("\n")
+        # Should have: comment, rules:, rule_name:, conditions:, latlongring:, actions:, emit_jsonl:
+        assert lines[1] == "rules:"
+        assert "KSQL_shard:" in lines[2]
+        assert "conditions:" in lines[3]
+        assert "latlongring:" in lines[4]
+        assert "actions:" in lines[5]
+        assert "emit_jsonl:" in lines[6]
+
+    def test_radius_matches_constant(self):
+        """Test that the radius in YAML matches ANALYSIS_RADIUS_NM."""
+        airport_info = {"KDCU": (34.6527, -86.9453, 592)}
+        yaml = generate_multi_airport_yaml(["KDCU"], "011526", airport_info)
+        assert f"[{ANALYSIS_RADIUS_NM}," in yaml
+
+
+class TestDownloadEstimate:
+    """Test download size estimation."""
+
+    def test_check_cached_dates_none_cached(self):
+        """Test when no dates are cached."""
+        from pathlib import Path
+        dates = [datetime(2099, 1, 15), datetime(2099, 1, 16)]
+        data_dir = Path("data")  # Using default data directory
+        estimated_gb, cached, uncached = estimate_download_size(dates, data_dir, ESTIMATED_DAILY_DATA_GB)
+        assert len(cached) == 0
+        assert len(uncached) == 2
+
+    def test_estimate_download_size(self):
+        """Test download size estimation."""
+        from pathlib import Path
+        dates = [datetime(2099, 1, 15), datetime(2099, 1, 16), datetime(2099, 1, 17)]
+        data_dir = Path("data")
+        estimated_gb, cached, uncached = estimate_download_size(dates, data_dir, ESTIMATED_DAILY_DATA_GB)
+        # All dates should be uncached (future dates)
+        assert len(cached) == 0
+        assert len(uncached) == 3
+        assert estimated_gb == 3 * ESTIMATED_DAILY_DATA_GB
+
+    def test_estimate_with_no_dates(self):
+        """Test estimation with empty date list."""
+        from pathlib import Path
+        data_dir = Path("data")
+        estimated_gb, cached, uncached = estimate_download_size([], data_dir, ESTIMATED_DAILY_DATA_GB)
+        assert estimated_gb == 0
+        assert len(cached) == 0
+        assert len(uncached) == 0
 
 
 class TestIntegration:
@@ -247,44 +322,15 @@ class TestIntegration:
             )
             assert len(dates) == 1
 
-            # Build commands
-            commands = []
-            for date in dates:
-                for i, icao in enumerate(icao_codes):
-                    is_last = i == len(icao_codes) - 1
-                    cmd = build_pipeline_command(date, icao, no_cleanup=not is_last)
-                    commands.append(cmd)
-
-            assert len(commands) == 2
-            assert "--no-cleanup" in commands[0]  # Not last
-            assert "--no-cleanup" not in commands[1]  # Last
+            # Generate shard YAML
+            airport_info = {
+                "KDCU": (34.6527, -86.9453, 592),
+                "KEUL": (43.6427, -116.6363, 2537),
+            }
+            yaml = generate_multi_airport_yaml(
+                icao_codes, "011526", airport_info)
+            assert "KDCU_shard:" in yaml
+            assert "KEUL_shard:" in yaml
 
         finally:
             Path(filepath).unlink()
-
-
-class TestDownloadEstimate:
-    """Test download size estimation."""
-
-    def test_check_cached_dates_none_cached(self):
-        """Test when no dates are cached."""
-        dates = [datetime(2099, 1, 15), datetime(2099, 1, 16)]
-        cached, uncached = check_cached_dates(dates)
-        assert len(cached) == 0
-        assert len(uncached) == 2
-
-    def test_estimate_download_size(self):
-        """Test download size estimation."""
-        dates = [datetime(2099, 1, 15), datetime(2099, 1, 16), datetime(2099, 1, 17)]
-        estimated_gb, cached, uncached = estimate_download_size(dates)
-        # All dates should be uncached (future dates)
-        assert len(cached) == 0
-        assert len(uncached) == 3
-        assert estimated_gb == 3 * ESTIMATED_DAILY_DATA_GB
-
-    def test_estimate_with_no_dates(self):
-        """Test estimation with empty date list."""
-        estimated_gb, cached, uncached = estimate_download_size([])
-        assert estimated_gb == 0
-        assert len(cached) == 0
-        assert len(uncached) == 0

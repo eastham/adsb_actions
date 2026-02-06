@@ -44,6 +44,7 @@ if __name__ == "__main__":
     parser.add_argument('--resample', action="store_true", help='Enable resampling and proximity checks')
     parser.add_argument('--sorted-file', help='Path to time-sorted JSONL file (.json, .jsonl, or .gz)')
     parser.add_argument('--animate-los', action="store_true", help='Generate animated HTML maps for each LOS event')
+    parser.add_argument('--animation-dir', help='Output directory for animation HTML files (default: examples/generated)')
     parser.add_argument('directory', nargs='?', help='Path to the data (not needed if --sorted-file used)')
     args = parser.parse_args()
 
@@ -60,12 +61,13 @@ if __name__ == "__main__":
         parser.error("Either directory or --sorted-file is required")
 
     print("Processing...")
-    adsb_actions = AdsbActions(yaml_file=args.yaml, pedantic=True, resample=args.resample)
+    adsb_actions = AdsbActions(yaml_file=args.yaml, pedantic=args.resample, resample=args.resample)
 
     # ad-hoc analysis callbacks from yaml config defined here:
     adsb_actions.register_callback("los_update_cb", los_cb)
 
     adsb_actions.loop(iterator_data = allpoints_iterator)
+    adsb_actions.rules.close_emit_files()
 
     if args.resample:
         RESAMPLING_STARTED = True
@@ -74,6 +76,8 @@ if __name__ == "__main__":
         # during los_gc() finalization and included in CSV output
         if args.animate_los:
             from postprocessing.los_animator import LOSAnimator
+            if args.animation_dir:
+                LOS.animation_output_dir = args.animation_dir
             LOS.animator = LOSAnimator(adsb_actions.resampler)
             print(f"Animation generation enabled, output to: {LOS.animation_output_dir}")
 
