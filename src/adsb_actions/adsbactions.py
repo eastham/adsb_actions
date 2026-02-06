@@ -41,6 +41,35 @@ logger = logging.getLogger(__name__)
 logger.level = logging.INFO
 LOGGER = Logger()
 
+def _log_loop_stats(last_read_time: float, flights: int,
+                    rules, resampler, loop_ctr: int):
+    """Log periodic loop statistics at INFO level, with extra detail at DEBUG."""
+    # Track state for performance calculation
+    if not hasattr(_log_loop_stats, 'last_wall'):
+        _log_loop_stats.last_wall = time.monotonic()
+        _log_loop_stats.last_ctr = 0
+
+    now_wall = time.monotonic()
+    elapsed = now_wall - _log_loop_stats.last_wall
+    pts_per_sec = (loop_ctr - _log_loop_stats.last_ctr) / elapsed if elapsed > 0 else 0
+    _log_loop_stats.last_wall = now_wall
+    _log_loop_stats.last_ctr = loop_ctr
+
+    time_str = datetime.datetime.utcfromtimestamp(last_read_time).strftime('%H:%MZ')
+    logger.info("Main loop at: %s ts: %s flights=%d pts/s=%.0f",
+                time_str, int(last_read_time), flights, pts_per_sec)
+    if logger.isEnabledFor(logging.DEBUG):
+        import gc
+        gc_counts = gc.get_count()
+        gc2_collections = gc.get_stats()[2]['collections']
+        resampler_pts = (sum(len(v) for v in resampler.locations_by_flight_id.values())
+                         if resampler else 0)
+        logger.debug("  rules_log=%d emit_files=%d resampler_pts=%d loop_ctr=%d gc=%s gc2=%d",
+                     len(rules.rule_execution_log.last_execution_time),
+                     len(rules._emit_files),
+                     resampler_pts, loop_ctr, gc_counts, gc2_collections)
+
+
 class AdsbActions:
     """Main API for the library."""
 
@@ -138,6 +167,7 @@ class AdsbActions:
             self.data_iterator = iterator_data
 
         last_read_time = 0
+        last_expire_time = 0
         loop_ctr = 0
 
         while True:
@@ -146,11 +176,15 @@ class AdsbActions:
             if last_read_return > 0:
                 last_read_time = last_read_return
                 logger.debug("Main loop periodic timestamp: %s", int(last_read_time))
-                if loop_ctr % 1000 == 0:
-                    logger.info("Main loop periodic timestamp: %s", int(last_read_time))
+                if loop_ctr % 25000 == 0:
+                    _log_loop_stats(last_read_time, len(self.flights.flight_dict),
+                                    self.rules,
+                                    self.resampler if self.enable_resample else None,
+                                    loop_ctr)
 
             if not self.flights.last_checkpoint:
                 self.flights.last_checkpoint = last_read_time
+                last_expire_time = last_read_time
 
             # Run a "Checkpoint".
             # Here we do periodic maintenance tasks, and expensive operations,
@@ -169,8 +203,12 @@ class AdsbActions:
                              self.CHECKPOINT_INTERVAL, Stats.json_readlines,
                              Stats.callbacks_fired, last_read_time, datestr)
 
-                self.flights.expire_old(self.rules, last_read_time,
-                                        self.expire_secs)
+                # expire_old is O(n) over all flights -- run at most once
+                # per second of data-time since expire_secs is 180s.
+                if last_read_time - last_expire_time >= 1:
+                    self.flights.expire_old(self.rules, last_read_time,
+                                            self.expire_secs)
+                    last_expire_time = last_read_time
                 self.rules.handle_proximity_conditions(self.flights, last_read_time)
                 self.flights.last_checkpoint = last_read_time
 

@@ -38,11 +38,17 @@ class Location:
         if not isinstance(self.gs, float): self.gs = 0
         if not isinstance(self.track, float): self.track = 0.
 
+    # Cache fields() result — it's the same tuple every time, but
+    # dataclasses.fields() rebuilds it on each call.
+    _fields = None
+
     @classmethod
     def from_dict(cl, d: dict):
         """Return a location created from a dict bearing the same-named fields."""
+        if cl._fields is None:
+            cl._fields = fields(Location)
         nd = {}
-        for f in fields(Location):
+        for f in cl._fields:
             if f.name in d:
                 nd[f.name] = d[f.name]
 

@@ -11,7 +11,7 @@ from .adsb_logger import Logger
 from .flights import Flights
 
 logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
+logger.level = logging.INFO
 LOGGER = Logger()
 
 MAX_INTERPOLATE_SECS = 60 # max seconds that we'll interpolate over.
