@@ -1,7 +1,10 @@
 """This module parses rules and actions, and applies them to flight data."""
 
 import datetime
+import gzip
+import json
 import logging
+import os
 import shlex
 import subprocess
 import sys
@@ -11,6 +14,7 @@ from .stats import Stats
 from .ruleexecutionlog import RuleExecutionLog, ExecutionCounter
 from .adsb_logger import Logger
 from .webhooks import send_webhook
+from .geo_helpers import nm_to_lat_lon_offsets
 
 logger = logging.getLogger(__name__)
 logger.level = logging.INFO
@@ -34,6 +38,7 @@ class Rules:
         self.yaml_data : dict = data
         self.rule_execution_log = RuleExecutionLog()
         self.callbacks : dict[str, Callable]= {}    # mapping from yaml name to fn
+        self._emit_files: dict[str, gzip.GzipFile] = {}  # open file handles for emit_jsonl
 
         if self.get_rules() is {}:
             logger.warning("No rules found in YAML")
@@ -44,6 +49,21 @@ class Rules:
             assert self.conditions_valid(rule['conditions']), "Invalid conditions, see log for more info"
             assert self.actions_valid(rule['actions']), "Invalid actions, see log for more info"
 
+        # Performance optimization: pre-build a flat list of (bbox_or_None, rule_name, rule_value)
+        # tuples. This allows process_flight() to iterate once through all rules doing fast
+        # bounding box checks, rather than doing nested lookups or dict iterations.
+        self._rule_list: list[tuple] = []
+        for rule_name, rule_value in self.get_rules().items():
+            conds = rule_value['conditions']
+            if 'latlongring' in conds:
+                cv = conds['latlongring']  # cv is [radius_nm, center_lat, center_lon]
+                lat_offset, lon_offset = nm_to_lat_lon_offsets(cv[0], cv[1])
+                bbox = (cv[1] - lat_offset, cv[1] + lat_offset,
+                        cv[2] - lon_offset, cv[2] + lon_offset)
+            else:
+                bbox = None
+            self._rule_list.append((bbox, rule_name, rule_value))
+
     def get_rules(self) -> list:
         if not 'rules' in self.yaml_data:
             return {}
@@ -53,16 +73,26 @@ class Rules:
     def process_flight(self, flight: Flight) -> None:
         """Apply rules and actions to the current position of a given flight. """
 
-        rule_items = self.get_rules().items()
+        _debug = logger.isEnabledFor(logging.DEBUG)
+        lat = flight.lastloc.lat
+        lon = flight.lastloc.lon
 
-        for rule_name, rule_value in rule_items:
-            logger.debug("Checking rules %s", rule_name)
+        for bbox, rule_name, rule_value in self._rule_list:
+            # Fast inline pre-reject for latlongring rules using
+            # pre-computed lat/lon bounding boxes.
+            # bbox is (min_lat, max_lat, min_lon, max_lon) or None
+            if bbox and (lat < bbox[0] or lat > bbox[1] or lon < bbox[2] or lon > bbox[3]):
+                continue
+
+            if _debug:
+                logger.debug("Checking rules %s", rule_name)
 
             if self.conditions_match(flight, rule_value['conditions'], rule_name):
-                logger.debug("MATCH for rule '%s' for flight %s", rule_name, flight.flight_id)
+                if _debug:
+                    logger.debug("MATCH for rule '%s' for flight %s", rule_name, flight.flight_id)
 
                 self.do_actions(flight, rule_value['actions'], rule_name)
-            else:
+            elif _debug:
                 logger.debug("NOMATCH for rule '%s' for flight %s", rule_name, flight.flight_id)
 
     def conditions_valid(self, conditions: dict):
@@ -74,7 +104,8 @@ class Rules:
                             'regions', 'latlongring',
                             'cooldown', 'rule_cooldown', 'has_attr', 'min_time',
                             'max_time', 'time_ranges', 'enabled', 'squawk',
-                            'emergency', 'category', 'min_gs', 'max_gs',
+                            'emergency', 'category', 'exclude_category',
+                            'min_gs', 'max_gs',
                             'min_vertical_rate', 'max_vertical_rate',
                             'callsign_prefix', 'on_ground', 'military']
 
@@ -106,6 +137,20 @@ class Rules:
 
         if 'proximity' in conditions:
             return False  # handled asynchronously in handle_proximity_conditions
+
+        # latlongring checked early: lat/lon band pre-reject is very cheap
+        # and eliminates ~99% of points for spatially-filtered rules.
+        if 'latlongring' in conditions:
+            condition_value = conditions['latlongring']
+            lat_offset, lon_offset = nm_to_lat_lon_offsets(condition_value[0], condition_value[1])
+            if abs(flight.lastloc.lat - condition_value[1]) > lat_offset:
+                return False
+            if abs(flight.lastloc.lon - condition_value[2]) > lon_offset:
+                return False
+            dist = flight.lastloc.distfrom(
+                condition_value[1], condition_value[2])
+            if condition_value[0] < dist:
+                return False
 
         if 'aircraft_list' in conditions:
             condition_value = conditions['aircraft_list']
@@ -193,14 +238,6 @@ class Rules:
                 return False
 
 
-        if 'latlongring' in conditions:
-            condition_value = conditions['latlongring']
-            dist = flight.lastloc.distfrom(
-                condition_value[1], condition_value[2])
-            result = condition_value[0] >= dist
-            if not result:
-                return False
-
         if 'has_attr' in conditions:
             condition_value = conditions['has_attr']
             if flight.lastloc.flightdict:
@@ -245,6 +282,16 @@ class Rules:
                 result = flight.lastloc.category == condition_value
             if not result:
                 return False
+
+        if 'exclude_category' in conditions:
+            condition_value = conditions['exclude_category']
+            if flight.lastloc.category is not None:
+                if isinstance(condition_value, list):
+                    if flight.lastloc.category in condition_value:
+                        return False
+                else:
+                    if flight.lastloc.category == condition_value:
+                        return False
 
         if 'min_gs' in conditions:
             condition_value = conditions['min_gs']
@@ -359,7 +406,7 @@ class Rules:
     def actions_valid(self, actions: dict):
         """Check for invalid or unknown actions, return True if valid."""
         VALID_ACTIONS = ['webhook', 'print', 'callback', 'note', 'track',
-                         'expire_callback', 'shell', 'print_csv']
+                         'expire_callback', 'shell', 'print_csv', 'emit_jsonl']
 
         for action in actions.keys():
             if action not in VALID_ACTIONS:
@@ -502,6 +549,19 @@ class Rules:
                 )
                 logger.info(csv_line)
 
+            elif 'emit_jsonl' == action_name:
+                # Write the raw position dict as a JSONL line to a gzipped file.
+                # action_value is the output file path (e.g. "output/KDCU.gz")
+                # File handles are kept open for the duration of processing.
+                output_path = action_value
+                if output_path not in self._emit_files:
+                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                    self._emit_files[output_path] = gzip.open(output_path, 'wt')
+                    logger.info("emit_jsonl: opened %s", output_path)
+                if flight.lastloc.flightdict:
+                    self._emit_files[output_path].write(
+                        json.dumps(flight.lastloc.flightdict) + '\n')
+
             else:
                 logger.warning("Unmatched action: %s", action_name)
 
@@ -587,6 +647,13 @@ class Rules:
                                             flight2)
                             found_prox_events.append((flight1, flight2))
         return found_prox_events
+
+    def close_emit_files(self):
+        """Close all open emit_jsonl file handles."""
+        for path, fh in self._emit_files.items():
+            fh.close()
+            logger.info("emit_jsonl: closed %s", path)
+        self._emit_files.clear()
 
     def print_final_report(self):
         """Print a report of rule execution statistics, for any rule

@@ -248,3 +248,63 @@ rules:
     assert matches_three >= 0, "Three conditions may or may not match"
     assert matches_single >= matches_two, "Adding conditions should not increase matches"
     assert matches_two >= matches_three, "Adding more conditions should not increase matches"
+
+
+def test_exclude_category_filtering():
+    """Test that exclude_category filters out specified categories.
+
+    Aircraft with undefined category (None) should NOT be excluded,
+    only aircraft with a matching defined category should be excluded.
+    """
+    global counters
+
+    # Match all aircraft (baseline)
+    counters = {}
+    matches_all = run_with_yaml("""
+rules:
+  test:
+    conditions: {}
+    actions:
+      callback: test_cb
+""")
+
+    # Exclude helicopters (A7) - should match all except A7
+    counters = {}
+    matches_no_helicopters = run_with_yaml("""
+rules:
+  test:
+    conditions:
+      exclude_category: [A7]
+    actions:
+      callback: test_cb
+""")
+
+    # Exclude light aircraft (A1, A2) - should exclude more
+    counters = {}
+    matches_no_light = run_with_yaml("""
+rules:
+  test:
+    conditions:
+      exclude_category: [A1, A2]
+    actions:
+      callback: test_cb
+""")
+
+    # Exclude single category (string, not list)
+    counters = {}
+    matches_no_a3 = run_with_yaml("""
+rules:
+  test:
+    conditions:
+      exclude_category: A3
+    actions:
+      callback: test_cb
+""")
+
+    assert matches_all > 0, "Baseline should match aircraft"
+    assert matches_no_helicopters <= matches_all, "Excluding A7 should not increase matches"
+    assert matches_no_light <= matches_all, "Excluding A1/A2 should not increase matches"
+    assert matches_no_a3 <= matches_all, "Excluding A3 should not increase matches"
+    # Excluding common categories (A1/A2) should result in fewer matches than excluding rare ones (A7)
+    assert matches_no_light < matches_no_helicopters, \
+        "Excluding common light aircraft categories should match fewer than excluding rare helicopters"
