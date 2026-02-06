@@ -193,6 +193,7 @@ class MockLOS:
         self.flight1 = MockFlight(tail1)
         self.flight2 = MockFlight(tail2)
         self.create_time = create_time
+        self.cpa_time = create_time  # Initialize to same as create_time
 
 
 class TestAnimateFromLOS:

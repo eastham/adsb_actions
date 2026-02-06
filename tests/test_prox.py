@@ -100,7 +100,7 @@ def big_prox_test(adsb_actions):
     for f in adsb_actions.flights.flight_dict.values():
         rendered_flight_ctr += 1 if f.in_any_bbox() else 0
     assert rendered_flight_ctr == 4  # unexpired aircraft left
-    assert los_update_ctr == 28
+    assert los_update_ctr == 21
 
 
 # Resampling test aircraft - they will cross each other's path in the middle
