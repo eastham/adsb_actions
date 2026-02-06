@@ -54,7 +54,7 @@ from lib.replay import locate_files, json_loads, json_dumps
 from lib.readsb_parse import parse_readsb_json
 
 # Tuning parameters
-CHUNK_SIZE = 500000  # points per temp chunk before flushing to disk
+DEFAULT_CHUNK_SIZE = 2000000  # points per temp chunk before flushing to disk
 
 # Constants for fast distance calculation
 NM_PER_DEG_LAT = 60.0  # nautical miles per degree of latitude
@@ -150,7 +150,8 @@ def write_sorted_chunk(buffer: list, temp_dir: str) -> str:
     fd, path = tempfile.mkstemp(suffix='.jsonl.gz', dir=temp_dir)
     os.close(fd)
 
-    with gzip.open(path, 'wt') as f:
+    # Use fast compression for temp chunks (they get deleted anyway)
+    with gzip.open(path, 'wt', compresslevel=1) as f:
         for ts, point in buffer:
             f.write(json_dumps(point) + '\n')
 
@@ -175,7 +176,7 @@ def read_chunk(filepath: str):
 
 def convert_to_sorted(input_dir: str, output_path: str, progress_interval: int = 1000,
                       lat_filter: float = None, lon_filter: float = None,
-                      radius_nm: float = None):
+                      radius_nm: float = None, chunk_size: int = DEFAULT_CHUNK_SIZE):
     """Convert directory of trace files to single time-sorted JSONL file.
 
     Uses external merge sort:
@@ -230,7 +231,7 @@ def convert_to_sorted(input_dir: str, output_path: str, progress_interval: int =
                       f"{rate:.0f} files/sec, ETA {eta/60:.1f} min")
 
             # Flush buffer to disk when it gets large
-            if len(buffer) >= CHUNK_SIZE:
+            if len(buffer) >= chunk_size:
                 chunk_path = write_sorted_chunk(buffer, temp_dir)
                 temp_files.append(chunk_path)
                 print(f"  Wrote chunk {len(temp_files)} ({len(buffer):,} points)")
@@ -314,6 +315,8 @@ def main():
                         help='Center longitude for spatial filter')
     parser.add_argument('--radius', type=float,
                         help='Radius in nautical miles for spatial filter')
+    parser.add_argument('--chunk-size', type=int, default=DEFAULT_CHUNK_SIZE,
+                        help=f'Points per sort chunk (default: {DEFAULT_CHUNK_SIZE})')
 
     args = parser.parse_args()
 
@@ -328,7 +331,7 @@ def main():
         sys.exit(1)
 
     convert_to_sorted(args.input_dir, args.output, args.progress,
-                      args.lat, args.lon, args.radius)
+                      args.lat, args.lon, args.radius, args.chunk_size)
 
 
 if __name__ == '__main__':
