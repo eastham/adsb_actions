@@ -62,13 +62,25 @@ def download_with_cache(url: str, filename: str) -> Path:
 
 
 def load_airport(icao: str) -> dict | None:
-    """Load airport data by ICAO code."""
+    """Load airport data by ICAO code or local code.
+
+    Searches by ident first, then gps_code, then local_code for airports where
+    the identifier differs from the OurAirports ident (e.g., KREG -> KL38,
+    S50 -> KS50).
+    """
     airports_path = download_with_cache(AIRPORTS_URL, "airports.csv")
+    icao_upper = icao.upper()
 
     with open(airports_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row['ident'].upper() == icao.upper():
+            if row['ident'].upper() == icao_upper:
+                return row
+            # Also check gps_code for airports like KREG (ident=KL38, gps_code=KREG)
+            if row.get('gps_code', '').upper() == icao_upper:
+                return row
+            # Also check local_code for airports like S50 (ident=KS50, local_code=S50)
+            if row.get('local_code', '').upper() == icao_upper:
                 return row
     return None
 
