@@ -149,6 +149,7 @@ class MapVisualizer:
             ).add_to(m)
         else:
             # Default to VFR Sectional
+            # max_native_zoom=11 tells Leaflet to upscale tiles when zooming past level 11
             m = folium.Map(
                 location=[center_lat, center_lon],
                 zoom_start=13,
@@ -157,7 +158,9 @@ class MapVisualizer:
             folium.TileLayer(
                 tiles="https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}",
                 attr="Esri VFR Sectional",
-                opacity=self.map_opacity
+                opacity=self.map_opacity,
+                max_native_zoom=11,
+                max_zoom=18
             ).add_to(m)
 
         print("Map created.")
@@ -456,6 +459,10 @@ if __name__ == "__main__":
                         help="Southwest corner as 'lat,lon' (e.g., '37.0,-122.5')")
     parser.add_argument("--ne", type=str, default=None,
                         help="Northeast corner as 'lat,lon' (e.g., '37.5,-122.0')")
+    parser.add_argument("--output", type=str, default="airport_map.html",
+                        help="Output HTML file path (default: airport_map.html)")
+    parser.add_argument("--no-browser", action="store_true",
+                        help="Don't open the map in a web browser")
     args = parser.parse_args()
 
     # Convert percentage to 0.0-1.0 range
@@ -533,14 +540,12 @@ if __name__ == "__main__":
 
     print(f"Visualizing {ctr} points.")
     if ctr == 0:
-        print("Error: No CSV points found in input. Check that:", file=sys.stderr)
-        print("  1. Your rules file exists and has valid YAML syntax", file=sys.stderr)
-        print("  2. Your rules include 'print_csv' actions", file=sys.stderr)
-        print("  3. The analyzer matched some flights (check stderr for errors)", file=sys.stderr)
-        print("  4. Input contains 'CSV OUTPUT FOR POSTPROCESSING:' lines", file=sys.stderr)
-        sys.exit(1)
+        print("⚠️ No LOS events to visualize")
+        sys.exit(0)
     visualizer.visualize(
         vectorlist=None,
+        output_file=args.output,
+        open_in_browser=not args.no_browser,
         map_image=args.map_image,
         overlay_image=args.overlay_image,
         geojson_file=args.geojson,
