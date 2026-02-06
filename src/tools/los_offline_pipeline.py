@@ -65,8 +65,8 @@ import generate_airport_config
 
 DATA_DIR = "data"
 BASE_DIR = "examples/generated"
-FT_ABOVE_AIRPORT = 4000
-FT_BELOW_AIRPORT = -200 # negative to ignore ground events
+FT_MAX_ABOVE_AIRPORT = 4000   # analysis ceiling relative to field elevation
+FT_MIN_BELOW_AIRPORT = -200   # negative AGL offset excludes ground traffic
 ANALYSIS_RADIUS_NM = 5  # Radius around airport for trace filtering
 
 
@@ -234,10 +234,10 @@ if __name__ == "__main__":
                         help="Force re-conversion of traces (step 6)")
     parser.add_argument("--no-cleanup", action="store_true",
                         help="Skip cleanup of traces/ directory (for batch processing)")
-    parser.add_argument("--ft-above", type=int, default=FT_ABOVE_AIRPORT,
-                        help=f"Feet above airport elevation for analysis ceiling (default: {FT_ABOVE_AIRPORT})")
-    parser.add_argument("--ft-below", type=int, default=FT_BELOW_AIRPORT,
-                        help=f"Feet below airport elevation for analysis floor (default: {FT_BELOW_AIRPORT})")
+    parser.add_argument("--ft-above", type=int, default=FT_MAX_ABOVE_AIRPORT,
+                        help=f"Feet above airport elevation for analysis ceiling (default: {FT_MAX_ABOVE_AIRPORT})")
+    parser.add_argument("--ft-below", type=int, default=FT_MIN_BELOW_AIRPORT,
+                        help=f"Feet below airport elevation for analysis floor (default: {FT_MIN_BELOW_AIRPORT})")
 
     args = parser.parse_args()
     setup_pipeline(args)
