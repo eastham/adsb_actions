@@ -6,6 +6,7 @@ aircraft positions before, during, and after proximity events.
 
 import datetime
 import logging
+
 from typing import List, Optional, Tuple
 
 import folium
@@ -310,6 +311,18 @@ class LOSAnimator:
             time_slider_drag_update=True
         ).add_to(m)
 
+        # Hide the time display (shows browser local time which is confusing)
+        hide_time_css = '''
+        <style>
+        .leaflet-control-container output,
+        .time-text,
+        span[style*="font-size: 11px"] {
+            display: none !important;
+        }
+        </style>
+        '''
+        m.get_root().html.add_child(folium.Element(hide_time_css))
+
         # Add altitude labels along the track every 20 seconds
         label_interval = 20  # seconds
         for positions, tail, color in [
@@ -395,7 +408,7 @@ class LOSAnimator:
         tail2 = los.flight2.flight_id.strip()
 
         # Use create_time as the event time (when LOS was first detected)
-        event_time = los.create_time
+        event_time = los.cpa_time
 
         # Find the resampler flight_ids (with _N suffix) that match these tails
         flight1_id = self._find_flight_id(tail1, event_time)
