@@ -89,19 +89,49 @@ class MapVisualizer:
         """
         annotation_lower = annotation.lower()
         if "overtake" in annotation_lower:
-            return "blue"
+            return "red"
         elif "tbone" in annotation_lower:
-            return "orange"
+            return "red"
         elif "headon" in annotation_lower:
             return "red"
         else:
-            return "green"
+            return "red"  # All LOS events are red
+
+    def add_traffic_cloud(self, m, points, opacity=0.15, radius=30):
+        """Add traffic point cloud as semi-transparent circles.
+
+        Args:
+            m: Folium map object
+            points: List of (lat, lon, alt) tuples
+            opacity: Circle opacity (0.0-1.0)
+            radius: Circle radius in meters
+        """
+        if not points:
+            return
+
+        cloud_group = folium.FeatureGroup(name="Traffic Cloud", show=True)
+
+        for lat, lon, alt in points:
+            folium.Circle(
+                location=[lat, lon],
+                radius=radius,
+                color='blue',
+                fill=True,
+                fill_color='blue',
+                fill_opacity=opacity,
+                opacity=opacity,
+                weight=0  # No border
+            ).add_to(cloud_group)
+
+        cloud_group.add_to(m)
+        print(f"Added traffic cloud with {len(points):,} points")
 
     def visualize(self, vectorlist=None, output_file="airport_map.html",
                   open_in_browser=True, map_image=None, overlay_image=None,
                   geojson_file=None,
                   enable_heatmap=False, native_heatmap=False, heatmap_bandwidth=None,
-                  heatmap_radius=20, heatmap_blur=25, heatmap_min_opacity=0.3):
+                  heatmap_radius=20, heatmap_blur=25, heatmap_min_opacity=0.3,
+                  traffic_cloud=None, cloud_opacity=0.15, cloud_radius=30):
         """
         Generate and save the visualization map.
 
@@ -115,10 +145,10 @@ class MapVisualizer:
         Raises:
             ValueError: If no points have been added or points/annotations length mismatch
         """
-        if not self.points:
-            raise ValueError("Points list cannot be empty")
+        if not self.points and not traffic_cloud:
+            raise ValueError("Points list cannot be empty and no traffic cloud provided")
 
-        if len(self.points) != len(self.annotations):
+        if self.points and len(self.points) != len(self.annotations):
             raise ValueError(
                 "Points list and annotations list must have the same length.")
 
@@ -211,34 +241,41 @@ class MapVisualizer:
 
             print(f"GeoJSON features loaded from: {geojson_file}")
 
-        # Plot points with annotations and hide functionality
-        # Create a feature group to hold all point markers
-        points_group = folium.FeatureGroup(name="LOS Points")
+        # Add traffic cloud BEFORE LOS points (background layer)
+        if traffic_cloud:
+            self.add_traffic_cloud(m, traffic_cloud, cloud_opacity, cloud_radius)
 
-        for idx, ((lat, lon), annotation) in enumerate(zip(self.points, self.annotations)):
-            color = self._get_point_color(annotation)
-            # Add hide link to annotation
-            hide_link = f'<br><a href="#" onclick="hidePoint({idx}); return false;" style="color:gray;font-size:11px;">Hide this point</a>'
-            popup_html = annotation + hide_link
+        # Plot LOS points with annotations and hide functionality (if any)
+        if self.points:
+            # Create a feature group to hold all point markers
+            points_group = folium.FeatureGroup(name="LOS Points")
 
-            circle = folium.Circle(
-                location=[lat, lon],
-                radius=85,
-                color=color,
-                fill=True,
-                fill_color=color,
-                popup=folium.Popup(popup_html, max_width=400)
-            )
-            # Store index as a property for JavaScript access
-            circle._name = f"point_{idx}"
-            circle.add_to(points_group)
+            for idx, ((lat, lon), annotation) in enumerate(zip(self.points, self.annotations)):
+                color = self._get_point_color(annotation)
+                # Add hide link to annotation
+                hide_link = f'<br><a href="#" onclick="hidePoint({idx}); return false;" style="color:gray;font-size:11px;">Hide this point</a>'
+                popup_html = annotation + hide_link
 
-        points_group.add_to(m)
-        print("Points plotted.")
+                circle = folium.Circle(
+                    location=[lat, lon],
+                    radius=85,
+                    color=color,
+                    fill=True,
+                    fill_color=color,
+                    popup=folium.Popup(popup_html, max_width=400)
+                )
+                # Store index as a property for JavaScript access
+                circle._name = f"point_{idx}"
+                circle.add_to(points_group)
 
-        # Add JavaScript for hiding points
+            points_group.add_to(m)
+            print("Points plotted.")
+        else:
+            print("No LOS points to plot (traffic cloud only)")
+
+        # Add JavaScript for hiding points (only if we have points)
         # Build point data array for native heatmap
-        points_json = [[p[0], p[1]] for p in self.points]
+        points_json = [[p[0], p[1]] for p in self.points] if self.points else []
         # Get the Folium map's JavaScript variable name
         map_name = m.get_name()
 
@@ -436,9 +473,8 @@ if __name__ == "__main__":
     parser.add_argument("--map-type", type=str, default="sectional",
                         choices=["sectional", "satellite"],
                         help="Type of base map to use: 'sectional' (VFR chart) or 'satellite' (imagery)")
-    parser.add_argument("--map-opacity", type=float, default=80.0,
-                        help="Opacity percentage" \
-                        " for the base map (0-100, default: 80)")
+    parser.add_argument("--map-opacity", type=float, default=0.5,
+                        help="Opacity for the base map, range 0.0-1.0 (default: 0.8)")
     parser.add_argument("--overlay-image", type=str, default=None,
                         help="Path to a transparent PNG image to overlay on the map at the defined boundaries")
     parser.add_argument("--geojson", type=str, default=None,
@@ -453,8 +489,14 @@ if __name__ == "__main__":
                         help="Heatmap point radius (default: 20)")
     parser.add_argument("--heatmap-blur", type=int, default=25,
                         help="Heatmap blur amount (default: 25)")
-    parser.add_argument("--heatmap-opacity", type=float, default=0.3,
-                        help="Heatmap minimum opacity 0.0-1.0 (default: 0.3)")
+    parser.add_argument("--heatmap-opacity", type=float, default=0.2,
+                        help="Heatmap minimum opacity, range 0.0-1.0 (default: 0.3)")
+    parser.add_argument("--traffic-samples", type=str,
+                        help="Path to CSV file with traffic point cloud samples (lat,lon,alt)")
+    parser.add_argument("--cloud-opacity", type=float, default=0.2,
+                        help="Traffic cloud point opacity, range 0.0-1.0 (default: 0.5)")
+    parser.add_argument("--cloud-radius", type=int, default=30,
+                        help="Traffic cloud point radius in meters (default: 30)")
     parser.add_argument("--sw", type=str, default=None,
                         help="Southwest corner as 'lat,lon' (e.g., '37.0,-122.5')")
     parser.add_argument("--ne", type=str, default=None,
@@ -465,8 +507,8 @@ if __name__ == "__main__":
                         help="Don't open the map in a web browser")
     args = parser.parse_args()
 
-    # Convert percentage to 0.0-1.0 range
-    opacity = max(0.0, min(100.0, args.map_opacity)) / 100.0
+    # Clamp opacity to valid range
+    opacity = max(0.0, min(1.0, args.map_opacity))
 
     # Parse coordinate bounds if provided
     ll_lat, ur_lat, ll_lon, ur_lon = LL_LAT, UR_LAT, LL_LON, UR_LON
@@ -538,10 +580,29 @@ if __name__ == "__main__":
             except (ValueError, IndexError) as e:
                 print(f"Parse error on row: {row} - {e}")
 
-    print(f"Visualizing {ctr} points.")
-    if ctr == 0:
-        print("⚠️ No LOS events to visualize")
+    # Load traffic samples if provided
+    traffic_cloud = None
+    if args.traffic_samples and os.path.exists(args.traffic_samples):
+        print(f"Loading traffic samples from {args.traffic_samples}...")
+        traffic_cloud = []
+
+        with open(args.traffic_samples, 'r') as f:
+            for line in f:
+                try:
+                    lat, lon, alt = line.strip().split(',')
+                    traffic_cloud.append((float(lat), float(lon), float(alt)))
+                except (ValueError, IndexError):
+                    continue  # Skip malformed lines
+
+        print(f"Loaded {len(traffic_cloud):,} traffic points")
+
+    print(f"Visualizing {ctr} LOS events.")
+    if ctr == 0 and not traffic_cloud:
+        print("⚠️ No LOS events or traffic cloud to visualize")
         sys.exit(0)
+    elif ctr == 0:
+        print("⚠️ No LOS events found, but will render traffic cloud")
+
     visualizer.visualize(
         vectorlist=None,
         output_file=args.output,
@@ -554,5 +615,8 @@ if __name__ == "__main__":
         heatmap_bandwidth=args.heatmap_bandwidth,
         heatmap_radius=args.heatmap_radius,
         heatmap_blur=args.heatmap_blur,
-        heatmap_min_opacity=args.heatmap_opacity
+        heatmap_min_opacity=args.heatmap_opacity,
+        traffic_cloud=traffic_cloud,
+        cloud_opacity=args.cloud_opacity,
+        cloud_radius=args.cloud_radius
     )

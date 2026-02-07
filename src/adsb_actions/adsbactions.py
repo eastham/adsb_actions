@@ -126,8 +126,11 @@ class AdsbActions:
         if resample:
             resampler_bboxes = self.flights.bboxes if resample_bbox_filter else None
             resampler_latlongrings = self._extract_latlongrings(yaml_data) if resample_bbox_filter else None
+            min_alt, max_alt = self._extract_altitude_limits(yaml_data)
             self.resampler = Resampler(bboxes=resampler_bboxes,
-                                       latlongrings=resampler_latlongrings)
+                                       latlongrings=resampler_latlongrings,
+                                       min_altitude=min_alt,
+                                       max_altitude=max_alt)
 
         if ip and port:
             self.tcp_conn = self._setup_network(ip, port)
@@ -288,6 +291,37 @@ class AdsbActions:
                                 rule_name, ring)
 
         return latlongrings if latlongrings else None
+
+    def _extract_altitude_limits(self, yaml_data: dict) -> tuple:
+        """Extract min/max altitude from proximity rules.
+
+        Args:
+            yaml_data: The parsed YAML configuration
+
+        Returns:
+            Tuple of (min_alt, max_alt) or (None, None) if not found
+        """
+        if 'rules' not in yaml_data:
+            return None, None
+
+        # Look for proximity rules with min_alt/max_alt
+        for rule_name, rule_body in yaml_data['rules'].items():
+            if not isinstance(rule_body, dict):
+                continue
+            conditions = rule_body.get('conditions', {})
+            if not isinstance(conditions, dict):
+                continue
+
+            # Check if this rule has proximity (LOS analysis rule)
+            if 'proximity' in conditions:
+                min_alt = conditions.get('min_alt')
+                max_alt = conditions.get('max_alt')
+                if min_alt is not None and max_alt is not None:
+                    logger.info("Extracted altitude limits from rule %s: %d-%d ft",
+                               rule_name, min_alt, max_alt)
+                    return int(min_alt), int(max_alt)
+
+        return None, None
 
     def _setup_network(self, ipaddr : str, port : int,
                        retry_conn : bool = True):

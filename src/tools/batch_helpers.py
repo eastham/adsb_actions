@@ -200,7 +200,7 @@ def estimate_download_size(dates: list[datetime], data_dir: Path,
 def print_pipeline_summary(dates: list[datetime], cached_dates: list[datetime],
                           uncached_dates: list[datetime], icao_codes: list[str],
                           estimated_gb: float, daily_data_gb: float,
-                          day_filter: str, skip_download: bool = False,
+                          day_filter: str, analysis_only: bool = False,
                           dry_run: bool = False, aggregate_only: bool = False):
     """Print batch pipeline execution summary.
 
@@ -212,7 +212,7 @@ def print_pipeline_summary(dates: list[datetime], cached_dates: list[datetime],
         estimated_gb: Estimated download size in GB
         daily_data_gb: Size per day in GB
         day_filter: Day filter type ('all', 'weekday', 'weekend')
-        skip_download: Whether download is being skipped
+        analysis_only: Whether preprocessing is being skipped
         dry_run: Whether this is a dry run
         aggregate_only: Whether only aggregation will run
     """
@@ -230,13 +230,13 @@ def print_pipeline_summary(dates: list[datetime], cached_dates: list[datetime],
         print(f"  {', '.join(icao_codes[:5])} ... {', '.join(icao_codes[-3:])}")
     print(f"Total analysis runs: {len(dates) * len(icao_codes)}")
     print()
-    if not skip_download:
+    if not analysis_only:
         print(f"Download estimate:")
         print(f"  Cached dates: {len(cached_dates)}")
         print(f"  To download:  {len(uncached_dates)} days x "
               f"~{daily_data_gb:.0f}GB = ~{estimated_gb:.0f}GB")
     else:
-        print(f"Mode: SKIP DOWNLOAD (using existing sharded files)")
+        print(f"Mode: ANALYSIS ONLY (using existing sharded files)")
     if dry_run:
         print(f"Mode: DRY RUN (no commands will be executed)")
     if aggregate_only:

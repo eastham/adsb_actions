@@ -16,14 +16,14 @@ LOGGER = Logger()
 
 MAX_INTERPOLATE_SECS = 60 # max seconds that we'll interpolate over.
 EXPIRE_TIME = 20 # seconds to keep stale position reports around for interpolation.
-MIN_ALTITUDE = 0  # optimization: minimum altitude for resampling
-MAX_ALTITUDE = 10000  # optimization: maximum altitude for resampling
+DEFAULT_MIN_ALTITUDE = 0  # default minimum altitude for resampling
+DEFAULT_MAX_ALTITUDE = 10000  # default maximum altitude for resampling
 
 class Resampler:
     """Stores / resamples locations, then can check for proximity events.
     """
 
-    def __init__(self, bboxes=None, latlongrings=None):
+    def __init__(self, bboxes=None, latlongrings=None, min_altitude=None, max_altitude=None):
         """Initialize the resampler.
 
         Args:
@@ -33,6 +33,8 @@ class Resampler:
                 This dramatically reduces memory usage for global datasets.
             latlongrings: Optional list of [radius_nm, lat, lon] tuples for
                 circular spatial filtering. Points within any circle are kept.
+            min_altitude: Minimum altitude in feet MSL (default: 0)
+            max_altitude: Maximum altitude in feet MSL (default: 10000)
         """
         # Mapping from flight_id to a list of location samples.
         # Resampled locations are not added here.
@@ -58,12 +60,17 @@ class Resampler:
         # Each entry is [radius_nm, lat, lon]
         self.latlongrings = latlongrings or []
 
+        # Altitude filtering (for memory optimization)
+        self.min_altitude = min_altitude if min_altitude is not None else DEFAULT_MIN_ALTITUDE
+        self.max_altitude = max_altitude if max_altitude is not None else DEFAULT_MAX_ALTITUDE
+
         # Just for stats/logging:
         self.resample_ctr = 0
         self.filtered_ctr = 0  # count of locations filtered out by bbox
         self.altitude_filtered_ctr = 0  # count filtered by altitude
         self.no_tail_ctr = 0  # count filtered by missing tail
         self.total_added_ctr = 0  # total locations successfully added
+        self.expire_ctr = 0  # count of flights expired during proximity checks
 
     def _in_any_bbox(self, lat: float, lon: float) -> bool:
         """Check if a point is within any bbox polygon or latlongring circle.
@@ -93,11 +100,11 @@ class Resampler:
 
         tail = location.tail
         now = location.now
-        if not MIN_ALTITUDE <= location.alt_baro <= MAX_ALTITUDE:
+        if not self.min_altitude <= location.alt_baro <= self.max_altitude:
             self.altitude_filtered_ctr += 1
             if self.altitude_filtered_ctr <= 5:
                 logger.debug("Altitude filter: %s at %d ft (limits: %d-%d)",
-                            tail, location.alt_baro, MIN_ALTITUDE, MAX_ALTITUDE)
+                            tail, location.alt_baro, self.min_altitude, self.max_altitude)
             return
 
         # Spatial filtering: skip if not in any bbox (memory optimization)
@@ -250,7 +257,8 @@ class Resampler:
 
             # Clear out recently-unseen locations...TODO final points will remain
             # stationary unless we continue their motion vector somehow...
-            flights.expire_old(rules, current_time, EXPIRE_TIME)
+            expired_count = flights.expire_old(rules, current_time, EXPIRE_TIME)
+            self.expire_ctr += expired_count
 
             if gc_callback:
                 gc_callback(current_time)
@@ -259,8 +267,10 @@ class Resampler:
         logger.info("  Locations processed: %d", location_ctr)
         logger.info("  Proximity checks performed: %d", prox_check_ctr)
         logger.info("  Proximity events found: %d", len(found_prox_events))
+        logger.info("  Flight expires during processing: %d", self.expire_ctr)
         logger.info("  Final active flights: %d", len(flights.flight_dict))
         print(f"Processed {location_ctr} resampled events, {len(found_prox_events)} proximity events found.")
+        print(f"  Flights expired during processing: {self.expire_ctr}")
         return found_prox_events
 
     def report_resampling_stats(self):
@@ -274,7 +284,7 @@ class Resampler:
         logger.info("  Total locations added: %d", self.total_added_ctr)
         logger.info("  Filtered by missing tail: %d", self.no_tail_ctr)
         logger.info("  Filtered by altitude (%d-%d ft): %d",
-                    MIN_ALTITUDE, MAX_ALTITUDE, self.altitude_filtered_ctr)
+                    self.min_altitude, self.max_altitude, self.altitude_filtered_ctr)
         logger.info("  Filtered by bbox/latlongring: %d", self.filtered_ctr)
         logger.info("  Unique flights tracked: %d", len(self.locations_by_flight_id))
         logger.info("  Unique timestamps: %d", len(self.locations_by_time))

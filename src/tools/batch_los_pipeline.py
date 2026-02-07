@@ -35,7 +35,7 @@ Usage:
     python src/tools/batch_los_pipeline.py \\
         --start-date 01/15/26 --end-date 01/15/26 \\
         --airports examples/busiest_nontowered.txt \\
-        --max-airports 3 --skip-download
+        --max-airports 3 --analysis-only
 """
 
 import argparse
@@ -43,7 +43,9 @@ import multiprocessing
 import os
 import re
 import shutil
+import signal
 import subprocess
+import sys
 import time
 import requests
 from datetime import datetime
@@ -68,6 +70,34 @@ BASE_DIR = Path("examples/generated")
 FT_MAX_ABOVE_AIRPORT = 4000   # analysis ceiling relative to field elevation
 FT_MIN_BELOW_AIRPORT = -200   # negative AGL offset excludes ground traffic
 ANALYSIS_RADIUS_NM = 5
+
+# Track incomplete files for cleanup on interruption
+_incomplete_files = set()
+_cleanup_registered = False
+
+
+def register_cleanup_handler():
+    """Register signal handler for cleanup on Ctrl-C."""
+    global _cleanup_registered
+    if _cleanup_registered:
+        return
+
+    def cleanup_handler(_signum, _frame):
+        """Clean up incomplete files on interruption."""
+        if _incomplete_files:
+            print("\n\n🧹 Interrupted! Cleaning up incomplete files...")
+            for filepath in _incomplete_files:
+                if filepath.exists():
+                    try:
+                        filepath.unlink()
+                        print(f"  Deleted: {filepath}")
+                    except Exception as e:
+                        print(f"  Failed to delete {filepath}: {e}")
+        sys.exit(1)
+
+    signal.signal(signal.SIGINT, cleanup_handler)
+    signal.signal(signal.SIGTERM, cleanup_handler)
+    _cleanup_registered = True
 
 
 def validate_date(date_text):
@@ -300,14 +330,28 @@ def run_airport_analysis(icao: str, date_compact: str,
 
     analysis_out = airport_dir / f"{date_compact}_{icao}.out"
     csv_out = airport_dir / f"{date_compact}_{icao}.csv.out"
+    traffic_samples = airport_dir / f"{date_compact}_{icao}_traffic.csv"
+
+    # Track output files as incomplete (for cleanup on Ctrl-C)
+    if not dry_run:
+        _incomplete_files.add(analysis_out)
+        _incomplete_files.add(csv_out)
+        _incomplete_files.add(traffic_samples)
 
     print(f"📊 Running analysis for {icao} ({date_compact})...")
     cmd = (f"python3 src/analyzers/prox_analyze_from_files.py "
            f"--yaml {airport_yaml} "
            f"--resample --sorted-file {trace_gz} --animate-los "
            f"--animation-dir {airport_dir} "
+           f"--export-traffic-samples {traffic_samples} "
            f"> {analysis_out} 2>&1")
     returncode = run_command(cmd, dry_run=dry_run)
+
+    # Mark output files as complete
+    if not dry_run:
+        _incomplete_files.discard(analysis_out)
+        _incomplete_files.discard(csv_out)
+        _incomplete_files.discard(traffic_samples)
 
     if not dry_run and returncode == 0:
         # Extract point count from "Finished streaming X points" line
@@ -354,17 +398,54 @@ def aggregate_airport_results(icao: str, airport_info: dict,
 
     run_command(f"cat {csv_list} > {combined_csv}")
 
+    # Combine traffic samples from all dates
+    combined_traffic = airport_dir / f"{icao}_traffic_combined.csv"
+    traffic_files = sorted(airport_dir.glob("*_*_traffic.csv"))
+
+    if traffic_files:
+        # First combine all files
+        temp_combined = airport_dir / f"{icao}_traffic_temp.csv"
+        traffic_list = " ".join(str(f) for f in traffic_files)
+        run_command(f"cat {traffic_list} > {temp_combined}")
+
+        # Check if we need to downsample the combined file
+        result = subprocess.run(f"wc -l < {temp_combined}", shell=True, capture_output=True, text=True)
+        line_count = int(result.stdout.strip())
+        max_combined_samples = 20000  # Limit for multi-day visualization (~8MB HTML)
+
+        if line_count > max_combined_samples:
+            # Downsample: take every Nth line
+            sample_rate = max(1, line_count // max_combined_samples)
+            run_command(f"awk 'NR % {sample_rate} == 0' {temp_combined} > {combined_traffic}")
+            run_command(f"rm {temp_combined}")
+            print(f"  Combined {len(traffic_files)} traffic files: {line_count:,} points "
+                  f"→ downsampled to ~{max_combined_samples:,} (every {sample_rate}th point)")
+        else:
+            run_command(f"mv {temp_combined} {combined_traffic}")
+            print(f"  Combined {len(traffic_files)} traffic files: {line_count:,} points")
+    else:
+        combined_traffic = None
+
     sw_lat, sw_lon, ne_lat, ne_lon = compute_bounds(lat, lon, ANALYSIS_RADIUS_NM)
     vis_output = airport_dir / f"{icao}_map.html"
-    run_command(
+
+    # Build visualizer command with optional traffic samples
+    vis_cmd = (
         f"cat {combined_csv} | python3 src/postprocessing/visualizer.py "
         f"--sw {sw_lat},{sw_lon} --ne {ne_lat},{ne_lon} "
-        f"--output {vis_output} --no-browser")
+    )
+
+    if combined_traffic and combined_traffic.exists():
+        vis_cmd += f"--traffic-samples {combined_traffic} "
+        print(f"  Using traffic samples: {combined_traffic.name}")
+
+    vis_cmd += f"--output {vis_output} --no-browser"
+    run_command(vis_cmd)
 
 
 def process_single_date(date: datetime, icao_codes: list[str], airport_info: dict,
                        timer: SimpleTimer, failed_runs: list,
-                       skip_download: bool, force_download: bool, dry_run: bool) -> bool:
+                       analysis_only: bool, force_download: bool, dry_run: bool) -> bool:
     """Process download, shard, and analysis for a single date.
 
     Returns:
@@ -377,7 +458,7 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
     print(f"Processing date: {date.strftime('%m/%d/%y')} ({date.strftime('%A')})")
     print(f"{'=' * 60}")
 
-    if not skip_download:
+    if not analysis_only:
         # --- Download ---
         timer.start('download')
         if not dry_run:
@@ -440,25 +521,51 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
         timer.end('convert_traces')
 
         # --- Pass 1: Shard ---
-        # Generate multi-airport shard YAML
-        shard_yaml_text = generate_multi_airport_yaml(
-            icao_codes, date_compact, airport_info)
-        shard_yaml_path = DATA_DIR / f"shard_{date_compact}.yaml"
-
+        # Check if all airport shard files already exist
+        all_shards_exist = True
         if not dry_run:
-            # Ensure output directories exist
             for icao in icao_codes:
-                (BASE_DIR / icao).mkdir(parents=True, exist_ok=True)
+                airport_gz = BASE_DIR / icao / f"{date_compact}_{icao}.gz"
+                if not airport_gz.exists() or airport_gz.stat().st_size < 30:
+                    all_shards_exist = False
+                    break
 
-            with open(shard_yaml_path, 'w') as f:
-                f.write(shard_yaml_text)
+        if all_shards_exist and analysis_only:
+            print(f"✅ All {len(icao_codes)} airport shard files already exist, skipping shard pass.")
+            timer.start('shard_pass')  # For timing consistency
+            timer.end('shard_pass')
+            shard_result = 0
+        else:
+            # Generate multi-airport shard YAML
+            shard_yaml_text = generate_multi_airport_yaml(
+                icao_codes, date_compact, airport_info)
+            shard_yaml_path = DATA_DIR / f"shard_{date_compact}.yaml"
 
-        print(f"🔍 Pass 1: Sharding {global_gz.name} -> "
-              f"{len(icao_codes)} airports...")
-        timer.start('shard_pass')
-        shard_result = run_shard_pass(global_gz, shard_yaml_path,
-                                      dry_run=dry_run)
-        timer.end('shard_pass')
+            if not dry_run:
+                # Ensure output directories exist
+                for icao in icao_codes:
+                    (BASE_DIR / icao).mkdir(parents=True, exist_ok=True)
+
+                with open(shard_yaml_path, 'w') as f:
+                    f.write(shard_yaml_text)
+
+                # Track shard files as incomplete (for cleanup on Ctrl-C)
+                for icao in icao_codes:
+                    shard_file = BASE_DIR / icao / f"{date_compact}_{icao}.gz"
+                    _incomplete_files.add(shard_file)
+
+            print(f"🔍 Pass 1: Sharding {global_gz.name} -> "
+                  f"{len(icao_codes)} airports...")
+            timer.start('shard_pass')
+            shard_result = run_shard_pass(global_gz, shard_yaml_path,
+                                          dry_run=dry_run)
+            timer.end('shard_pass')
+
+            # Mark shard files as complete
+            if shard_result == 0 and not dry_run:
+                for icao in icao_codes:
+                    shard_file = BASE_DIR / icao / f"{date_compact}_{icao}.gz"
+                    _incomplete_files.discard(shard_file)
 
         # Clean up local temp file after successful shard
         if shard_result == 0 and not dry_run and str(global_gz).startswith('/tmp/'):
@@ -597,7 +704,7 @@ Examples:
   python src/tools/batch_los_pipeline.py \\
       --start-date 01/15/26 --end-date 01/15/26 \\
       --airports examples/busiest_nontowered.txt \\
-      --max-airports 3 --skip-download
+      --max-airports 3 --analysis-only
 """
     )
 
@@ -614,8 +721,8 @@ Examples:
                         help="Filter dates by day type (default: all)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print commands without executing")
-    parser.add_argument("--skip-download", action="store_true",
-                        help="Skip download/extract/convert/shard, "
+    parser.add_argument("--analysis-only", action="store_true",
+                        help="Skip download/extract/convert/shard preprocessing, "
                              "re-run analysis on existing sharded files")
     parser.add_argument("--force-download", action="store_true",
                         help="Force re-download of raw tarballs")
@@ -625,6 +732,9 @@ Examples:
                         help="Path for timing report JSON file (default: timing_report.json)")
 
     args = parser.parse_args()
+
+    # Register cleanup handler for Ctrl-C
+    register_cleanup_handler()
 
     if args.end_date < args.start_date:
         parser.error("End date must be >= start date")
@@ -665,7 +775,7 @@ Examples:
     print_pipeline_summary(
         dates, cached_dates, uncached_dates, icao_codes,
         estimated_gb, ESTIMATED_DAILY_DATA_GB, args.day_filter,
-        skip_download=args.skip_download,
+        analysis_only=args.analysis_only,
         dry_run=args.dry_run,
         aggregate_only=args.aggregate_only
     )
@@ -680,7 +790,7 @@ Examples:
         for date in dates:
             process_single_date(
                 date, icao_codes, airport_info, timer, failed_runs,
-                skip_download=args.skip_download,
+                analysis_only=args.analysis_only,
                 force_download=args.force_download,
                 dry_run=args.dry_run
             )

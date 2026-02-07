@@ -90,7 +90,11 @@ class Flights:
         we can iterate from the oldest entry and stop as soon as we find
         one that isn't expired.  This makes the common case O(k) where
         k is the number of flights actually expired (usually 0-few)
-        instead of O(n) for all flights."""
+        instead of O(n) for all flights.
+
+        Returns:
+            Number of flights expired
+        """
 
         count = 0
         with self.lock:
@@ -105,6 +109,8 @@ class Flights:
                                  flight.flight_id, flight.lastloc.now, last_read_time)
                 else:
                     break  # remaining entries are newer, nothing more to expire
+
+        return count
 
     def find_nearby_flight(self, flight2, altsep, latsep, last_read_time) -> Flight:
         """Returns maximum of one nearby flight within the given separation, 
