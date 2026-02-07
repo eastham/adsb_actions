@@ -8,13 +8,14 @@ import os
 import shlex
 import subprocess
 import sys
-from typing import Callable
+from typing import Callable, Optional, Dict, Tuple, List
 from .flight import Flight
 from .stats import Stats
 from .ruleexecutionlog import RuleExecutionLog, ExecutionCounter
 from .adsb_logger import Logger
 from .webhooks import send_webhook
 from .geo_helpers import nm_to_lat_lon_offsets
+from .rules_optimizations import initialize_rule_optimizations, get_candidate_rule_indices
 
 logger = logging.getLogger(__name__)
 logger.level = logging.INFO
@@ -34,11 +35,23 @@ class Rules:
             function.
     """
 
-    def __init__(self, data):
+    def __init__(self, data, use_optimizations: bool = False):
+        """Initialize Rules with optional performance optimizations.
+
+        Args:
+            data: YAML rules data dictionary
+            use_optimizations: Enable performance optimizations for batch processing:
+                - Bbox pre-computation for fast spatial rejection
+                - Spatial grid indexing to reduce rule checks from O(n_rules) to O(1)
+                Best for batch processing with many rules (e.g., shard pass with 99 airports).
+                Not needed for streaming mode with few rules.
+        """
         self.yaml_data : dict = data
         self.rule_execution_log = RuleExecutionLog()
         self.callbacks : dict[str, Callable]= {}    # mapping from yaml name to fn
         self._emit_files: dict[str, gzip.GzipFile] = {}  # open file handles for emit_jsonl
+        self._use_optimizations = use_optimizations
+        self._spatial_grid: Optional[Dict[Tuple[int, int], List[int]]] = None
 
         if self.get_rules() is {}:
             logger.warning("No rules found in YAML")
@@ -49,20 +62,12 @@ class Rules:
             assert self.conditions_valid(rule['conditions']), "Invalid conditions, see log for more info"
             assert self.actions_valid(rule['actions']), "Invalid actions, see log for more info"
 
-        # Performance optimization: pre-build a flat list of (bbox_or_None, rule_name, rule_value)
-        # tuples. This allows process_flight() to iterate once through all rules doing fast
-        # bounding box checks, rather than doing nested lookups or dict iterations.
-        self._rule_list: list[tuple] = []
-        for rule_name, rule_value in self.get_rules().items():
-            conds = rule_value['conditions']
-            if 'latlongring' in conds:
-                cv = conds['latlongring']  # cv is [radius_nm, center_lat, center_lon]
-                lat_offset, lon_offset = nm_to_lat_lon_offsets(cv[0], cv[1])
-                bbox = (cv[1] - lat_offset, cv[1] + lat_offset,
-                        cv[2] - lon_offset, cv[2] + lon_offset)
-            else:
-                bbox = None
-            self._rule_list.append((bbox, rule_name, rule_value))
+        # Performance optimizations: bbox pre-computation + spatial grid
+        # Delegated to rules_optimizations.py for cleaner separation
+        self._rule_list, self._spatial_grid = initialize_rule_optimizations(
+            self.get_rules(),
+            use_optimizations=self._use_optimizations
+        )
 
     def get_rules(self) -> list:
         if not 'rules' in self.yaml_data:
@@ -77,7 +82,16 @@ class Rules:
         lat = flight.lastloc.lat
         lon = flight.lastloc.lon
 
-        for bbox, rule_name, rule_value in self._rule_list:
+        # Determine which rules to check based on spatial grid (if enabled)
+        if self._use_optimizations and self._spatial_grid is not None:
+            # Get candidate rule indices from spatial grid (typically 1-3 rules)
+            candidate_indices = get_candidate_rule_indices(lat, lon, self._spatial_grid)
+            rules_to_check = [self._rule_list[idx] for idx in candidate_indices]
+        else:
+            # Default behavior: check all rules
+            rules_to_check = self._rule_list
+
+        for bbox, rule_name, rule_value in rules_to_check:
             # Fast inline pre-reject for latlongring rules using
             # pre-computed lat/lon bounding boxes.
             # bbox is (min_lat, max_lat, min_lon, max_lon) or None

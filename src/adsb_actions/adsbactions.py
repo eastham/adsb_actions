@@ -77,7 +77,8 @@ class AdsbActions:
 
     def __init__(self, yaml_data=None, yaml_file=None, ip=None, port=None,
                  mport=None, bboxes=None, expire_secs=180, pedantic=False,
-                 resample=False, resample_bbox_filter=False):
+                 resample=False, resample_bbox_filter=False,
+                 use_optimizations=False):
         """Main API for the library.  You can provide network port info in the
         constructor here, or specify local data sources in the subsequent call to
         loop().  Either yaml_data or yaml_file must be specified.
@@ -99,6 +100,9 @@ class AdsbActions:
             resample_bbox_filter: if True and resample is True, filter resampled
                 data to only include points within configured bboxes. This is a
                 memory optimization for large global datasets.
+            use_optimizations: if True, enable performance optimizations for batch
+                processing (bbox pre-computation + spatial grid indexing).
+                Recommended for batch processing with many airport rules (e.g., shard pass).
         """
 
         assert yaml_data or yaml_file, "Must provide yaml or yaml_file"
@@ -108,7 +112,7 @@ class AdsbActions:
 
         self.flights = Flights(bboxes or self._load_bboxes(yaml_data),
                                ignore_unboxed_flights=not pedantic)
-        self.rules = Rules(yaml_data)
+        self.rules = Rules(yaml_data, use_optimizations=use_optimizations)
         self.tcp_conn = None
         self.data_iterator = None
         self.exit_loop_flag = False      # set externally if we need to exit the main loop

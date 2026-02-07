@@ -39,10 +39,12 @@ Usage:
 """
 
 import argparse
+import multiprocessing
 import os
 import re
 import shutil
 import subprocess
+import time
 import requests
 from datetime import datetime
 from pathlib import Path
@@ -216,8 +218,9 @@ def extract_traces(date_obj: datetime) -> bool:
 
     archive_pattern = DATA_DIR / f"{file_prefix}.tar.a*"
     print(f"📦 Extracting tar archives to {extract_base}/...")
+    # Extract only the traces/ directory (excludes License*.txt and other files)
     result = run_command(
-        f"cat {archive_pattern} | tar --options read_concatenated_archives -xf - -C {extract_base} --exclude='License*.txt'")
+        f"cat {archive_pattern} | tar --options read_concatenated_archives -xf - -C {extract_base} traces/")
     return result == 0
 
 
@@ -474,20 +477,65 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
 
     # --- Pass 2: Per-airport analysis ---
     print(f"\n📊 Pass 2: Per-airport LOS analysis...")
-    for icao in icao_codes:
-        timer.start(f'analyze_{icao}')
-        returncode = run_airport_analysis(
-            icao, date_compact, airport_info, dry_run=dry_run)
-        timer.end(f'analyze_{icao}')
-        if returncode != 0:
-            failed_runs.append((date.strftime('%m/%d/%y'), icao,
-                                "analysis"))
+
+    # Parallel execution for analysis phase (each airport is independent)
+    if len(icao_codes) > 1 and not dry_run:
+        print(f"  Running {len(icao_codes)} analyses in parallel...")
+
+        # Prepare arguments for worker processes
+        worker_args = [(icao, date_compact, airport_info, dry_run) for icao in icao_codes]
+
+        # Use all available CPUs
+        num_workers = min(multiprocessing.cpu_count(), len(icao_codes))
+        print(f"  Using {num_workers} worker processes")
+
+        analysis_start = time.time()
+        with multiprocessing.Pool(processes=num_workers) as pool:
+            # Process airports in parallel
+            for icao, returncode in pool.imap_unordered(_analyze_airport_worker, worker_args):
+                # Track timing for each airport (approximate, since they run in parallel)
+                timer.start(f'analyze_{icao}')
+                timer.end(f'analyze_{icao}')
+
+                if returncode == 0:
+                    print(f"  ✓ Completed {icao}")
+                else:
+                    print(f"  ✗ Failed {icao}")
+                    failed_runs.append((date.strftime('%m/%d/%y'), icao, "analysis"))
+
+        analysis_elapsed = time.time() - analysis_start
+        print(f"  Parallel analysis completed in {analysis_elapsed:.1f}s "
+              f"(~{analysis_elapsed/len(icao_codes):.1f}s per airport)")
+    else:
+        # Sequential execution (for single airport or dry-run)
+        for icao in icao_codes:
+            timer.start(f'analyze_{icao}')
+            returncode = run_airport_analysis(
+                icao, date_compact, airport_info, dry_run=dry_run)
+            timer.end(f'analyze_{icao}')
+            if returncode != 0:
+                failed_runs.append((date.strftime('%m/%d/%y'), icao,
+                                    "analysis"))
 
     return True
 
 
+def _analyze_airport_worker(args):
+    """Worker function for parallel analysis (must be top-level for pickling)."""
+    icao, date_compact, airport_info, dry_run = args
+    returncode = run_airport_analysis(icao, date_compact, airport_info, dry_run=dry_run)
+    return icao, returncode
+
+
+def _aggregate_airport_worker(args):
+    """Worker function for parallel aggregation (must be top-level for pickling)."""
+    icao, airport_info, dry_run = args
+    aggregate_airport_results(icao, airport_info, dry_run=dry_run)
+    return icao
+
+
 def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
-                         timer: SimpleTimer, dry_run: bool = False):
+                         timer: SimpleTimer, dry_run: bool = False, parallel: bool = True):
     """Run cross-date aggregation for all airports.
 
     Args:
@@ -495,15 +543,35 @@ def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
         airport_info: Dict mapping ICAO -> (lat, lon, field_alt)
         timer: Timer instance for tracking
         dry_run: Whether this is a dry run
+        parallel: Whether to run aggregations in parallel (default: True)
     """
     print(f"\n{'=' * 60}")
     print(f"Cross-date aggregation")
     print(f"{'=' * 60}")
 
     timer.start('aggregation')
-    for icao in icao_codes:
-        print(f"\n  Aggregating results for {icao}...")
-        aggregate_airport_results(icao, airport_info, dry_run=dry_run)
+
+    if parallel and not dry_run and len(icao_codes) > 1:
+        # Parallel execution - much faster for visualization generation
+        print(f"  Running {len(icao_codes)} aggregations in parallel...")
+
+        # Prepare arguments for worker processes
+        worker_args = [(icao, airport_info, dry_run) for icao in icao_codes]
+
+        # Use all available CPUs
+        num_workers = min(multiprocessing.cpu_count(), len(icao_codes))
+        print(f"  Using {num_workers} worker processes")
+
+        with multiprocessing.Pool(processes=num_workers) as pool:
+            # Process airports in parallel, show progress as they complete
+            for icao in pool.imap_unordered(_aggregate_airport_worker, worker_args):
+                print(f"  ✓ Completed {icao}")
+    else:
+        # Sequential execution (for dry-run or single airport)
+        for icao in icao_codes:
+            print(f"\n  Aggregating results for {icao}...")
+            aggregate_airport_results(icao, airport_info, dry_run=dry_run)
+
     timer.end('aggregation')
 
 

@@ -394,7 +394,7 @@ class MapVisualizer:
             ).add_to(m)
 
             # Add JavaScript to find and track the heatmap layer for rebuilding on hide
-            native_heatmap_script = f"""
+            native_heatmap_script = """
             <script>
             document.addEventListener('DOMContentLoaded', function() {{
                 // Wait for map to be ready

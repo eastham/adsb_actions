@@ -45,6 +45,10 @@ if __name__ == "__main__":
     parser.add_argument('--sorted-file', help='Path to time-sorted JSONL file (.json, .jsonl, or .gz)')
     parser.add_argument('--animate-los', action="store_true", help='Generate animated HTML maps for each LOS event')
     parser.add_argument('--animation-dir', help='Output directory for animation HTML files (default: examples/generated)')
+    parser.add_argument('--use-optimizations', action="store_true", default=True,
+                        help='Enable performance optimizations for batch processing (default: True)')
+    parser.add_argument('--no-optimizations', dest='use_optimizations', action="store_false",
+                        help='Disable performance optimizations')
     parser.add_argument('directory', nargs='?', help='Path to the data (not needed if --sorted-file used)')
     args = parser.parse_args()
 
@@ -61,7 +65,8 @@ if __name__ == "__main__":
         parser.error("Either directory or --sorted-file is required")
 
     print("Processing...")
-    adsb_actions = AdsbActions(yaml_file=args.yaml, pedantic=args.resample, resample=args.resample)
+    adsb_actions = AdsbActions(yaml_file=args.yaml, pedantic=args.resample,
+                              resample=args.resample, use_optimizations=args.use_optimizations)
 
     # ad-hoc analysis callbacks from yaml config defined here:
     adsb_actions.register_callback("los_update_cb", los_cb)

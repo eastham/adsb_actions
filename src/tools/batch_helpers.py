@@ -40,7 +40,12 @@ class SimpleTimer:
                 'avg_seconds': sum(times) / len(times) if times else 0
             }
 
-        total_seconds = sum(t['total_seconds'] for t in aggregated.values())
+        # Use total_pipeline as the authoritative total if available,
+        # otherwise sum all phases
+        if 'total_pipeline' in aggregated:
+            total_seconds = aggregated['total_pipeline']['total_seconds']
+        else:
+            total_seconds = sum(t['total_seconds'] for t in aggregated.values())
 
         report = {
             'total_seconds': total_seconds,
