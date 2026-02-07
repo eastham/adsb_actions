@@ -20,6 +20,8 @@
         aircraft_list: alert_aircraft  # match aircraft_list above
         exclude_aircraft_list: alert_aircraft # exclude aircraft_list above
         exclude_aircraft_substrs: ["N10C", "N10D"]  # exclude aircraft matching any of these strings
+        category: [A1, A2, A3]  # emitter category - A1-A7 (aircraft), B1-B4 (gliders/balloons), C1-C3 (vehicles)
+        exclude_category: [A7]  # exclude specific categories, e.g., helicopters (A7). Aircraft with undefined category are NOT excluded.
         regions: [ "23 upwind", "Pattern" ]  # will match if inside any of these KML polygons
         regions: []          # not in any KML-defined region
         transition_regions: [ "from", "to" ] # moved from first KML region to second
@@ -37,7 +39,6 @@
         squawk: [7500, 7600, 7700]  # transponder code(s) - can be single value or list
         emergency: any       # 'any' matches all emergencies except 'none'
         # emergency values: none, general (7700), lifeguard (medical), minfuel, nordo (7600), unlawful (7500), downed
-        category: [A1, A2, A3]  # emitter category - A1-A7 (aircraft), B1-B4 (gliders/balloons), C1-C3 (vehicles)
         min_gs: 400          # minimum ground speed in knots
         max_gs: 80           # maximum ground speed in knots
         min_vertical_rate: 2000   # minimum climb rate in feet/minute
@@ -58,6 +59,7 @@
         webhook: ['custom', 'recipient']    # use a custom webhook handler registered via register_webhook_handler()
         shell: "echo 'Aircraft {flight_id}'"  # run a shell command (see below for variables)
         print_csv: "event_type"  # output CSV line for visualizer.py (event_type label is optional)
+        emit_jsonl: "output/KDCU.gz"  # write raw position as JSONL line to gzipped file (for sharding/streaming)
 
 # Shell action variable substitution:
 # The shell action supports these variables (all sanitized with shlex.quote for security):

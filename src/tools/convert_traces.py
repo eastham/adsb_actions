@@ -5,6 +5,11 @@ This tool performs a one-time preprocessing of readsb trace files (gzipped JSON,
 one file per aircraft) into a single time-sorted JSONL file that can be streamed
 with minimal memory usage.
 
+Performance optimizations:
+- Uses orjson for 2-5x faster JSON parsing (auto-detected)
+- Uses pigz for parallel gzip compression if available (2-3x faster)
+  Install: brew install pigz (macOS) or apt-get install pigz (Linux)
+
 Algorithm: External Merge Sort
 ------------------------------
 A typical day's ADS-B data globally (~85M points, ~15GB uncompressed) is too 
@@ -43,6 +48,8 @@ import gzip
 import heapq
 import math
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -254,9 +261,27 @@ def convert_to_sorted(input_dir: str, output_path: str, progress_interval: int =
         # Open all chunk readers
         chunk_readers = [read_chunk(f) for f in temp_files]
 
-        # Merge and write
+        # Merge and write (using pigz for parallel compression if available)
         written = 0
-        with gzip.open(output_path, 'wt') as out:
+
+        # Check if pigz is available for parallel gzip compression
+        use_pigz = shutil.which('pigz') is not None
+
+        if use_pigz:
+            print(f"  Using pigz for parallel compression")
+            # Use pigz subprocess for parallel compression
+            pigz_process = subprocess.Popen(
+                ['pigz', '-c'],
+                stdin=subprocess.PIPE,
+                stdout=open(output_path, 'wb'),
+                text=True
+            )
+            out = pigz_process.stdin
+        else:
+            print(f"  Using standard gzip (pigz not available)")
+            out = gzip.open(output_path, 'wt')
+
+        try:
             merged = heapq.merge(*chunk_readers, key=lambda x: x[0])
 
             for ts, point in merged:
@@ -269,6 +294,10 @@ def convert_to_sorted(input_dir: str, output_path: str, progress_interval: int =
                     eta = (total_points - written) / rate
                     print(f"  {written/1e6:.1f}M/{total_points/1e6:.1f}M points, "
                           f"{rate/1e6:.2f}M/sec, ETA {eta:.0f}s")
+        finally:
+            out.close()
+            if use_pigz:
+                pigz_process.wait()
 
         merge_time = time.time() - merge_start
         total_time = time.time() - start_time
