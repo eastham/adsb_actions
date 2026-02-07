@@ -55,7 +55,7 @@ def _log_loop_stats(last_read_time: float, flights: int,
     _log_loop_stats.last_wall = now_wall
     _log_loop_stats.last_ctr = loop_ctr
 
-    time_str = datetime.datetime.utcfromtimestamp(last_read_time).strftime('%H:%MZ')
+    time_str = datetime.datetime.utcfromtimestamp(last_read_time).strftime('%m/%d %H:%MZ')
     logger.info("Main loop at: %s ts: %s flights=%d pts/s=%.0f",
                 time_str, int(last_read_time), flights, pts_per_sec)
     if logger.isEnabledFor(logging.DEBUG):

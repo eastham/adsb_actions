@@ -97,41 +97,42 @@ class MapVisualizer:
         else:
             return "red"  # All LOS events are red
 
-    def add_traffic_cloud(self, m, points, opacity=0.15, radius=30):
-        """Add traffic point cloud as semi-transparent circles.
+    def add_traffic_tracks(self, m, tracks, opacity=0.5):
+        """Add traffic tracks as semi-transparent polylines.
 
         Args:
             m: Folium map object
-            points: List of (lat, lon, alt) tuples
-            opacity: Circle opacity (0.0-1.0)
-            radius: Circle radius in meters
+            tracks: List of tracks, each track is a list of [lat, lon, alt] coordinates
+            opacity: Line opacity (0.0-1.0)
         """
-        if not points:
+        if not tracks:
             return
 
-        cloud_group = folium.FeatureGroup(name="Traffic Cloud", show=True)
+        tracks_group = folium.FeatureGroup(name="Traffic Tracks", show=True)
+        total_points = 0
 
-        for lat, lon, alt in points:
-            folium.Circle(
-                location=[lat, lon],
-                radius=radius,
+        for track in tracks:
+            # Convert [[lat, lon, alt], ...] to [[lat, lon], ...]
+            coords = [[point[0], point[1]] for point in track]
+            total_points += len(coords)
+
+            # Draw the polyline
+            folium.PolyLine(
+                locations=coords,
                 color='blue',
-                fill=True,
-                fill_color='blue',
-                fill_opacity=opacity,
-                opacity=opacity,
-                weight=0  # No border
-            ).add_to(cloud_group)
+                weight=2,
+                opacity=opacity
+            ).add_to(tracks_group)
 
-        cloud_group.add_to(m)
-        print(f"Added traffic cloud with {len(points):,} points")
+        tracks_group.add_to(m)
+        print(f"Added {len(tracks):,} traffic tracks with {total_points:,} points")
 
     def visualize(self, vectorlist=None, output_file="airport_map.html",
                   open_in_browser=True, map_image=None, overlay_image=None,
                   geojson_file=None,
                   enable_heatmap=False, native_heatmap=False, heatmap_bandwidth=None,
                   heatmap_radius=20, heatmap_blur=25, heatmap_min_opacity=0.3,
-                  traffic_cloud=None, cloud_opacity=0.15, cloud_radius=30):
+                  traffic_tracks=None, track_opacity=0.5):
         """
         Generate and save the visualization map.
 
@@ -145,8 +146,8 @@ class MapVisualizer:
         Raises:
             ValueError: If no points have been added or points/annotations length mismatch
         """
-        if not self.points and not traffic_cloud:
-            raise ValueError("Points list cannot be empty and no traffic cloud provided")
+        if not self.points and not traffic_tracks:
+            raise ValueError("Points list cannot be empty and no traffic tracks provided")
 
         if self.points and len(self.points) != len(self.annotations):
             raise ValueError(
@@ -241,9 +242,9 @@ class MapVisualizer:
 
             print(f"GeoJSON features loaded from: {geojson_file}")
 
-        # Add traffic cloud BEFORE LOS points (background layer)
-        if traffic_cloud:
-            self.add_traffic_cloud(m, traffic_cloud, cloud_opacity, cloud_radius)
+        # Add traffic tracks BEFORE LOS points (background layer)
+        if traffic_tracks:
+            self.add_traffic_tracks(m, traffic_tracks, track_opacity)
 
         # Plot LOS points with annotations and hide functionality (if any)
         if self.points:
@@ -492,11 +493,9 @@ if __name__ == "__main__":
     parser.add_argument("--heatmap-opacity", type=float, default=0.2,
                         help="Heatmap minimum opacity, range 0.0-1.0 (default: 0.3)")
     parser.add_argument("--traffic-samples", type=str,
-                        help="Path to CSV file with traffic point cloud samples (lat,lon,alt)")
-    parser.add_argument("--cloud-opacity", type=float, default=0.2,
-                        help="Traffic cloud point opacity, range 0.0-1.0 (default: 0.5)")
-    parser.add_argument("--cloud-radius", type=int, default=30,
-                        help="Traffic cloud point radius in meters (default: 30)")
+                        help="Path to JSON file with traffic tracks (one track per line)")
+    parser.add_argument("--track-opacity", type=float, default=0.1,
+                        help="Traffic track opacity, range 0.0-1.0 (default: 0.5)")
     parser.add_argument("--sw", type=str, default=None,
                         help="Southwest corner as 'lat,lon' (e.g., '37.0,-122.5')")
     parser.add_argument("--ne", type=str, default=None,
@@ -580,28 +579,33 @@ if __name__ == "__main__":
             except (ValueError, IndexError) as e:
                 print(f"Parse error on row: {row} - {e}")
 
-    # Load traffic samples if provided
-    traffic_cloud = None
+    # Load traffic tracks if provided
+    traffic_tracks = None
     if args.traffic_samples and os.path.exists(args.traffic_samples):
-        print(f"Loading traffic samples from {args.traffic_samples}...")
-        traffic_cloud = []
+        print(f"Loading traffic tracks from {args.traffic_samples}...")
+        traffic_tracks = []
+        total_points = 0
 
+        import json
         with open(args.traffic_samples, 'r') as f:
             for line in f:
                 try:
-                    lat, lon, alt = line.strip().split(',')
-                    traffic_cloud.append((float(lat), float(lon), float(alt)))
-                except (ValueError, IndexError):
+                    # Each line is a JSON array of [lat, lon, alt] coordinates
+                    coords = json.loads(line.strip())
+                    if coords and len(coords) >= 2:  # Need at least 2 points for a line
+                        traffic_tracks.append(coords)
+                        total_points += len(coords)
+                except (json.JSONDecodeError, ValueError, IndexError):
                     continue  # Skip malformed lines
 
-        print(f"Loaded {len(traffic_cloud):,} traffic points")
+        print(f"Loaded {len(traffic_tracks):,} flight tracks with {total_points:,} total points")
 
     print(f"Visualizing {ctr} LOS events.")
-    if ctr == 0 and not traffic_cloud:
-        print("⚠️ No LOS events or traffic cloud to visualize")
+    if ctr == 0 and not traffic_tracks:
+        print("⚠️ No LOS events or traffic tracks to visualize")
         sys.exit(0)
     elif ctr == 0:
-        print("⚠️ No LOS events found, but will render traffic cloud")
+        print("⚠️ No LOS events found, but will render traffic tracks")
 
     visualizer.visualize(
         vectorlist=None,
@@ -616,7 +620,6 @@ if __name__ == "__main__":
         heatmap_radius=args.heatmap_radius,
         heatmap_blur=args.heatmap_blur,
         heatmap_min_opacity=args.heatmap_opacity,
-        traffic_cloud=traffic_cloud,
-        cloud_opacity=args.cloud_opacity,
-        cloud_radius=args.cloud_radius
+        traffic_tracks=traffic_tracks,
+        track_opacity=args.track_opacity
     )

@@ -1,11 +1,11 @@
 #!/bin/bash
-# Integration test for traffic cloud visualization feature
-# Uses the 20minutes.json test dataset
+# Integration test for traffic track visualization feature
+# Uses the 1hr.json test dataset
 
 set -e  # Exit on error
 
-echo "🧪 Traffic Cloud Integration Test"
-echo "=================================="
+echo "🧪 Traffic Track Visualization Integration Test"
+echo "==============================================="
 
 # Activate venv
 source .venv/bin/activate
@@ -14,43 +14,49 @@ source .venv/bin/activate
 TEST_DIR=$(mktemp -d)
 echo "Test directory: $TEST_DIR"
 
-# Test 1: Export traffic samples from test data
+# Test 1: Export traffic tracks from test data
 echo ""
-echo "📊 Test 1: Export traffic samples"
-echo "----------------------------------"
+echo "📊 Test 1: Export traffic tracks"
+echo "---------------------------------"
 
 python3 src/analyzers/prox_analyze_from_files.py \
   --yaml tests/test_yaml/analyze_from_files.yaml \
   --resample \
-  --export-traffic-samples "$TEST_DIR/traffic.csv" \
+  --export-traffic-samples "$TEST_DIR/traffic.json" \
   --sorted-file tests/1hr.json > "$TEST_DIR/analysis.out" 2>&1
 
 # Check output
-if [ -f "$TEST_DIR/traffic.csv" ]; then
-    LINE_COUNT=$(wc -l < "$TEST_DIR/traffic.csv")
-    echo "✓ Traffic CSV created with $LINE_COUNT points"
+if [ -f "$TEST_DIR/traffic.json" ]; then
+    LINE_COUNT=$(wc -l < "$TEST_DIR/traffic.json")
+    echo "✓ Traffic tracks file created with $LINE_COUNT tracks"
 
     # Show sample
-    echo "Sample points:"
-    head -3 "$TEST_DIR/traffic.csv"
+    echo "Sample tracks:"
+    head -3 "$TEST_DIR/traffic.json"
 
-    # Verify format
-    if head -1 "$TEST_DIR/traffic.csv" | grep -E '^-?[0-9]+\.[0-9]+,-?[0-9]+\.[0-9]+,[0-9]+$' > /dev/null; then
-        echo "✓ CSV format is valid (lat,lon,alt)"
+    # Verify JSON format
+    if head -1 "$TEST_DIR/traffic.json" | python3 -m json.tool > /dev/null 2>&1; then
+        echo "✓ JSON format is valid"
     else
-        echo "❌ CSV format is invalid!"
+        echo "❌ JSON format is invalid!"
         exit 1
     fi
+
+    # Check for point reduction stats in analysis output
+    if grep -q "reduction" "$TEST_DIR/analysis.out"; then
+        REDUCTION=$(grep "reduction" "$TEST_DIR/analysis.out" | head -1)
+        echo "✓ $REDUCTION"
+    fi
 else
-    echo "❌ Traffic CSV not created!"
+    echo "❌ Traffic tracks file not created!"
     cat "$TEST_DIR/analysis.out"
     exit 1
 fi
 
 # Test 2: Create mock LOS CSV for visualization
 echo ""
-echo "🗺️  Test 2: Visualize with traffic cloud"
-echo "----------------------------------------"
+echo "🗺️  Test 2: Visualize with traffic tracks"
+echo "-----------------------------------------"
 
 # Create a simple LOS event CSV
 cat > "$TEST_DIR/los.csv" << 'EOF'
@@ -61,7 +67,7 @@ EOF
 cat "$TEST_DIR/los.csv" | python3 src/postprocessing/visualizer.py \
   --sw 40.6,-119.4 \
   --ne 40.8,-119.1 \
-  --traffic-samples "$TEST_DIR/traffic.csv" \
+  --traffic-samples "$TEST_DIR/traffic.json" \
   --output "$TEST_DIR/map.html" \
   --no-browser > "$TEST_DIR/viz.out" 2>&1
 
@@ -69,17 +75,24 @@ cat "$TEST_DIR/los.csv" | python3 src/postprocessing/visualizer.py \
 if [ -f "$TEST_DIR/map.html" ]; then
     echo "✓ Map HTML created: $TEST_DIR/map.html"
 
-    # Verify traffic cloud was added (check for blue circles which are unique to traffic cloud)
-    if grep -q '"blue"' "$TEST_DIR/map.html"; then
-        echo "✓ Map contains traffic cloud points"
+    # Verify traffic tracks were added (check for polyline which is Leaflet's PolyLine)
+    if grep -q 'L.polyline' "$TEST_DIR/map.html"; then
+        TRACK_LINE_COUNT=$(grep -c 'L.polyline' "$TEST_DIR/map.html")
+        echo "✓ Map contains traffic tracks ($TRACK_LINE_COUNT PolyLines found)"
     else
-        echo "❌ Map does not contain traffic cloud!"
+        echo "❌ Map does not contain traffic tracks!"
         exit 1
     fi
 
-    # Check file size is reasonable
+    # Check file size is reasonable (should be smaller with tracks vs point cloud)
     SIZE=$(wc -c < "$TEST_DIR/map.html")
     echo "✓ Map size: $((SIZE / 1024)) KB"
+
+    # Verify track count
+    TRACK_COUNT=$(grep -o 'traffic tracks' "$TEST_DIR/viz.out" | head -1)
+    if [ -n "$TRACK_COUNT" ]; then
+        echo "✓ $(grep 'Added.*traffic tracks' "$TEST_DIR/viz.out")"
+    fi
 
 else
     echo "❌ Map HTML not created!"
@@ -96,8 +109,8 @@ START=$(date +%s)
 python3 src/analyzers/prox_analyze_from_files.py \
   --yaml tests/test_yaml/analyze_from_files.yaml \
   --resample \
-  --export-traffic-samples "$TEST_DIR/traffic2.csv" \
-  --sorted-file tests/20minutes.json > /dev/null 2>&1
+  --export-traffic-samples "$TEST_DIR/traffic2.json" \
+  --sorted-file tests/1hr.json > /dev/null 2>&1
 END=$(date +%s)
 
 DURATION=$((END - START))
@@ -122,5 +135,5 @@ echo "✅ All tests passed!"
 echo ""
 echo "Next steps:"
 echo "  - Open map: open $TEST_DIR/map.html"
-echo "  - Verify traffic cloud layer is visible and toggleable"
+echo "  - Verify traffic tracks (blue PolyLines) are visible and toggleable"
 echo "  - Clean up when done: rm -rf $TEST_DIR"

@@ -91,45 +91,73 @@ if __name__ == "__main__":
 
         # Export traffic samples for visualization if requested
         if args.export_traffic_samples:
-            print("Exporting traffic point cloud samples...")
+            print("Exporting traffic tracks...")
             sample_file = args.export_traffic_samples
 
-            # Sample per-flight to ensure all aircraft are represented
-            max_samples = 15000  # Per-day limit for reasonable file size and rendering (~4-6MB HTML)
+            # Collect complete tracks per flight (preserve temporal order)
+            # Use locations_by_time which includes both original AND interpolated points
+            # This gives smooth tracks instead of jagged sparse reports
+            flight_tracks = {}
+            for timestamp in sorted(adsb_actions.resampler.locations_by_time.keys()):
+                for loc in adsb_actions.resampler.locations_by_time[timestamp]:
+                    flight_id = loc.flight
+                    if flight_id not in flight_tracks:
+                        flight_tracks[flight_id] = []
+                    flight_tracks[flight_id].append((loc.lat, loc.lon, loc.alt_baro, loc.track))
 
-            # Collect positions per flight
-            flight_positions = {}
-            for timestamp in adsb_actions.resampler.locations_by_time.values():
-                for loc in timestamp:
-                    if loc.flight not in flight_positions:
-                        flight_positions[loc.flight] = []
-                    flight_positions[loc.flight].append((loc.lat, loc.lon, loc.alt_baro))
+            # Apply heading-change decimation to reduce points while preserving path shape
+            # Only keep points where the aircraft turns significantly
+            def decimate_track(track, min_heading_change=5.0):
+                """Keep points where heading changes significantly or at start/end."""
+                if len(track) <= 2:
+                    return track
 
-            total_positions = sum(len(positions) for positions in flight_positions.values())
-            num_flights = len(flight_positions)
+                decimated = [track[0]]  # Always keep first point
+                last_kept_heading = track[0][3]  # track field from first point
 
-            # Calculate points per flight to hit target
-            points_per_flight = max(1, max_samples // num_flights) if num_flights > 0 else 1
+                for i in range(1, len(track) - 1):
+                    curr_heading = track[i][3]
 
-            print(f"  Total positions: {total_positions:,} from {num_flights} flights")
-            print(f"  Sampling {points_per_flight} points per flight")
+                    # Calculate heading change since last kept point
+                    heading_diff = abs(curr_heading - last_kept_heading)
+                    if heading_diff > 180:
+                        heading_diff = 360 - heading_diff
 
-            # Collect stats on flight durations and point counts
+                    # Keep point if heading changed significantly since last kept point
+                    if heading_diff >= min_heading_change:
+                        decimated.append(track[i])
+                        last_kept_heading = curr_heading
+
+                decimated.append(track[-1])  # Always keep last point
+                return decimated
+
+            # Statistics
+            total_points_before = sum(len(track) for track in flight_tracks.values())
+            num_flights = len(flight_tracks)
+
+            print(f"  Total track points before decimation: {total_points_before:,} from {num_flights} flights")
+
+            # Decimate tracks and collect stats
+            decimated_tracks = {}
+            total_points_after = 0
             flight_stats = []
-            for flight_id, positions in flight_positions.items():
-                flight_stats.append((flight_id, len(positions)))
 
-            # Sort by position count to see distribution
-            flight_stats.sort(key=lambda x: x[1], reverse=True)
+            for flight_id, track in flight_tracks.items():
+                decimated = decimate_track(track, min_heading_change=10.0)  # Keep points with 10° turns
+                decimated_tracks[flight_id] = decimated
+                total_points_after += len(decimated)
+                flight_stats.append((flight_id, len(track), len(decimated)))
 
-            # Stats on distribution
-            position_counts = [count for _, count in flight_stats]
-            avg_positions = sum(position_counts) / len(position_counts) if position_counts else 0
-            median_idx = len(position_counts) // 2
-            median_positions = position_counts[median_idx] if position_counts else 0
-            print(f"    Average positions per flight: {avg_positions:.0f}")
-            print(f"    Median positions per flight: {median_positions}")
-            short_flights = sum(1 for count in position_counts if count < 60)  # <1 minute of data
+            reduction_pct = (1 - total_points_after / total_points_before) * 100 if total_points_before > 0 else 0
+            print(f"  After heading-change decimation: {total_points_after:,} points ({reduction_pct:.1f}% reduction)")
+
+            # Show flight stats
+            flight_stats.sort(key=lambda x: x[1], reverse=True)  # Sort by original point count
+            avg_before = total_points_before / num_flights if num_flights > 0 else 0
+            avg_after = total_points_after / num_flights if num_flights > 0 else 0
+            print(f"    Average points per flight: {avg_before:.0f} → {avg_after:.0f}")
+
+            short_flights = sum(1 for _, orig, _ in flight_stats if orig < 60)
             print(f"    Flights with <60 positions (likely expired or transient): {short_flights}/{num_flights}")
 
             # Expire statistics from resampler
@@ -139,20 +167,12 @@ if __name__ == "__main__":
                     expire_rate = adsb_actions.resampler.expire_ctr / num_flights
                     print(f"    Average expiration events per flight: {expire_rate:.1f}")
 
-            sample_count = 0
+            # Write tracks to file (one track per line, JSON format for easy parsing)
+            import json
             with open(sample_file, 'w') as f:
-                for flight_id, positions in flight_positions.items():
-                    # Sample this flight's positions uniformly
-                    if len(positions) <= points_per_flight:
-                        # Keep all points if flight has few positions
-                        sampled = positions
-                    else:
-                        # Take every Nth point
-                        step = len(positions) // points_per_flight
-                        sampled = positions[::step][:points_per_flight]
+                for flight_id, track in decimated_tracks.items():
+                    # Format: [[lat, lon, alt], [lat, lon, alt], ...]
+                    coords = [[lat, lon, alt] for lat, lon, alt, _ in track]
+                    f.write(json.dumps(coords) + '\n')
 
-                    for lat, lon, alt in sampled:
-                        f.write(f"{lat},{lon},{alt}\n")
-                        sample_count += 1
-
-            print(f"Exported {sample_count:,} traffic samples to {sample_file}")
+            print(f"Exported {num_flights} flight tracks with {total_points_after:,} total points to {sample_file}")

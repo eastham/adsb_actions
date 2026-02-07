@@ -80,7 +80,7 @@ class TestRulesSpatialGridIntegration:
     def test_grid_stats_logging(self, sample_yaml_data, caplog):
         """Spatial grid should log statistics when enabled."""
         import logging
-        caplog.set_level(logging.INFO)
+        caplog.set_level(logging.INFO, logger='src.adsb_actions.rules_optimizations')
 
         Rules(sample_yaml_data, use_optimizations=True)
 
