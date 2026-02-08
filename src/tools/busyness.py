@@ -21,18 +21,15 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def count_hourly_traffic(shard_gz: Path,
-                         field_elev: int = 0) -> dict[int, int]:
-    """Count unique aircraft per UTC hour from a single gzipped JSONL shard.
+def read_shard_records(shard_gz: Path, field_elev: int = 0):
+    """Yield filtered records from a gzipped JSONL shard.
 
-    Filters to aircraft within FT_MAX_ABOVE_AIRPORT/FT_MIN_BELOW_AIRPORT of
-    field_elev to exclude high-altitude overflights and ground targets.
-
-    Returns {hour: unique_aircraft_count} for hours 0-23.
+    Filters to altitude band field_elev ± FT_MAX_ABOVE/FT_MIN_BELOW.
+    Yields dicts with at least: hex, now, alt_baro (as int or None), lat, lon.
+    Records missing hex or now are skipped.
     """
     alt_ceil = field_elev + FT_MAX_ABOVE_AIRPORT
     alt_floor = field_elev + FT_MIN_BELOW_AIRPORT
-    hex_by_hour: dict[int, set[str]] = defaultdict(set)
 
     try:
         with gzip.open(shard_gz, "rt") as f:
@@ -48,19 +45,36 @@ def count_hourly_traffic(shard_gz: Path,
                     continue
 
                 alt = record.get("alt_baro")
+                alt_int = None
                 if alt is not None and alt != "ground":
                     try:
                         alt_int = int(alt)
                     except (ValueError, TypeError):
-                        alt_int = None
+                        pass
                     if alt_int is not None and (alt_int > alt_ceil
                                                 or alt_int < alt_floor):
                         continue
 
-                hour = datetime.fromtimestamp(ts, tz=timezone.utc).hour
-                hex_by_hour[hour].add(hex_id)
+                record["_alt_int"] = alt_int
+                yield record
     except (EOFError, OSError) as e:
         logger.warning(f"Error reading {shard_gz}: {e} (using partial data)")
+
+
+def count_hourly_traffic(shard_gz: Path,
+                         field_elev: int = 0) -> dict[int, int]:
+    """Count unique aircraft per UTC hour from a single gzipped JSONL shard.
+
+    Filters to aircraft within FT_MAX_ABOVE_AIRPORT/FT_MIN_BELOW_AIRPORT of
+    field_elev to exclude high-altitude overflights and ground targets.
+
+    Returns {hour: unique_aircraft_count} for hours 0-23.
+    """
+    hex_by_hour: dict[int, set[str]] = defaultdict(set)
+
+    for record in read_shard_records(shard_gz, field_elev):
+        hour = datetime.fromtimestamp(record["now"], tz=timezone.utc).hour
+        hex_by_hour[hour].add(record["hex"])
 
     return {h: len(hexes) for h, hexes in hex_by_hour.items()}
 

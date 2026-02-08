@@ -442,6 +442,27 @@ def aggregate_airport_results(icao: str, airport_info: dict,
     except Exception as e:
         print(f"  Warning: busyness data generation failed: {e}")
 
+    # Build data quality assessment
+    quality_json = None
+    try:
+        from data_quality import build_data_quality
+        quality_data = build_data_quality(icao, airport_dir,
+                                          field_elev=field_elev,
+                                          airport_lat=lat,
+                                          airport_lon=lon)
+        if quality_data:
+            import json
+            quality_json = airport_dir / f"{icao}_quality.json"
+            quality_json.write_text(json.dumps(quality_data))
+            lost = quality_data['lostRate']
+            lost_str = f"{lost:.0%}" if lost is not None else "N/A"
+            gap = quality_data['medianGapS']
+            gap_str = f"{gap:.1f}s" if gap is not None else "N/A"
+            print(f"  Data quality: {quality_data['score']} "
+                  f"(lost={lost_str}, gap={gap_str})")
+    except Exception as e:
+        print(f"  Warning: data quality assessment failed: {e}")
+
     sw_lat, sw_lon, ne_lat, ne_lon = compute_bounds(lat, lon, ANALYSIS_RADIUS_NM)
     vis_output = airport_dir / f"{icao}_map.html"
 
@@ -457,6 +478,9 @@ def aggregate_airport_results(icao: str, airport_info: dict,
 
     if busyness_json and busyness_json.exists():
         vis_cmd += f"--busyness-data {busyness_json} "
+
+    if quality_json and quality_json.exists():
+        vis_cmd += f"--data-quality {quality_json} "
 
     vis_cmd += f"--output {vis_output} --no-browser"
     run_command(vis_cmd)

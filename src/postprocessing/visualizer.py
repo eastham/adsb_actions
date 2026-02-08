@@ -140,7 +140,7 @@ class MapVisualizer:
                   enable_heatmap=False, native_heatmap=False, heatmap_bandwidth=None,
                   heatmap_radius=20, heatmap_blur=25, heatmap_min_opacity=0.3,
                   traffic_tracks=None, track_opacity=0.5,
-                  busyness_data=None):
+                  busyness_data=None, data_quality=None):
         """
         Generate and save the visualization map.
 
@@ -359,7 +359,7 @@ class MapVisualizer:
 
         # Add busyness chart panel if data is available
         if busyness_data:
-            m.get_root().html.add_child(folium.Element(build_busyness_html(busyness_data)))
+            m.get_root().html.add_child(folium.Element(build_busyness_html(busyness_data, data_quality)))
             print(f"Busyness chart added to map")
 
         # Add a legend to the map
@@ -421,6 +421,8 @@ if __name__ == "__main__":
                         help="Don't open the map in a web browser")
     parser.add_argument("--busyness-data", type=str, default=None,
                         help="Path to busyness JSON file for traffic chart overlay")
+    parser.add_argument("--data-quality", type=str, default=None,
+                        help="Path to data quality JSON file for coverage badge")
     args = parser.parse_args()
 
     # Clamp opacity to valid range
@@ -501,6 +503,14 @@ if __name__ == "__main__":
         print(f"Loaded busyness data: {busyness_data.get('numDates', '?')} dates, "
               f"globalMax={busyness_data.get('globalMax', '?')}")
 
+    # Load data quality if provided
+    quality_data = None
+    if args.data_quality and os.path.exists(args.data_quality):
+        import json
+        with open(args.data_quality, 'r') as f:
+            quality_data = json.load(f)
+        print(f"Loaded data quality: {quality_data.get('score', '?')}")
+
     # Load traffic tracks if provided
     traffic_tracks = None
     if args.traffic_samples and os.path.exists(args.traffic_samples):
@@ -544,5 +554,6 @@ if __name__ == "__main__":
         heatmap_min_opacity=args.heatmap_opacity,
         traffic_tracks=traffic_tracks,
         track_opacity=args.track_opacity,
-        busyness_data=busyness_data
+        busyness_data=busyness_data,
+        data_quality=quality_data
     )
