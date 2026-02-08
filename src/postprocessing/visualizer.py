@@ -19,7 +19,11 @@ import webbrowser
 import os
 import sys
 import csv
-from lib.map_elements import LEGEND_HTML, STATIC_LEGEND_HTML, CoordinateDisplay
+from lib.map_elements import (
+    LEGEND_HTML, STATIC_LEGEND_HTML, CoordinateDisplay,
+    build_hide_script, NATIVE_HEATMAP_SCRIPT,
+    build_busyness_html, build_help_html,
+)
 from postprocessing.hotspot_analyzer import compute_hotspot_heatmap
 
 # Corners of the map
@@ -27,6 +31,9 @@ LL_LAT = 40.7126
 UR_LAT = 40.8199
 LL_LON = -119.3068
 UR_LON = -119.0603
+
+# Feature flags
+SHOW_ANALYSIS_WINDOW = False  # Lower-left analysis window (for heatmap analysis)
 
 
 class MapVisualizer:
@@ -132,7 +139,8 @@ class MapVisualizer:
                   geojson_file=None,
                   enable_heatmap=False, native_heatmap=False, heatmap_bandwidth=None,
                   heatmap_radius=20, heatmap_blur=25, heatmap_min_opacity=0.3,
-                  traffic_tracks=None, track_opacity=0.5):
+                  traffic_tracks=None, track_opacity=0.5,
+                  busyness_data=None):
         """
         Generate and save the visualization map.
 
@@ -254,15 +262,17 @@ class MapVisualizer:
             for idx, ((lat, lon), annotation) in enumerate(zip(self.points, self.annotations)):
                 color = self._get_point_color(annotation)
                 # Add hide link to annotation
-                hide_link = f'<br><a href="#" onclick="hidePoint({idx}); return false;" style="color:gray;font-size:11px;">Hide this point</a>'
+                hide_link = f' <a href="#" onclick="hidePoint({idx}); return false;">Hide</a>'
                 popup_html = annotation + hide_link
 
                 circle = folium.Circle(
                     location=[lat, lon],
-                    radius=85,
+                    radius=42,
                     color=color,
                     fill=True,
                     fill_color=color,
+                    fill_opacity=1.0,
+                    opacity=1.0,
                     popup=folium.Popup(popup_html, max_width=400)
                 )
                 # Store index as a property for JavaScript access
@@ -275,98 +285,11 @@ class MapVisualizer:
             print("No LOS points to plot (traffic cloud only)")
 
         # Add JavaScript for hiding points (only if we have points)
-        # Build point data array for native heatmap
         points_json = [[p[0], p[1]] for p in self.points] if self.points else []
-        # Get the Folium map's JavaScript variable name
         map_name = m.get_name()
-
-        hide_script = f"""
-        <script>
-        var hiddenPoints = [];
-        var allPoints = {points_json};
-        var nativeHeatmapLayer = null;
-
-        function getMap() {{
-            // Folium map variable name is known
-            return {map_name};
-        }}
-
-        function rebuildNativeHeatmap() {{
-            var map = getMap();
-            if (!map || !nativeHeatmapLayer) return;
-
-            // Get visible points (exclude hidden)
-            var visiblePoints = allPoints.filter(function(_, idx) {{
-                return hiddenPoints.indexOf(idx) === -1;
-            }});
-
-            // Remove old heatmap
-            map.removeLayer(nativeHeatmapLayer);
-
-            // Create new heatmap with visible points only
-            if (visiblePoints.length > 0) {{
-                nativeHeatmapLayer = L.heatLayer(visiblePoints, {{
-                    radius: {heatmap_radius},
-                    blur: {heatmap_blur},
-                    minOpacity: {heatmap_min_opacity},
-                    gradient: {{0.0: 'blue', 0.3: 'cyan', 0.5: 'lime', 0.7: 'yellow', 0.9: 'orange', 1.0: 'red'}}
-                }});
-                nativeHeatmapLayer.addTo(map);
-                console.log('Rebuilt heatmap with ' + visiblePoints.length + ' points');
-            }}
-        }}
-
-        function hidePoint(idx) {{
-            var map = getMap();
-            if (!map) {{
-                console.error('Could not find map');
-                return;
-            }}
-
-            var found = false;
-            map.eachLayer(function(layer) {{
-                // Check multiple ways popup content might be stored
-                var content = null;
-                if (layer._popup) {{
-                    var popupContent = layer._popup._content;
-                    // Content might be a DOM element or string
-                    if (popupContent) {{
-                        if (typeof popupContent === 'string') {{
-                            content = popupContent;
-                        }} else if (popupContent.innerHTML) {{
-                            content = popupContent.innerHTML;
-                        }} else if (popupContent.outerHTML) {{
-                            content = popupContent.outerHTML;
-                        }}
-                    }}
-                }}
-                if (content && content.includes('hidePoint(' + idx + ')')) {{
-                    map.removeLayer(layer);
-                    hiddenPoints.push(idx);
-                    found = true;
-                    console.log('Hidden point ' + idx);
-                }}
-            }});
-
-            if (!found) {{
-                console.log('Point ' + idx + ' not found in layers');
-            }}
-
-            // Rebuild native heatmap if it exists
-            if (nativeHeatmapLayer) {{
-                rebuildNativeHeatmap();
-            }}
-
-            // Close any open popup
-            map.closePopup();
-        }}
-
-        function showAllPoints() {{
-            // Reload the page to restore all points
-            location.reload();
-        }}
-        </script>
-        """
+        hide_script = build_hide_script(points_json, map_name,
+                                        heatmap_radius, heatmap_blur,
+                                        heatmap_min_opacity)
         m.get_root().html.add_child(folium.Element(hide_script))
 
         # Add overlay image if provided
@@ -431,34 +354,26 @@ class MapVisualizer:
                 }
             ).add_to(m)
 
-            # Add JavaScript to find and track the heatmap layer for rebuilding on hide
-            native_heatmap_script = """
-            <script>
-            document.addEventListener('DOMContentLoaded', function() {{
-                // Wait for map to be ready
-                setTimeout(function() {{
-                    var map = getMap();
-                    if (map) {{
-                        // Find the existing heatmap layer created by Folium
-                        map.eachLayer(function(layer) {{
-                            if (layer._heat) {{
-                                nativeHeatmapLayer = layer;
-                                console.log('Found native heatmap layer with ' + allPoints.length + ' points');
-                            }}
-                        }});
-                    }}
-                }}, 500);
-            }});
-            </script>
-            """
-            m.get_root().html.add_child(folium.Element(native_heatmap_script))
+            m.get_root().html.add_child(folium.Element(NATIVE_HEATMAP_SCRIPT))
             print(f"Native heatmap enabled with {len(self.points)} points (updates on hide)")
+
+        # Add busyness chart panel if data is available
+        if busyness_data:
+            m.get_root().html.add_child(folium.Element(build_busyness_html(busyness_data)))
+            print(f"Busyness chart added to map")
 
         # Add a legend to the map
         m.get_root().html.add_child(folium.Element(self.legend_html))
 
-        # Add dynamic coordinate display that updates on zoom/pan
-        m.add_child(CoordinateDisplay())
+        # Add dynamic coordinate display (hidden behind feature flag for analysis use)
+        if SHOW_ANALYSIS_WINDOW:
+            m.add_child(CoordinateDisplay())
+
+        # Add help window with keyboard shortcuts and generation info
+        cmd_args = ' '.join(sys.argv[1:]) if len(sys.argv) > 1 else 'none'
+        if len(cmd_args) > 200:
+            cmd_args = cmd_args[:200] + '...'
+        m.get_root().html.add_child(folium.Element(build_help_html(cmd_args)))
 
         # Save the map to an HTML file
         m.save(output_file)
@@ -504,6 +419,8 @@ if __name__ == "__main__":
                         help="Output HTML file path (default: airport_map.html)")
     parser.add_argument("--no-browser", action="store_true",
                         help="Don't open the map in a web browser")
+    parser.add_argument("--busyness-data", type=str, default=None,
+                        help="Path to busyness JSON file for traffic chart overlay")
     args = parser.parse_args()
 
     # Clamp opacity to valid range
@@ -561,23 +478,28 @@ if __name__ == "__main__":
                 altdist = row[17] if len(row) > 17 else ""
 
                 annotation = f"{datestr} {tail1}/{tail2} <b>Alt:</b> {altitude}"
-                if los_type:
-                    annotation += f" <b>type:</b> {los_type}"
-                if phase:
-                    annotation += f" <b>phase:</b> {phase}"
                 if latdist:
                     annotation += f" <b>lat sep:</b> {float(latdist):.2f}nm"
                 if altdist:
                     annotation += f" <b>alt sep:</b> {altdist}ft"
-                annotation += f" <b><a href='{link}' target='_blank'>REPLAY</a></b>"
                 if animation:
-                    annotation += f" <b><a href='{animation}' target='_blank'>ANIMATION</a></b>"
+                    annotation += f" <b><a href='{animation}' target='_blank'>Event preview</a> - </b>"
+                annotation += f"<br><b><a href='{link}' target='_blank'>airplanes.live replay</a></b>"
 
                 visualizer.add_point((float(lat), float(lon)), annotation)
                 print(f"Read point {ctr} at {lat} {lon} alt: {altitude} datestr:{datestr}")
                 ctr += 1
             except (ValueError, IndexError) as e:
                 print(f"Parse error on row: {row} - {e}")
+
+    # Load busyness data if provided
+    busyness_data = None
+    if args.busyness_data and os.path.exists(args.busyness_data):
+        import json
+        with open(args.busyness_data, 'r') as f:
+            busyness_data = json.load(f)
+        print(f"Loaded busyness data: {busyness_data.get('numDates', '?')} dates, "
+              f"globalMax={busyness_data.get('globalMax', '?')}")
 
     # Load traffic tracks if provided
     traffic_tracks = None
@@ -621,5 +543,6 @@ if __name__ == "__main__":
         heatmap_blur=args.heatmap_blur,
         heatmap_min_opacity=args.heatmap_opacity,
         traffic_tracks=traffic_tracks,
-        track_opacity=args.track_opacity
+        track_opacity=args.track_opacity,
+        busyness_data=busyness_data
     )

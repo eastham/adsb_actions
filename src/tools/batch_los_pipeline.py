@@ -61,15 +61,15 @@ from batch_helpers import (
     estimate_download_size,
     print_pipeline_summary,
     print_completion_summary,
+    FT_MAX_ABOVE_AIRPORT,
+    FT_MIN_BELOW_AIRPORT,
+    ANALYSIS_RADIUS_NM,
 )
 
 # Approximate size of daily ADS-B data from adsb.lol (two tar parts combined)
 ESTIMATED_DAILY_DATA_GB = 3.0
 DATA_DIR = Path("data")
 BASE_DIR = Path("examples/generated")
-FT_MAX_ABOVE_AIRPORT = 4000   # analysis ceiling relative to field elevation
-FT_MIN_BELOW_AIRPORT = -200   # negative AGL offset excludes ground traffic
-ANALYSIS_RADIUS_NM = 5
 
 # Track incomplete files for cleanup on interruption
 _incomplete_files = set()
@@ -377,7 +377,7 @@ def run_airport_analysis(icao: str, date_compact: str,
 def aggregate_airport_results(icao: str, airport_info: dict,
                               dry_run: bool = False):
     """Cross-date aggregation: combine CSV outputs and generate visualization."""
-    lat, lon, _ = airport_info[icao]
+    lat, lon, field_elev = airport_info[icao]
     airport_dir = BASE_DIR / icao
     combined_csv = airport_dir / f"{icao}_combined.csv.out"
 
@@ -426,6 +426,22 @@ def aggregate_airport_results(icao: str, airport_info: dict,
     else:
         combined_traffic = None
 
+    # Build busyness data (traffic counts + METAR weather categories)
+    busyness_json = None
+    try:
+        from busyness import build_busyness_data
+        busyness_data = build_busyness_data(icao, airport_dir,
+                                            metar_cache_dir=airport_dir,
+                                            field_elev=field_elev)
+        if busyness_data:
+            import json
+            busyness_json = airport_dir / f"{icao}_busyness.json"
+            busyness_json.write_text(json.dumps(busyness_data))
+            print(f"  Busyness data: {busyness_data['numDates']} dates, "
+                  f"max={busyness_data['globalMax']} aircraft/hr")
+    except Exception as e:
+        print(f"  Warning: busyness data generation failed: {e}")
+
     sw_lat, sw_lon, ne_lat, ne_lon = compute_bounds(lat, lon, ANALYSIS_RADIUS_NM)
     vis_output = airport_dir / f"{icao}_map.html"
 
@@ -438,6 +454,9 @@ def aggregate_airport_results(icao: str, airport_info: dict,
     if combined_traffic and combined_traffic.exists():
         vis_cmd += f"--traffic-samples {combined_traffic} "
         print(f"  Using traffic samples: {combined_traffic.name}")
+
+    if busyness_json and busyness_json.exists():
+        vis_cmd += f"--busyness-data {busyness_json} "
 
     vis_cmd += f"--output {vis_output} --no-browser"
     run_command(vis_cmd)
@@ -713,7 +732,7 @@ Examples:
     parser.add_argument("--end-date", type=validate_date, required=True,
                         help="End date in mm/dd/yy format")
     parser.add_argument("--airports", type=str, required=True,
-                        help="Path to file with airport codes (one per line)")
+                        help="Airport code (e.g. WVI) or path to file with codes (one per line)")
     parser.add_argument("--max-airports", type=int, default=None,
                         help="Limit to first N airports from the list")
     parser.add_argument("--day-filter", type=str, default="all",
@@ -740,7 +759,10 @@ Examples:
         parser.error("End date must be >= start date")
 
     # Load airports and convert to ICAO
-    faa_codes = load_airport_list(args.airports, args.max_airports)
+    if os.path.isfile(args.airports):
+        faa_codes = load_airport_list(args.airports, args.max_airports)
+    else:
+        faa_codes = [args.airports]
     icao_codes = [faa_to_icao(code) for code in faa_codes]
 
     # Generate date range

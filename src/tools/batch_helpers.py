@@ -6,6 +6,11 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
+# Shared constants for airport traffic analysis
+FT_MAX_ABOVE_AIRPORT = 4000   # analysis ceiling relative to field elevation
+FT_MIN_BELOW_AIRPORT = -200   # negative AGL offset excludes ground traffic
+ANALYSIS_RADIUS_NM = 10       # radius around airport for trace filtering and sharding
+
 
 class SimpleTimer:
     """Simple timing utility to track phase durations."""

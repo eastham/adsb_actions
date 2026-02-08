@@ -62,12 +62,10 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 import generate_airport_config
+from batch_helpers import FT_MAX_ABOVE_AIRPORT, FT_MIN_BELOW_AIRPORT, ANALYSIS_RADIUS_NM
 
 DATA_DIR = "data"
 BASE_DIR = "examples/generated"
-FT_MAX_ABOVE_AIRPORT = 4000   # analysis ceiling relative to field elevation
-FT_MIN_BELOW_AIRPORT = -200   # negative AGL offset excludes ground traffic
-ANALYSIS_RADIUS_NM = 5  # Radius around airport for trace filtering
 
 
 def compute_bounds(center_lat: float, center_lon: float, radius_nm: float) -> tuple:
@@ -191,7 +189,7 @@ def setup_pipeline(args):
     if not trace_gz.exists() or args.force_extract:
         print(f"⚙️ Converting traces to {trace_gz.name}...")
         run_command(f"python src/tools/convert_traces.py traces -o {trace_gz} "
-                    f"--lat {lat} --lon {lon} --radius 5 --progress 100")
+                    f"--lat {lat} --lon {lon} --radius {ANALYSIS_RADIUS_NM} --progress 100")
     else:
         print(f"✅ {trace_gz.name} exists. Skipping conversion.")
 
