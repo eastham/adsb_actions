@@ -20,7 +20,7 @@ import os
 import sys
 import csv
 from lib.map_elements import (
-    LEGEND_HTML, STATIC_LEGEND_HTML, CoordinateDisplay,
+    CoordinateDisplay,
     build_hide_script, NATIVE_HEATMAP_SCRIPT,
     build_busyness_html, build_help_html,
 )
@@ -45,7 +45,7 @@ class MapVisualizer:
     """
 
     def __init__(self, ll_lat=LL_LAT, ur_lat=UR_LAT, ll_lon=LL_LON, ur_lon=UR_LON,
-                 legend_html=LEGEND_HTML, map_type="sectional", map_opacity=0.8):
+                 map_type="sectional", map_opacity=0.8):
         """
         Initialize the MapVisualizer.
 
@@ -54,7 +54,6 @@ class MapVisualizer:
             ur_lat: Upper-right latitude boundary
             ll_lon: Lower-left longitude boundary
             ur_lon: Upper-right longitude boundary
-            legend_html: HTML string for the map legend
             map_type: Type of base map to use ("sectional" or "satellite")
             map_opacity: Opacity of the base map (0.0 to 1.0)
         """
@@ -62,7 +61,6 @@ class MapVisualizer:
         self.ur_lat = ur_lat
         self.ll_lon = ll_lon
         self.ur_lon = ur_lon
-        self.legend_html = legend_html
         self.map_type = map_type
         self.map_opacity = map_opacity
         self.points = []
@@ -262,7 +260,7 @@ class MapVisualizer:
             for idx, ((lat, lon), annotation) in enumerate(zip(self.points, self.annotations)):
                 color = self._get_point_color(annotation)
                 # Add hide link to annotation
-                hide_link = f' <a href="#" onclick="hidePoint({idx}); return false;">Hide</a>'
+                hide_link = f' - <b><a href="#" onclick="hidePoint({idx}); return false;">Hide</a></b>'
                 popup_html = annotation + hide_link
 
                 circle = folium.Circle(
@@ -335,9 +333,7 @@ class MapVisualizer:
                 print(f"Heatmap layer added with {len(heatmap_data)} points")
 
         # Add native heatmap if enabled (uses raw points, recomputes on hide)
-        if native_heatmap:
-            # Add a HeatMap to force Folium to include the Leaflet.heat library
-            # We create it with the actual data - it will be our initial heatmap
+        if native_heatmap and self.points:
             HeatMap(
                 [[p[0], p[1]] for p in self.points],
                 name="Dynamic Heatmap",
@@ -361,9 +357,6 @@ class MapVisualizer:
         if busyness_data:
             m.get_root().html.add_child(folium.Element(build_busyness_html(busyness_data, data_quality)))
             print(f"Busyness chart added to map")
-
-        # Add a legend to the map
-        m.get_root().html.add_child(folium.Element(self.legend_html))
 
         # Add dynamic coordinate display (hidden behind feature flag for analysis use)
         if SHOW_ANALYSIS_WINDOW:
@@ -479,14 +472,16 @@ if __name__ == "__main__":
                 latdist = row[16] if len(row) > 16 else ""
                 altdist = row[17] if len(row) > 17 else ""
 
-                annotation = f"{datestr} {tail1}/{tail2} <b>Alt:</b> {altitude}"
+                annotation = f"<b>{datestr}</b> {tail1}/{tail2} "
                 if latdist:
-                    annotation += f" <b>lat sep:</b> {float(latdist):.2f}nm"
+                    annotation += f" <b>Lat sep:</b> {float(latdist):.2f}nm"
                 if altdist:
-                    annotation += f" <b>alt sep:</b> {altdist}ft"
+                    annotation += f" <b>Alt sep:</b> {altdist}ft"
                 if animation:
-                    annotation += f" <b><a href='{animation}' target='_blank'>Event preview</a> - </b>"
-                annotation += f"<br><b><a href='{link}' target='_blank'>airplanes.live replay</a></b>"
+                    annotation += f"<br><b><a href='{animation}' target='_blank'>Event preview</a></b> - "
+                else:
+                    annotation += "<br>"
+                annotation += f"<b><a href='{link}' target='_blank'>adsb.lol replay</a></b>"
 
                 visualizer.add_point((float(lat), float(lon)), annotation)
                 print(f"Read point {ctr} at {lat} {lon} alt: {altitude} datestr:{datestr}")

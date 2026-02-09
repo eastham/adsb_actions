@@ -10,85 +10,6 @@ from folium.elements import MacroElement
 from jinja2 import Template
 
 
-LEGEND_HTML = """
-    <div id="legend-box" style="
-        position: fixed;
-        bottom: 50px;
-        left: 50px;
-        width: 270px;
-        height: 190px;
-        background-color: white;
-        border: 2px solid black;
-        z-index: 1000;
-        padding: 10px;
-        font-size: 14px;
-    ">
-        <b>YEAR: <a href="2022.html">2022</a>
-        <a href="2023.html">2023</a>
-        <a href="2024.html">2024</a></b><br/><br/>
-        <b>Click on an event for details.</b><br>
-        <b>LOS event types:</b><br>
-        <i style="background: blue; width: 10px; height: 10px; display: inline-block;"></i> Overtake<br>
-        <i style="background: orange; width: 10px; height: 10px; display: inline-block;"></i> T-Bone<br>
-        <i style="background: red; width: 10px; height: 10px; display: inline-block;"></i> Head-On<br>
-        <i style="background: green; width: 10px; height: 10px; display: inline-block;"></i> Other<br>
-        <br>
-        <a href="#" onclick="if(typeof showAllPoints==='function'){showAllPoints();}else{location.reload();} return false;" style="font-size:12px;">Restore hidden points</a>
-    </div>
-    <script>
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                var legend = document.getElementById('legend-box');
-                var coordDisplay = document.querySelector('.coord-display');
-                if (legend) {
-                    legend.style.display = legend.style.display === 'none' ? 'block' : 'none';
-                }
-                if (coordDisplay) {
-                    coordDisplay.style.display = coordDisplay.style.display === 'none' ? 'block' : 'none';
-                }
-            }
-        });
-    </script>
-    """
-
-STATIC_LEGEND_HTML = """
-    <div id="legend-box" style="
-        position: fixed;
-        bottom: 50px;
-        left: 50px;
-        width: 270px;
-        height: 190px;
-        background-color: white;
-        border: 2px solid black;
-        z-index: 1000;
-        padding: 10px;
-        font-size: 14px;
-    ">
-        <b>LOS criteria:</b> within .3nm laterally AND 400 feet vertically<br>
-        <br/>
-        <b>LOS event types:</b><br>
-        <i style="background: blue; width: 10px; height: 10px; display: inline-block;"></i> Overtake<br>
-        <i style="background: orange; width: 10px; height: 10px; display: inline-block;"></i> T-Bone<br>
-        <i style="background: red; width: 10px; height: 10px; display: inline-block;"></i> Head-On<br>
-        <i style="background: green; width: 10px; height: 10px; display: inline-block;"></i> Other<br>
-    </div>
-    <script>
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                var legend = document.getElementById('legend-box');
-                var coordDisplay = document.querySelector('.coord-display');
-                if (legend) {
-                    legend.style.display = legend.style.display === 'none' ? 'block' : 'none';
-                }
-                if (coordDisplay) {
-                    coordDisplay.style.display = coordDisplay.style.display === 'none' ? 'block' : 'none';
-                }
-            }
-        });
-    </script>
-    """
-
-
 class CoordinateDisplay(MacroElement):
     """A Leaflet control that displays current viewport bounds.
 
@@ -188,6 +109,13 @@ def build_hide_script(points_json, map_name,
         "0.7: 'yellow', 0.9: 'orange', 1.0: 'red'}\n"
         "        });\n"
         "        nativeHeatmapLayer.addTo(map);\n"
+        "        var pane = map.getPane('heatmapPane');\n"
+        "        if (pane && nativeHeatmapLayer._canvas) {\n"
+        "            nativeHeatmapLayer._canvas.style.zIndex = 450;\n"
+        "            nativeHeatmapLayer._canvas.style.pointerEvents = 'none';\n"
+        "            nativeHeatmapLayer._canvas.style.opacity = '0.6';\n"
+        "            pane.appendChild(nativeHeatmapLayer._canvas);\n"
+        "        }\n"
         "        console.log('Rebuilt heatmap with ' + visiblePoints.length + ' points');\n"
         "    }\n"
         "}\n"
@@ -233,9 +161,17 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(function() {
         var map = getMap();
         if (map) {
+            var heatPane = map.createPane('heatmapPane');
+            heatPane.style.zIndex = 450;
+            heatPane.style.pointerEvents = 'none';
+
             map.eachLayer(function(layer) {
                 if (layer._heat) {
                     nativeHeatmapLayer = layer;
+                    layer._canvas.style.zIndex = 450;
+                    layer._canvas.style.pointerEvents = 'none';
+                    layer._canvas.style.opacity = '0.6';
+                    heatPane.appendChild(layer._canvas);
                     console.log('Found native heatmap layer with ' + allPoints.length + ' points');
                 }
             });
@@ -474,13 +410,12 @@ def build_help_html(cmd_args):
         "background-color: white; border: 2px solid #333; border-radius: 5px; "
         "padding: 10px; font-family: Arial, sans-serif; font-size: 12px; "
         'z-index: 9999; box-shadow: 2px 2px 6px rgba(0,0,0,0.3);">\n'
-        '<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">Help</div>\n'
+        '<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">GA hotspots</div>\n'
         '<div style="margin-bottom: 4px;">&bull; Click red dots for incident info</div>\n'
         '<div style="margin-bottom: 8px;">&bull; Press <kbd>b</kbd> to toggle viewport bounds</div>\n'
         '<div style="border-top: 1px solid #ccc; padding-top: 8px; margin-top: 8px;">'
-        '<div style="font-weight: bold; font-size: 11px; margin-bottom: 4px;">Generated with:</div>'
-        "<div style=\"font-family: 'Courier New', monospace; font-size: 10px; color: #555; "
-        'word-wrap: break-word;">' + cmd_args + '</div>'
+        '<div style="font-weight: bold; font-size: 11px; margin-bottom: 4px;">'
+        'Data courtesy <a href="http://adsb.lol">adsb.lol</a>, via the Open Database License</div>\n'
         '</div>\n'
         '</div>\n'
     )

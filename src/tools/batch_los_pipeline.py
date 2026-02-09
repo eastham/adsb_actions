@@ -470,6 +470,7 @@ def aggregate_airport_results(icao: str, airport_info: dict,
     vis_cmd = (
         f"cat {combined_csv} | python3 src/postprocessing/visualizer.py "
         f"--sw {sw_lat},{sw_lon} --ne {ne_lat},{ne_lon} "
+        f"--native-heatmap --heatmap-opacity 0.5 --heatmap-radius 25 "
     )
 
     if combined_traffic and combined_traffic.exists():
