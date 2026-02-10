@@ -58,6 +58,7 @@ from batch_helpers import (
     generate_date_range,
     compute_bounds,
     run_command,
+    validate_date,
     estimate_download_size,
     print_pipeline_summary,
     print_completion_summary,
@@ -70,6 +71,7 @@ from batch_helpers import (
 ESTIMATED_DAILY_DATA_GB = 3.0
 DATA_DIR = Path("data")
 BASE_DIR = Path("examples/generated")
+GZ_DATA_PREFIX = "global_"  # Prefix for global sorted JSONL input files from convert_traces.py
 
 # Track incomplete files for cleanup on interruption
 _incomplete_files = set()
@@ -98,15 +100,6 @@ def register_cleanup_handler():
     signal.signal(signal.SIGINT, cleanup_handler)
     signal.signal(signal.SIGTERM, cleanup_handler)
     _cleanup_registered = True
-
-
-def validate_date(date_text):
-    """Validate and parse date in mm/dd/yy format."""
-    try:
-        return datetime.strptime(date_text, '%m/%d/%y')
-    except ValueError:
-        raise argparse.ArgumentTypeError(
-            f"Incorrect date format '{date_text}', should be mm/dd/yy")
 
 
 def load_airport_list(filepath: str, max_airports: int = None) -> list[str]:
@@ -266,8 +259,8 @@ def convert_traces_global(date_obj: datetime) -> Path:
     date_compact = date_obj.strftime('%m%d%y')
 
     # Use local temp directory for fast, reliable I/O
-    local_temp = Path("/tmp") / f"global_{date_compact}.gz"
-    network_final = DATA_DIR / f"global_{date_compact}.gz"
+    local_temp = Path("/tmp") / f"{GZ_DATA_PREFIX}{date_compact}.gz"
+    network_final = DATA_DIR / f"{GZ_DATA_PREFIX}{date_compact}.gz"
 
     print(f"⚙️ Converting traces to {local_temp} (local temp)...")
     traces_dir = BASE_DIR / "traces"
@@ -523,7 +516,7 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
         # --- Extract ---
         timer.start('extract')
         # Check network storage for cached file (authoritative source)
-        network_global_gz = DATA_DIR / f"global_{date_compact}.gz"
+        network_global_gz = DATA_DIR / f"{GZ_DATA_PREFIX}{date_compact}.gz"
         global_gz = network_global_gz
 
         if not dry_run:

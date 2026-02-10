@@ -1,0 +1,9 @@
+
+rules:
+  stripper:
+    conditions:
+      latlongring: [100, 36.9357325,-121.7896375]  # 100nm radius around KWVI
+      min_alt: 300
+      max_alt: 4000
+    actions:
+      emit_jsonl: "output/KWVI.gz"

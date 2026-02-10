@@ -13,6 +13,7 @@ from applications.airport_monitor.db_ops import add_los, update_los
 from adsb_actions.stats import Stats
 from adsb_actions.location import Location
 from adsb_actions.adsb_logger import Logger
+from adsb_actions.flight import PLAYBACK_WEBSITE
 
 logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
@@ -162,7 +163,7 @@ def log_csv_record(flight1, flight2, los, datestring, altdatestring,
         los.create_time  # Use event start time, not end time
     ).strftime("%Y-%m-%d-%H:%M")
     link = (
-        f"https://globe.airplanes.live/" # TODO make configurable
+        f"{PLAYBACK_WEBSITE}/"
         f"?replay={replay_time}&lat={meanloc.lat}&lon={meanloc.lon}"
         f"&zoom=12'"
     )

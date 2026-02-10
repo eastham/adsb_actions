@@ -102,6 +102,98 @@ class MapVisualizer:
         else:
             return "red"  # All LOS events are red
 
+    def add_traffic_tile_overlay(self, m, tile_dir, zoom=None, opacity=0.7,
+                                 radius_nm=100):
+        """Add pre-rendered traffic density tiles as ImageOverlay layers.
+
+        Loads tiles at multiple zoom levels covering radius_nm around the
+        map center. Uses the highest available zoom for the immediate area
+        and progressively coarser zooms for the wider region.
+
+        Args:
+            m: Folium map object
+            tile_dir: Path to tile directory containing {z}/{x}/{y}.png
+            zoom: Tile zoom level to load (auto-detected from directory if None)
+            opacity: Overlay opacity (0.0-1.0)
+            radius_nm: Load tiles within this radius (nm) of map center
+        """
+        import math
+        from pathlib import Path
+
+        tile_dir = Path(tile_dir)
+
+        # Find all available zoom levels
+        available_zooms = sorted([
+            int(d.name) for d in tile_dir.iterdir()
+            if d.is_dir() and d.name.isdigit()
+        ], reverse=True)
+        if not available_zooms:
+            print(f"No tile zoom directories found in {tile_dir}")
+            return
+        max_zoom = available_zooms[0]
+        print(f"Available tile zoom levels: {sorted(available_zooms)}")
+
+        def _latlon_to_tile(lat, lon, z):
+            n = 2 ** z
+            tx = int((lon + 180.0) / 360.0 * n)
+            lat_rad = math.radians(lat)
+            ty = int((1.0 - math.log(math.tan(lat_rad) + 1.0 / math.cos(lat_rad))
+                       / math.pi) / 2.0 * n)
+            return tx, ty
+
+        def _tile_bounds(tx, ty, z):
+            n = 2 ** z
+            sw_lon = tx / n * 360.0 - 180.0
+            ne_lon = (tx + 1) / n * 360.0 - 180.0
+            ne_lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * ty / n))))
+            sw_lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (ty + 1) / n))))
+            return [[sw_lat, sw_lon], [ne_lat, ne_lon]]
+
+        traffic_group = folium.FeatureGroup(name="Traffic Density", show=True)
+        total_count = 0
+
+        center_lat = (self.ll_lat + self.ur_lat) / 2
+        center_lon = (self.ll_lon + self.ur_lon) / 2
+
+        # Load tiles at each zoom level for progressively wider areas
+        # Highest zoom: inner area; lower zooms: fill out to radius_nm
+        covered = set()  # track parent tiles already covered by children
+        for z in available_zooms:
+            lat_offset = radius_nm / 60.0
+            lon_offset = radius_nm / (60.0 * math.cos(math.radians(center_lat)))
+
+            min_tx, min_ty = _latlon_to_tile(center_lat + lat_offset,
+                                              center_lon - lon_offset, z)
+            max_tx, max_ty = _latlon_to_tile(center_lat - lat_offset,
+                                              center_lon + lon_offset, z)
+
+            count = 0
+            for tx in range(min_tx, max_tx + 1):
+                for ty in range(min_ty, max_ty + 1):
+                    # Skip if a higher-zoom child already covers this area
+                    if (z, tx, ty) in covered:
+                        continue
+                    tile_path = tile_dir / str(z) / str(tx) / f"{ty}.png"
+                    if tile_path.exists():
+                        bounds = _tile_bounds(tx, ty, z)
+                        folium.raster_layers.ImageOverlay(
+                            image=str(tile_path),
+                            bounds=bounds,
+                            opacity=opacity,
+                        ).add_to(traffic_group)
+                        count += 1
+                        # Mark parent as covered so lower zooms skip it
+                        if z > available_zooms[-1]:
+                            covered.add((z - 1, tx // 2, ty // 2))
+
+            if count > 0:
+                total_count += count
+                print(f"  Zoom {z}: {count} tiles")
+
+        traffic_group.add_to(m)
+        print(f"Added {total_count} traffic density tiles ({radius_nm}nm radius) "
+              f"from {tile_dir}")
+
     def add_traffic_tracks(self, m, tracks, opacity=0.5):
         """Add traffic tracks as semi-transparent polylines.
 
@@ -124,8 +216,8 @@ class MapVisualizer:
             # Draw the polyline
             folium.PolyLine(
                 locations=coords,
-                color='blue',
-                weight=2,
+                color='#4488ff',
+                weight=3,
                 opacity=opacity
             ).add_to(tracks_group)
 
@@ -138,6 +230,7 @@ class MapVisualizer:
                   enable_heatmap=False, native_heatmap=False, heatmap_bandwidth=None,
                   heatmap_radius=20, heatmap_blur=25, heatmap_min_opacity=0.3,
                   traffic_tracks=None, track_opacity=0.5,
+                  traffic_tile_dir=None,
                   busyness_data=None, data_quality=None):
         """
         Generate and save the visualization map.
@@ -152,7 +245,7 @@ class MapVisualizer:
         Raises:
             ValueError: If no points have been added or points/annotations length mismatch
         """
-        if not self.points and not traffic_tracks:
+        if not self.points and not traffic_tracks and not traffic_tile_dir:
             raise ValueError("Points list cannot be empty and no traffic tracks provided")
 
         if self.points and len(self.points) != len(self.annotations):
@@ -247,6 +340,10 @@ class MapVisualizer:
                 ).add_to(m)
 
             print(f"GeoJSON features loaded from: {geojson_file}")
+
+        # Add traffic density tile overlay (pre-rendered PNG tiles)
+        if traffic_tile_dir:
+            self.add_traffic_tile_overlay(m, traffic_tile_dir)
 
         # Add traffic tracks BEFORE LOS points (background layer)
         if traffic_tracks:
@@ -402,6 +499,8 @@ if __name__ == "__main__":
                         help="Heatmap minimum opacity, range 0.0-1.0 (default: 0.3)")
     parser.add_argument("--traffic-samples", type=str,
                         help="Path to JSON file with traffic tracks (one track per line)")
+    parser.add_argument("--traffic-tiles", type=str, default=None,
+                        help="Path to traffic tile directory (contains {z}/{x}/{y}.png)")
     parser.add_argument("--track-opacity", type=float, default=0.1,
                         help="Traffic track opacity, range 0.0-1.0 (default: 0.5)")
     parser.add_argument("--sw", type=str, default=None,
@@ -528,7 +627,7 @@ if __name__ == "__main__":
         print(f"Loaded {len(traffic_tracks):,} flight tracks with {total_points:,} total points")
 
     print(f"Visualizing {ctr} LOS events.")
-    if ctr == 0 and not traffic_tracks:
+    if ctr == 0 and not traffic_tracks and not args.traffic_tiles:
         print("⚠️ No LOS events or traffic tracks to visualize")
         sys.exit(0)
     elif ctr == 0:
@@ -549,6 +648,7 @@ if __name__ == "__main__":
         heatmap_min_opacity=args.heatmap_opacity,
         traffic_tracks=traffic_tracks,
         track_opacity=args.track_opacity,
+        traffic_tile_dir=args.traffic_tiles,
         busyness_data=busyness_data,
         data_quality=quality_data
     )

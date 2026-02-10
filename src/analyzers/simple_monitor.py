@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """Sample implementation for the library.
 
 Takes ip address/port/yaml from command line and processes the data,

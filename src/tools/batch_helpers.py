@@ -104,6 +104,16 @@ def is_weekend(date: datetime) -> bool:
     return date.weekday() >= 5
 
 
+def validate_date(date_text):
+    """Validate and parse date in mm/dd/yy format."""
+    try:
+        return datetime.strptime(date_text, '%m/%d/%y')
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"Incorrect date format '{date_text}', should be mm/dd/yy")
+
+
+
 def generate_date_range(start: datetime, end: datetime,
                         day_filter: str = 'all') -> list[datetime]:
     """Generate list of dates in range, optionally filtered.
