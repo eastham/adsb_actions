@@ -25,7 +25,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
 
-INPUT_DATA_PREFIX = "global_"  # Prefix for global sorted JSONL input files from convert_traces.py  
+INPUT_DATA_PREFIX = "KMOD_100nm_"  # Prefix for global sorted JSONL input files from convert_traces.py  
+
 
 try:
     from src.tools.batch_helpers import FT_MAX_ABOVE_AIRPORT, FT_MIN_BELOW_AIRPORT
@@ -45,6 +46,9 @@ NUM_BANDS = 10
 # Default zoom level (~160ft/pixel at 40°N)
 DEFAULT_ZOOM = 11
 
+DENSITY_FOR_FULL_BRIGHTNESS = 20  # adjust this: lower = brighter single tracks
+COLOR_VIBRANCY = 0.9  # adjust this: 1.0 = full brightness, <1.0 = dimmer, >1.0 = brighter
+TRACK_WIDTH = 3  # pixels - adjust this for thicker or thinner track lines
 
 # --- Tile coordinate math (standard Web Mercator) ---
 
@@ -294,28 +298,26 @@ def flush_segments(segments_by_tile_band, tile_store):
         acc, count = tile_store.get(tx, ty)
 
         color_rgb = band_to_color(band)
-        cr, cg, cb = int(color_rgb[0] + 0.5), int(color_rgb[1] + 0.5), int(color_rgb[2] + 0.5)
+        # Don't scale colors here - we'll handle opacity at save time
+        cr = int(color_rgb[0] + 0.5)
+        cg = int(color_rgb[1] + 0.5)
+        cb = int(color_rgb[2] + 0.5)
 
         # Draw all segments for this band on a scratch image
         scratch = Image.new('L', (256, 256), 0)
         draw = ImageDraw.Draw(scratch)
         for seg in segs:
             draw.line([(seg[0], seg[1]), (seg[2], seg[3])],
-                      fill=255, width=2)
+                      fill=255, width=TRACK_WIDTH)
 
-        mask = np.array(scratch) > 0
-        # Saturating add to avoid uint16 overflow (max 65535)
-        if cr > 0:
-            acc[:, :, 0][mask] = np.minimum(
-                acc[:, :, 0][mask].astype(np.uint32) + cr, 65535).astype(np.uint16)
-        if cg > 0:
-            acc[:, :, 1][mask] = np.minimum(
-                acc[:, :, 1][mask].astype(np.uint32) + cg, 65535).astype(np.uint16)
-        if cb > 0:
-            acc[:, :, 2][mask] = np.minimum(
-                acc[:, :, 2][mask].astype(np.uint32) + cb, 65535).astype(np.uint16)
-        count[mask] = np.minimum(
-            count[mask].astype(np.uint32) + 1, 65535).astype(np.uint16)
+        # Use threshold > 128 to ignore anti-aliased edges (only keep solid pixels)
+        mask = np.array(scratch) > 128
+        # Use MAX not ADD - avoids dark colors from same track hitting pixels multiple times
+        acc[:, :, 0][mask] = np.maximum(acc[:, :, 0][mask], cr)
+        acc[:, :, 1][mask] = np.maximum(acc[:, :, 1][mask], cg)
+        acc[:, :, 2][mask] = np.maximum(acc[:, :, 2][mask], cb)
+        # Count tracks contributing to each pixel (for density/opacity later)
+        count[mask] = np.minimum(count[mask].astype(np.uint32) + 1, 65535).astype(np.uint16)
         render_count += 1
 
     segments_by_tile_band.clear()
@@ -494,13 +496,16 @@ def generate_tiles(data_dir, output_dir, zoom=DEFAULT_ZOOM, max_files=10,
         if tile_max == 0:
             continue
 
-        # Normalize uint16 accumulator to 0.0-1.0 then apply gamma
-        # boost (gamma < 1 brightens midtones so sparse tracks are visible)
-        normalized = acc.astype(np.float32) / tile_max
-        gamma = 0.5
-        brightened = np.power(normalized, gamma)
-        rgb = (brightened * 255.0).clip(0, 255).astype(np.uint8)
-        alpha = np.where(count > 0, 255, 0).astype(np.uint8)
+        # Scale colors by track density to control opacity
+        # count tracks how many bands/tracks touched each pixel
+        # A single track = partial opacity, multiple overlapping tracks = brighter
+
+        # Scale alpha by density (more tracks = more opaque)
+        alpha_scale = np.minimum(count.astype(np.float32) / DENSITY_FOR_FULL_BRIGHTNESS, 1.0)
+        alpha = (alpha_scale * 255.0).clip(0, 255).astype(np.uint8)
+
+        # Scale color brightness (vibrancy control)
+        rgb = (acc.astype(np.float32) * COLOR_VIBRANCY).clip(0, 255).astype(np.uint8)
         rgba = np.dstack([rgb, alpha])
 
         img = Image.fromarray(rgba, 'RGBA')
@@ -561,7 +566,7 @@ if __name__ == "__main__":
                         help=f"Tile zoom level (default: {DEFAULT_ZOOM})")
     parser.add_argument("--max-files", type=int, default=10,
                         help="Maximum number of global files to process")
-    parser.add_argument("--seed", type=int, default=None,
+    parser.add_argument("--seed", type=int, default=123,
                         help="Random seed for file selection")
     parser.add_argument("--max-records", type=int, default=None,
                         help="Stop processing each file after this many records")

@@ -191,6 +191,50 @@ class MapVisualizer:
                 print(f"  Zoom {z}: {count} tiles")
 
         traffic_group.add_to(m)
+
+        # Add opacity slider control for traffic tiles
+        opacity_slider_html = """
+        <div style="position: fixed;
+                    top: 10px;
+                    right: 10px;
+                    width: 250px;
+                    background-color: white;
+                    border: 2px solid grey;
+                    z-index: 9999;
+                    padding: 10px;
+                    border-radius: 5px;
+                    box-shadow: 2px 2px 6px rgba(0,0,0,0.3);">
+            <label for="traffic-opacity-slider" style="font-weight: bold; font-size: 14px;">
+                Traffic Layer Opacity: <span id="opacity-value">""" + str(int(opacity * 100)) + """</span>%
+            </label><br>
+            <input type="range"
+                   id="traffic-opacity-slider"
+                   min="0"
+                   max="100"
+                   value=\"""" + str(int(opacity * 100)) + """\"
+                   style="width: 100%; margin-top: 5px;">
+        </div>
+        <script>
+            // Wait for map to be ready
+            setTimeout(function() {
+                var slider = document.getElementById('traffic-opacity-slider');
+                var valueDisplay = document.getElementById('opacity-value');
+
+                slider.oninput = function() {
+                    valueDisplay.innerHTML = this.value;
+                    var opacityValue = this.value / 100.0;
+
+                    // Find all img elements that are part of ImageOverlay (leaflet-image-layer class)
+                    var overlayImages = document.querySelectorAll('.leaflet-image-layer');
+                    overlayImages.forEach(function(img) {
+                        img.style.opacity = opacityValue;
+                    });
+                };
+            }, 1000);
+        </script>
+        """
+        m.get_root().html.add_child(folium.Element(opacity_slider_html))
+
         print(f"Added {total_count} traffic density tiles ({radius_nm}nm radius) "
               f"from {tile_dir}")
 
@@ -360,9 +404,9 @@ class MapVisualizer:
                 hide_link = f' - <b><a href="#" onclick="hidePoint({idx}); return false;">Hide</a></b>'
                 popup_html = annotation + hide_link
 
-                circle = folium.Circle(
+                circle = folium.CircleMarker(
                     location=[lat, lon],
-                    radius=42,
+                    radius=4,  # pixels, not meters - consistent size at all zoom levels
                     color=color,
                     fill=True,
                     fill_color=color,
@@ -431,23 +475,68 @@ class MapVisualizer:
 
         # Add native heatmap if enabled (uses raw points, recomputes on hide)
         if native_heatmap and self.points:
+            heatmap_group = folium.FeatureGroup(name="Dynamic Heatmap", show=True)
+            # Blue-based color scheme to avoid conflict with red-yellow-green traffic tiles
+            # Use larger radius and max parameter to make zoom-independent
             HeatMap(
                 [[p[0], p[1]] for p in self.points],
-                name="Dynamic Heatmap",
-                radius=heatmap_radius,
-                blur=heatmap_blur,
+                radius=25,
+                blur=35,
                 min_opacity=heatmap_min_opacity,
+                max=1.0,  # Maximum point intensity (affects color mapping)
                 gradient={
-                    '0.0': 'blue',
-                    '0.3': 'cyan',
-                    '0.5': 'lime',
-                    '0.7': 'yellow',
-                    '0.9': 'orange',
-                    '1.0': 'red'
+                    '0.0': 'white',
+                    '0.25': 'aqua',
+                    '0.5': 'cyan',
+                    '0.75': 'blue',
+                    '1.0': 'navy'
                 }
-            ).add_to(m)
+            ).add_to(heatmap_group)
+            heatmap_group.add_to(m)
 
             m.get_root().html.add_child(folium.Element(NATIVE_HEATMAP_SCRIPT))
+
+            # Add heatmap opacity slider
+            heatmap_opacity_slider_html = """
+            <div style="position: fixed;
+                        top: 90px;
+                        right: 10px;
+                        width: 250px;
+                        background-color: white;
+                        border: 2px solid grey;
+                        z-index: 9999;
+                        padding: 10px;
+                        border-radius: 5px;
+                        box-shadow: 2px 2px 6px rgba(0,0,0,0.3);">
+                <label for="heatmap-opacity-slider" style="font-weight: bold; font-size: 14px;">
+                    Heatmap Opacity: <span id="heatmap-opacity-value">60</span>%
+                </label><br>
+                <input type="range"
+                       id="heatmap-opacity-slider"
+                       min="0"
+                       max="100"
+                       value="60"
+                       style="width: 100%; margin-top: 5px;">
+            </div>
+            <script>
+                setTimeout(function() {
+                    var slider = document.getElementById('heatmap-opacity-slider');
+                    var valueDisplay = document.getElementById('heatmap-opacity-value');
+
+                    slider.oninput = function() {
+                        valueDisplay.innerHTML = this.value;
+                        var opacityValue = this.value / 100.0;
+
+                        // Find heatmap canvas and update its opacity
+                        if (nativeHeatmapLayer && nativeHeatmapLayer._canvas) {
+                            nativeHeatmapLayer._canvas.style.opacity = opacityValue;
+                        }
+                    };
+                }, 1000);
+            </script>
+            """
+            m.get_root().html.add_child(folium.Element(heatmap_opacity_slider_html))
+
             print(f"Native heatmap enabled with {len(self.points)} points (updates on hide)")
 
         # Add busyness chart panel if data is available

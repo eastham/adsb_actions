@@ -88,6 +88,7 @@ def build_hide_script(points_json, map_name,
         "var hiddenPoints = [];\n"
         "var allPoints = " + json.dumps(points_json) + ";\n"
         "var nativeHeatmapLayer = null;\n"
+        "var heatmapParentGroup = null;\n"
         "\n"
         "function getMap() {\n"
         "    return " + map_name + ";\n"
@@ -95,28 +96,66 @@ def build_hide_script(points_json, map_name,
         "\n"
         "function rebuildNativeHeatmap() {\n"
         "    var map = getMap();\n"
-        "    if (!map || !nativeHeatmapLayer) return;\n"
+        "    if (!map) {\n"
+        "        console.error('rebuildNativeHeatmap: map not found');\n"
+        "        return;\n"
+        "    }\n"
+        "    if (!nativeHeatmapLayer) {\n"
+        "        console.error('rebuildNativeHeatmap: nativeHeatmapLayer is null');\n"
+        "        return;\n"
+        "    }\n"
+        "    \n"
         "    var visiblePoints = allPoints.filter(function(_, idx) {\n"
         "        return hiddenPoints.indexOf(idx) === -1;\n"
         "    });\n"
-        "    map.removeLayer(nativeHeatmapLayer);\n"
+        "    console.log('rebuildNativeHeatmap: ' + visiblePoints.length + ' visible points, parent: ' + (heatmapParentGroup ? 'FeatureGroup' : 'map'));\n"
+        "    \n"
+        "    // Remove from parent group if it exists, otherwise from map\n"
+        "    try {\n"
+        "        if (heatmapParentGroup && heatmapParentGroup.removeLayer) {\n"
+        "            heatmapParentGroup.removeLayer(nativeHeatmapLayer);\n"
+        "            console.log('Removed from FeatureGroup');\n"
+        "        } else {\n"
+        "            map.removeLayer(nativeHeatmapLayer);\n"
+        "            console.log('Removed from map');\n"
+        "        }\n"
+        "    } catch (e) {\n"
+        "        console.error('Error removing heatmap layer:', e);\n"
+        "    }\n"
+        "    \n"
         "    if (visiblePoints.length > 0) {\n"
         "        nativeHeatmapLayer = L.heatLayer(visiblePoints, {\n"
         "            radius: " + str(heatmap_radius) + ",\n"
         "            blur: " + str(heatmap_blur) + ",\n"
         "            minOpacity: " + str(heatmap_min_opacity) + ",\n"
-        "            gradient: {0.0: 'blue', 0.3: 'cyan', 0.5: 'lime', "
-        "0.7: 'yellow', 0.9: 'orange', 1.0: 'red'}\n"
+        "            max: 18,\n"
+        "            gradient: {0.0: 'white', 0.25: 'aqua', 0.5: 'cyan', "
+        "0.75: 'blue', 1.0: 'navy'}\n"
         "        });\n"
-        "        nativeHeatmapLayer.addTo(map);\n"
-        "        var pane = map.getPane('heatmapPane');\n"
-        "        if (pane && nativeHeatmapLayer._canvas) {\n"
+        "        console.log('Created new heatmap layer');\n"
+        "        \n"
+        "        // Add to parent group if it exists, otherwise to map\n"
+        "        try {\n"
+        "            if (heatmapParentGroup && heatmapParentGroup.addLayer) {\n"
+        "                nativeHeatmapLayer.addTo(heatmapParentGroup);\n"
+        "                console.log('Added to FeatureGroup');\n"
+        "            } else {\n"
+        "                nativeHeatmapLayer.addTo(map);\n"
+        "                console.log('Added to map');\n"
+        "            }\n"
+        "        } catch (e) {\n"
+        "            console.error('Error adding heatmap layer:', e);\n"
+        "        }\n"
+        "        \n"
+        "        // Just set styles, don't move canvas to avoid removal errors\n"
+        "        if (nativeHeatmapLayer._canvas) {\n"
         "            nativeHeatmapLayer._canvas.style.zIndex = 450;\n"
         "            nativeHeatmapLayer._canvas.style.pointerEvents = 'none';\n"
         "            nativeHeatmapLayer._canvas.style.opacity = '0.6';\n"
-        "            pane.appendChild(nativeHeatmapLayer._canvas);\n"
         "        }\n"
         "        console.log('Rebuilt heatmap with ' + visiblePoints.length + ' points');\n"
+        "    } else {\n"
+        "        console.log('No visible points, heatmap not recreated');\n"
         "    }\n"
         "}\n"
         "\n"
@@ -165,14 +204,34 @@ document.addEventListener('DOMContentLoaded', function() {
             heatPane.style.zIndex = 450;
             heatPane.style.pointerEvents = 'none';
 
-            map.eachLayer(function(layer) {
+            // Recursively search for heatmap layer (may be nested in FeatureGroup)
+            // Returns {heatLayer: layer, parentGroup: group}
+            function findHeatmapLayer(layer, parent) {
                 if (layer._heat) {
-                    nativeHeatmapLayer = layer;
-                    layer._canvas.style.zIndex = 450;
-                    layer._canvas.style.pointerEvents = 'none';
-                    layer._canvas.style.opacity = '0.6';
-                    heatPane.appendChild(layer._canvas);
-                    console.log('Found native heatmap layer with ' + allPoints.length + ' points');
+                    return {heatLayer: layer, parentGroup: parent};
+                }
+                if (layer.eachLayer) {
+                    var found = null;
+                    layer.eachLayer(function(child) {
+                        if (!found) {
+                            found = findHeatmapLayer(child, layer);
+                        }
+                    });
+                    return found;
+                }
+                return null;
+            }
+
+            map.eachLayer(function(layer) {
+                var result = findHeatmapLayer(layer, null);
+                if (result && result.heatLayer) {
+                    nativeHeatmapLayer = result.heatLayer;
+                    heatmapParentGroup = result.parentGroup;
+                    // Just set styles, don't move canvas to avoid removal errors
+                    result.heatLayer._canvas.style.zIndex = 450;
+                    result.heatLayer._canvas.style.pointerEvents = 'none';
+                    result.heatLayer._canvas.style.opacity = '0.6';
+                    console.log('Found native heatmap layer with ' + allPoints.length + ' points, parent: ' + (heatmapParentGroup ? 'FeatureGroup' : 'map'));
                 }
             });
         }

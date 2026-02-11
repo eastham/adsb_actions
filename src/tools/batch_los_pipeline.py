@@ -71,7 +71,7 @@ from batch_helpers import (
 ESTIMATED_DAILY_DATA_GB = 3.0
 DATA_DIR = Path("data")
 BASE_DIR = Path("examples/generated")
-GZ_DATA_PREFIX = "global_"  # Prefix for global sorted JSONL input files from convert_traces.py
+GZ_DATA_PREFIX = "KMOD_100nm_"  # Prefix for global sorted JSONL input files from convert_traces.py
 
 # Track incomplete files for cleanup on interruption
 _incomplete_files = set()
@@ -519,8 +519,10 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
         network_global_gz = DATA_DIR / f"{GZ_DATA_PREFIX}{date_compact}.gz"
         global_gz = network_global_gz
 
+        print(f"🔍 Checking for existing JSONL file in network storage: {network_global_gz}...")
         if not dry_run:
             if not network_global_gz.exists():
+                print(f" extracting to {network_global_gz}...")
                 if not extract_traces(date):
                     timer.end('extract')
                     print(f"❌ Extraction failed for "
