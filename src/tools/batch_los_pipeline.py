@@ -71,7 +71,7 @@ from batch_helpers import (
 ESTIMATED_DAILY_DATA_GB = 3.0
 DATA_DIR = Path("data")
 BASE_DIR = Path("examples/generated")
-GZ_DATA_PREFIX = "KMOD_100nm_"  # Prefix for global sorted JSONL input files from convert_traces.py
+GZ_DATA_PREFIX = "global_"  # Prefix for global sorted JSONL input files from convert_traces.py
 
 # Track incomplete files for cleanup on interruption
 _incomplete_files = set()
@@ -172,8 +172,11 @@ def generate_multi_airport_yaml(icao_codes: list[str], date_compact: str,
     lines = ["# Multi-airport shard YAML (auto-generated)", "rules:"]
 
     for icao in icao_codes:
+
         lat, lon, _ = airport_info[icao]
         output_path = f"{BASE_DIR}/{icao}/{date_compact}_{icao}.gz"
+        print(f"Generating multi-airport yaml, data target dir: {output_path}")
+
         lines.append(f"  {icao}_shard:")
         lines.append(f"    conditions:")
         lines.append(f"      latlongring: [{ANALYSIS_RADIUS_NM}, {lat}, {lon}]")
@@ -272,7 +275,7 @@ def convert_traces_global(date_obj: datetime) -> Path:
     # Background copy to network storage (don't block pipeline)
     print(f"📦 Copying {local_temp.name} to network storage in background...")
     run_command(
-        f"cp '{local_temp}' '{network_final}' && echo '✅ Network copy complete: {network_final.name}' &",
+        f"mv '{local_temp}' '{network_final}' && echo '✅ Network copy complete: {network_final.name}' &",
         dry_run=False)
 
     # Return local path for immediate use by shard pass
@@ -336,7 +339,7 @@ def run_airport_analysis(icao: str, date_compact: str,
            f"--yaml {airport_yaml} "
            f"--resample --sorted-file {trace_gz} --animate-los "
            f"--animation-dir {airport_dir} "
-           f"--export-traffic-samples {traffic_samples} "
+           # f"--export-traffic-samples {traffic_samples} "
            f"> {analysis_out} 2>&1")
     returncode = run_command(cmd, dry_run=dry_run)
 
@@ -373,7 +376,7 @@ def aggregate_airport_results(icao: str, airport_info: dict,
     lat, lon, field_elev = airport_info[icao]
     airport_dir = BASE_DIR / icao
     combined_csv = airport_dir / f"{icao}_combined.csv.out"
-
+    
     # Match date-prefixed files (MMDDYY_ICAO.csv.out), exclude combined file
     csv_files = sorted(f for f in airport_dir.glob("*_*.csv.out")
                        if f != combined_csv)
@@ -382,18 +385,26 @@ def aggregate_airport_results(icao: str, airport_info: dict,
         print(f"  No CSV results for {icao}")
         return
 
-    csv_list = " ".join(str(f) for f in csv_files)
-
     if dry_run:
-        print(f"[DRY-RUN] cat {csv_list} > {combined_csv}")
+        print(f"[DRY-RUN] Combine {len(csv_files)} CSV files > {combined_csv}")
         print(f"[DRY-RUN] cat {combined_csv} | python3 src/postprocessing/visualizer.py ...")
         return
 
-    run_command(f"cat {csv_list} > {combined_csv}")
+    # Write metadata header, then append all CSV files
+    with open(combined_csv, 'w') as outf:
+        outf.write(f"# analysis_radius_nm = {ANALYSIS_RADIUS_NM}\n")
+        outf.write(f"# center_lat = {lat}\n")
+        outf.write(f"# center_lon = {lon}\n")
 
-    # Combine traffic samples from all dates
-    combined_traffic = airport_dir / f"{icao}_traffic_combined.csv"
-    traffic_files = sorted(airport_dir.glob("*_*_traffic.csv"))
+        # Concatenate all CSV files
+        for csv_file in csv_files:
+            with open(csv_file, 'r') as inf:
+                outf.write(inf.read())
+    
+    # Combine traffic samples from all dates - DISABLED
+    #combined_traffic = airport_dir / f"{icao}_traffic_combined.csv"
+    #traffic_files = sorted(airport_dir.glob("*_*_traffic.csv"))
+    combined_traffic = traffic_files = None  # Disable traffic sample combination for now
 
     if traffic_files:
         # First combine all files
@@ -476,6 +487,7 @@ def aggregate_airport_results(icao: str, airport_info: dict,
     if quality_json and quality_json.exists():
         vis_cmd += f"--data-quality {quality_json} "
 
+    vis_cmd += "--traffic-tiles tiles/traffic/ "
     vis_cmd += f"--output {vis_output} --no-browser"
     run_command(vis_cmd)
 
@@ -559,7 +571,7 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
             print(f"[DRY-RUN] Convert traces -> {global_gz}")
         timer.end('convert_traces')
 
-        # --- Pass 1: Shard ---
+        # --- Pass 1: Shard into per-airport JSONL gzip files ---
         # Check if all airport shard files already exist
         all_shards_exist = True
         if not dry_run:
@@ -681,7 +693,7 @@ def _aggregate_airport_worker(args):
 
 
 def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
-                         timer: SimpleTimer, dry_run: bool = False, parallel: bool = True):
+                         timer: SimpleTimer, dry_run: bool = False, parallel: bool = True) -> dict:
     """Run cross-date aggregation for all airports.
 
     Args:
@@ -690,6 +702,9 @@ def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
         timer: Timer instance for tracking
         dry_run: Whether this is a dry run
         parallel: Whether to run aggregations in parallel (default: True)
+
+    Returns:
+        Dict mapping ICAO to output stats (num_events, data_quality, html_path)
     """
     print(f"\n{'=' * 60}")
     print(f"Cross-date aggregation")
@@ -719,6 +734,85 @@ def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
             aggregate_airport_results(icao, airport_info, dry_run=dry_run)
 
     timer.end('aggregation')
+
+    # Collect output statistics from generated files
+    output_stats = {}
+    if not dry_run:
+        import json
+        for icao in icao_codes:
+            airport_dir = BASE_DIR / icao
+            html_path = airport_dir / f"{icao}_map.html"
+            combined_csv = airport_dir / f"{icao}_combined.csv.out"
+            quality_json = airport_dir / f"{icao}_quality.json"
+
+            if html_path.exists():
+                # Count LOS events from combined CSV
+                num_events = 0
+                if combined_csv.exists():
+                    with open(combined_csv, 'r') as f:
+                        num_events = sum(1 for _ in f)
+
+                # Load data quality metrics
+                quality_data = None
+                if quality_json.exists():
+                    try:
+                        quality_data = json.loads(quality_json.read_text())
+                    except Exception:
+                        pass
+
+                output_stats[icao] = {
+                    'html_path': html_path,
+                    'num_events': num_events,
+                    'quality_data': quality_data
+                }
+
+    return output_stats
+
+
+def print_visualization_summary(output_stats: dict):
+    """Print summary of generated HTML visualizations with stats.
+
+    Args:
+        output_stats: Dict mapping ICAO to {html_path, num_events, quality_data}
+    """
+    if not output_stats:
+        return
+
+    print("\n" + "=" * 80)
+    print("GENERATED VISUALIZATIONS")
+    print("=" * 80)
+
+    for icao in sorted(output_stats.keys()):
+        stats = output_stats[icao]
+        html_path = stats['html_path']
+        num_events = stats['num_events']
+        quality_data = stats.get('quality_data')
+
+        print(f"\n{icao}: {html_path}")
+        print(f"  LOS Events: {num_events}", end="")
+
+        if quality_data:
+            score = quality_data.get('score', 'N/A')
+            completion = (quality_data.get('completionRate') or 0) * 100
+            median_gap = quality_data.get('medianGapS') or 0
+
+            # Color-code the score
+            if score == 'green':
+                score_display = '🟢 Green (Excellent)'
+            elif score == 'yellow':
+                score_display = '🟡 Yellow (Good)'
+            elif score == 'red':
+                score_display = '🔴 Red (Poor)'
+            else:
+                score_display = score
+
+            print(f"  Data Quality: {score_display}")
+            print(f"  Completion Rate: {completion:.1f}%", end="")
+            print(f"  Median Gap: {median_gap:.1f}s")
+        else:
+            print(f"  Data Quality: No quality data available")
+
+    print("\n" + "=" * 80)
 
 
 def main():
@@ -838,11 +932,15 @@ Examples:
             )
 
     # --- Cross-date aggregation ---
-    run_aggregation_phase(icao_codes, airport_info, timer, dry_run=args.dry_run)
+    output_stats = run_aggregation_phase(icao_codes, airport_info, timer, dry_run=args.dry_run)
 
     # Summary
     timer.end('total_pipeline')
     print_completion_summary(dates, icao_codes, failed_runs)
+
+    # Print visualization summary with stats
+    if output_stats and not args.dry_run:
+        print_visualization_summary(output_stats)
 
     # Save timing report
     if not args.dry_run:

@@ -245,13 +245,13 @@ _QUALITY_COLORS = {"green": "#2ecc40", "yellow": "#ffdc00", "red": "#ff4136"}
 _QUALITY_LABELS = {"green": "Good", "yellow": "Fair", "red": "Poor"}
 
 
-def _build_quality_indicator(data_quality):
-    """Build the data quality indicator HTML for the busyness panel.
+def build_quality_indicator_json(data_quality):
+    """Build quality indicator data as JSON for injection into JavaScript.
 
-    Returns an HTML string (possibly empty if data_quality is None).
+    Returns JSON string with color, label, and tooltip.
     """
     if not data_quality:
-        return ''
+        return 'null'
 
     score = data_quality.get("score", "yellow")
     color = _QUALITY_COLORS.get(score, "#ffdc00")
@@ -272,33 +272,21 @@ def _build_quality_indicator(data_quality):
     if gap_str:
         tooltip_lines.append(gap_str)
     tooltip_lines.append(f"Based on {num_dates} days of data")
-    tooltip = '&#10;'.join(tooltip_lines)
+    tooltip = '\n'.join(tooltip_lines)  # Actual newline - will work in title attribute
 
-    return (
-        '<div id="quality-indicator" style="'
-        'border-top: 1px solid #ddd; margin-top: 6px; '
-        'padding-top: 6px; cursor: help;" '
-        'title="' + tooltip + '">'
-        '<span style="display: inline-block; width: 12px; '
-        'height: 12px; border-radius: 50%; '
-        'background-color: ' + color + '; '
-        'border: 1px solid #333; vertical-align: middle;'
-        '"></span> '
-        '<span style="font-size: 11px; color: #555;">'
-        'Data Quality: ' + label
-        + ' (mouseover for details)</span></div>\n'
-    )
+    return json.dumps({
+        'color': color,
+        'label': label,
+        'tooltip': tooltip
+    })
 
 
-def build_busyness_html(busyness_data, data_quality=None):
+def build_busyness_html(busyness_data):
     """Build the busyness chart panel HTML/CSS/JS.
 
     Args:
         busyness_data: Dict with keys 'data', 'globalMax', 'hasWeather',
                        'icao', 'numDates', 'weatherCategories'.
-        data_quality: Optional dict with keys 'score', 'completionRate',
-                      'medianGapS', 'numDates', etc. If provided, a
-                      quality indicator is shown below the chart.
     Returns:
         HTML string to inject via folium.Element().
     """
@@ -343,10 +331,6 @@ def build_busyness_html(busyness_data, data_quality=None):
         '<div id="busy-chart-wrap" style="position: relative; height: 140px;">'
         '<canvas id="busyness-chart"></canvas>'
         '</div>\n'
-        '<div id="busy-subtitle" style="text-align: center; font-size: 10px; color: #888; margin-top: 4px;">'
-        'Based on ' + str(num_dates) + ' days of data'
-        '</div>\n'
-        + _build_quality_indicator(data_quality) +
         '</div>\n'
     )
 
@@ -465,7 +449,7 @@ def build_help_html(cmd_args):
     """
     help_panel = (
         '<div id="help-window" style="'
-        "position: fixed; bottom: 20px; left: 20px; width: 300px; "
+        "position: fixed; bottom: 20px; left: 20px; width: 350px; "
         "background-color: white; border: 2px solid #333; border-radius: 5px; "
         "padding: 10px; font-family: Arial, sans-serif; font-size: 12px; "
         'z-index: 9999; box-shadow: 2px 2px 6px rgba(0,0,0,0.3);">\n'

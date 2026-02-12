@@ -51,7 +51,8 @@ if __name__ == "__main__":
         if os.path.exists(destination_file):
             print(f"Final destination file {destination_file} already exists, skipping")
             continue
-
+        else:
+            print(f"Output file {destination_file} does not exist, processing...")
         print(f"Extracting local data for {date_str} to {output_file}...")
         command_process = f"python3  src/analyzers/simple_monitor.py --sorted-file {input_file}  examples/KMOD/strip_global.yaml"
         command_mv = f"mv {output_file} {destination_file}"

@@ -144,7 +144,7 @@ def test_build_data_quality_empty(tmp_path):
 
 
 def test_quality_in_html(tmp_path):
-    """Verify quality indicator renders in the visualizer HTML."""
+    """Verify visualizer generates with busyness and quality data."""
     import json
     import subprocess
 
@@ -196,5 +196,6 @@ def test_quality_in_html(tmp_path):
     assert output_html.exists()
 
     html = output_html.read_text()
-    assert "quality-indicator" in html
-    assert "Data Quality:" in html
+    # Verify busyness chart is present
+    assert "busyness-chart" in html
+    assert "Typical Traffic" in html

@@ -25,8 +25,12 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
 
-INPUT_DATA_PREFIX = "KMOD_100nm_"  # Prefix for global sorted JSONL input files from convert_traces.py  
+INPUT_DATA_PREFIX = "global_"  # Prefix for global sorted JSONL input files from convert_traces.py
 
+# Continental US bounding box (upper-left and lower-right corners)
+# These bounds roughly cover the contiguous United States
+CONUS_UPPER_LEFT = (49.5, -125.0)   # lat, lon (northwest corner near WA/Canada border)
+CONUS_LOWER_RIGHT = (24.5, -66.0)   # lat, lon (southeast corner near FL/Atlantic)
 
 try:
     from src.tools.batch_helpers import FT_MAX_ABOVE_AIRPORT, FT_MIN_BELOW_AIRPORT
@@ -48,7 +52,32 @@ DEFAULT_ZOOM = 11
 
 DENSITY_FOR_FULL_BRIGHTNESS = 20  # adjust this: lower = brighter single tracks
 COLOR_VIBRANCY = 0.9  # adjust this: 1.0 = full brightness, <1.0 = dimmer, >1.0 = brighter
-TRACK_WIDTH = 3  # pixels - adjust this for thicker or thinner track lines
+TRACK_WIDTH = 2  # pixels - adjust this for thicker or thinner track lines
+
+# --- Geographic bounds checking ---
+
+def is_within_conus(lat, lon):
+    """Check if a lat/lon point is within the continental US bounding box.
+
+    Args:
+        lat: Latitude in degrees
+        lon: Longitude in degrees
+
+    Returns:
+        True if point is within CONUS bounds, False otherwise
+    """
+    ul_lat, ul_lon = CONUS_UPPER_LEFT
+    lr_lat, lr_lon = CONUS_LOWER_RIGHT
+
+    # Check latitude (north to south)
+    if not (lr_lat <= lat <= ul_lat):
+        return False
+
+    # Check longitude (west to east)
+    if not (ul_lon <= lon <= lr_lon):
+        return False
+
+    return True
 
 # --- Tile coordinate math (standard Web Mercator) ---
 
@@ -145,6 +174,85 @@ def get_tile_field_elev(tx, ty, zoom, airports, cache):
     return elev
 
 
+# --- Line clipping ---
+
+def clip_segment_to_tile(x1, y1, x2, y2, tx1, ty1, tx2, ty2, target_tx, target_ty):
+    """Clip a line segment to a specific tile's pixel bounds [0, 256).
+
+    Args:
+        x1, y1: Start point in tile (tx1, ty1) pixel coords
+        x2, y2: End point in tile (tx2, ty2) pixel coords
+        tx1, ty1: Tile coordinates of start point
+        tx2, ty2: Tile coordinates of end point
+        target_tx, target_ty: Tile to clip to
+
+    Returns:
+        (clipped_x1, clipped_y1, clipped_x2, clipped_y2) in target tile coords,
+        or None if segment doesn't intersect this tile.
+    """
+    # Convert both endpoints to target tile's coordinate system
+    # Each tile is 256 pixels, so offset = (tile_diff) * 256
+    offset_x1 = (tx1 - target_tx) * 256
+    offset_y1 = (ty1 - target_ty) * 256
+    offset_x2 = (tx2 - target_tx) * 256
+    offset_y2 = (ty2 - target_ty) * 256
+
+    # Convert to target tile coords
+    seg_x1 = x1 + offset_x1
+    seg_y1 = y1 + offset_y1
+    seg_x2 = x2 + offset_x2
+    seg_y2 = y2 + offset_y2
+
+    # Clip to [0, 256) using Cohen-Sutherland
+    xmin, ymin, xmax, ymax = 0, 0, 256, 256
+
+    def outcode(x, y):
+        code = 0
+        if x < xmin: code |= 1  # LEFT
+        if x >= xmax: code |= 2  # RIGHT
+        if y < ymin: code |= 4  # TOP
+        if y >= ymax: code |= 8  # BOTTOM
+        return code
+
+    out1 = outcode(seg_x1, seg_y1)
+    out2 = outcode(seg_x2, seg_y2)
+
+    while True:
+        if not (out1 | out2):  # Both inside
+            return (int(seg_x1), int(seg_y1), int(seg_x2), int(seg_y2))
+        if out1 & out2:  # Both outside same edge
+            return None
+
+        # Pick point outside and clip
+        out = out1 if out1 else out2
+
+        # Find intersection with boundary
+        if seg_x2 != seg_x1:
+            slope = (seg_y2 - seg_y1) / (seg_x2 - seg_x1)
+        else:
+            slope = float('inf')
+
+        if out & 1:  # LEFT
+            x = xmin
+            y = seg_y1 + slope * (x - seg_x1) if slope != float('inf') else seg_y1
+        elif out & 2:  # RIGHT
+            x = xmax - 0.001  # Just inside
+            y = seg_y1 + slope * (x - seg_x1) if slope != float('inf') else seg_y1
+        elif out & 4:  # TOP
+            y = ymin
+            x = seg_x1 + (y - seg_y1) / slope if slope != 0 and slope != float('inf') else seg_x1
+        else:  # BOTTOM
+            y = ymax - 0.001  # Just inside
+            x = seg_x1 + (y - seg_y1) / slope if slope != 0 and slope != float('inf') else seg_x1
+
+        if out == out1:
+            seg_x1, seg_y1 = x, y
+            out1 = outcode(seg_x1, seg_y1)
+        else:
+            seg_x2, seg_y2 = x, y
+            out2 = outcode(seg_x2, seg_y2)
+
+
 # --- Altitude to color ---
 
 def altitude_to_band(alt, alt_floor, alt_ceil, num_bands=NUM_BANDS):
@@ -212,9 +320,9 @@ FLUSH_INTERVAL = 1_000_000  # Flush segments to disk every N records
 
 
 class TileStore:
-    """Disk-backed tile accumulator storage.
+    """Disk-backed tile count storage.
 
-    Keeps tile data as .npy files on disk, with a small LRU cache of
+    Keeps tile count data as .npy files on disk, with a small LRU cache of
     recently-used tiles in memory. This bounds RAM to ~cache_size tiles
     regardless of how many total tiles exist.
     """
@@ -226,20 +334,19 @@ class TileStore:
             shutil.rmtree(self.work_dir)
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.cache_size = cache_size
-        self._cache = OrderedDict()  # (tx,ty) -> (acc, count)
+        self._cache = OrderedDict()  # (tx,ty) -> count
         self.tile_keys = set()  # all tiles ever created
 
-    def _tile_path(self, tx, ty, suffix):
-        return self.work_dir / f"{tx}_{ty}_{suffix}.npy"
+    def _tile_path(self, tx, ty):
+        return self.work_dir / f"{tx}_{ty}_count.npy"
 
     def _evict_oldest(self):
         """Write the oldest cached tile to disk and remove from cache."""
-        key, (acc, count) = self._cache.popitem(last=False)
-        np.save(self._tile_path(key[0], key[1], "acc"), acc)
-        np.save(self._tile_path(key[0], key[1], "count"), count)
+        key, count = self._cache.popitem(last=False)
+        np.save(self._tile_path(key[0], key[1]), count)
 
     def get(self, tx, ty):
-        """Get tile accumulators, loading from disk or creating new."""
+        """Get tile count array, loading from disk or creating new."""
         key = (tx, ty)
         if key in self._cache:
             self._cache.move_to_end(key)
@@ -250,17 +357,15 @@ class TileStore:
             self._evict_oldest()
 
         # Load from disk or create new
-        acc_path = self._tile_path(tx, ty, "acc")
-        if acc_path.exists():
-            acc = np.load(acc_path)
-            count = np.load(self._tile_path(tx, ty, "count"))
+        count_path = self._tile_path(tx, ty)
+        if count_path.exists():
+            count = np.load(count_path)
         else:
-            acc = np.zeros((256, 256, 3), dtype=np.uint16)
             count = np.zeros((256, 256), dtype=np.uint16)
 
         self.tile_keys.add(key)
-        self._cache[key] = (acc, count)
-        return acc, count
+        self._cache[key] = count
+        return count
 
     def flush_all(self):
         """Write all cached tiles to disk."""
@@ -268,25 +373,27 @@ class TileStore:
             self._evict_oldest()
 
     def iter_tiles(self):
-        """Iterate over all tiles, yielding (tx, ty, acc, count).
+        """Iterate over all tiles, yielding (tx, ty, count).
 
         Loads each tile from disk one at a time for memory efficiency.
         """
         for tx, ty in sorted(self.tile_keys):
             # Check cache first
             if (tx, ty) in self._cache:
-                acc, count = self._cache[(tx, ty)]
+                count = self._cache[(tx, ty)]
             else:
-                acc_path = self._tile_path(tx, ty, "acc")
-                if not acc_path.exists():
+                count_path = self._tile_path(tx, ty)
+                if not count_path.exists():
                     continue
-                acc = np.load(acc_path)
-                count = np.load(self._tile_path(tx, ty, "count"))
-            yield tx, ty, acc, count
+                count = np.load(count_path)
+            yield tx, ty, count
 
 
 def flush_segments(segments_by_tile_band, tile_store):
     """Render buffered segments into disk-backed tile store and clear buffer.
+
+    Increments track count for each pixel. Color is applied at save time based
+    on final density (not altitude).
 
     Returns the number of tile-band groups rendered.
     """
@@ -295,13 +402,7 @@ def flush_segments(segments_by_tile_band, tile_store):
         if not segs:
             continue
 
-        acc, count = tile_store.get(tx, ty)
-
-        color_rgb = band_to_color(band)
-        # Don't scale colors here - we'll handle opacity at save time
-        cr = int(color_rgb[0] + 0.5)
-        cg = int(color_rgb[1] + 0.5)
-        cb = int(color_rgb[2] + 0.5)
+        count = tile_store.get(tx, ty)
 
         # Draw all segments for this band on a scratch image
         scratch = Image.new('L', (256, 256), 0)
@@ -312,11 +413,8 @@ def flush_segments(segments_by_tile_band, tile_store):
 
         # Use threshold > 128 to ignore anti-aliased edges (only keep solid pixels)
         mask = np.array(scratch) > 128
-        # Use MAX not ADD - avoids dark colors from same track hitting pixels multiple times
-        acc[:, :, 0][mask] = np.maximum(acc[:, :, 0][mask], cr)
-        acc[:, :, 1][mask] = np.maximum(acc[:, :, 1][mask], cg)
-        acc[:, :, 2][mask] = np.maximum(acc[:, :, 2][mask], cb)
-        # Count tracks contributing to each pixel (for density/opacity later)
+
+        # Increment count, color will be applied at save time based on density
         count[mask] = np.minimum(count[mask].astype(np.uint32) + 1, 65535).astype(np.uint16)
         render_count += 1
 
@@ -329,6 +427,8 @@ def flush_segments(segments_by_tile_band, tile_store):
 def generate_tiles(data_dir, output_dir, zoom=DEFAULT_ZOOM, max_files=10,
                    seed=None, max_records=None, input_file=None):
     """Generate traffic density tiles from global ADS-B files.
+
+    Colors are based on traffic density: red = high density, green = low density.
 
     Args:
         data_dir: Directory containing global_MMDDYY.gz files
@@ -426,6 +526,10 @@ def generate_tiles(data_dir, output_dir, zoom=DEFAULT_ZOOM, max_files=10,
             ts = record['now']
             alt = record.get('alt_baro')
 
+            # Skip records outside continental US
+            if not is_within_conus(lat, lon):
+                continue
+
             # Parse altitude
             alt_int = None
             if alt is not None and alt != "ground":
@@ -442,24 +546,38 @@ def generate_tiles(data_dir, output_dir, zoom=DEFAULT_ZOOM, max_files=10,
                     tx1, ty1, px1, py1 = latlon_to_tile_pixel(plat, plon, zoom)
                     tx2, ty2, px2, py2 = latlon_to_tile_pixel(lat, lon, zoom)
 
-                    if (tx1, ty1) == (tx2, ty2):
-                        tile_key = (tx1, ty1)
+                    # Get all tiles this segment potentially touches
+                    # (rectangular bounding box of the two endpoints)
+                    min_tx, max_tx = min(tx1, tx2), max(tx1, tx2)
+                    min_ty, max_ty = min(ty1, ty2), max(ty1, ty2)
 
-                        # Per-tile altitude filter
-                        fe = get_tile_field_elev(tx1, ty1, zoom, airports,
-                                                 tile_elev_cache)
-                        alt_floor = fe + FT_MIN_BELOW_AIRPORT
-                        alt_ceil = fe + FT_MAX_ABOVE_AIRPORT
+                    avg_alt = (palt + alt_int) // 2
 
-                        avg_alt = (palt + alt_int) // 2
-                        if alt_floor <= avg_alt <= alt_ceil:
-                            band = altitude_to_band(avg_alt, alt_floor,
-                                                    alt_ceil)
-                            segments_by_tile_band[(*tile_key, band)].append(
-                                (px1, py1, px2, py2))
-                            file_segments += 1
-                        else:
-                            file_filtered += 1
+                    # Try to clip segment into each tile it might intersect
+                    for ttx in range(min_tx, max_tx + 1):
+                        for tty in range(min_ty, max_ty + 1):
+                            # Clip segment to this tile
+                            clipped = clip_segment_to_tile(px1, py1, px2, py2,
+                                                          tx1, ty1, tx2, ty2,
+                                                          ttx, tty)
+                            if clipped is None:
+                                continue  # Segment doesn't intersect this tile
+
+                            clip_px1, clip_py1, clip_px2, clip_py2 = clipped
+
+                            # Per-tile altitude filter
+                            fe = get_tile_field_elev(ttx, tty, zoom, airports,
+                                                     tile_elev_cache)
+                            alt_floor = fe + FT_MIN_BELOW_AIRPORT
+                            alt_ceil = fe + FT_MAX_ABOVE_AIRPORT
+
+                            if alt_floor <= avg_alt <= alt_ceil:
+                                band = altitude_to_band(avg_alt, alt_floor, alt_ceil)
+                                segments_by_tile_band[(ttx, tty, band)].append(
+                                    (clip_px1, clip_py1, clip_px2, clip_py2))
+                                file_segments += 1
+                            else:
+                                file_filtered += 1
 
             last_seen[hex_id] = (lat, lon, alt_int, ts)
 
@@ -487,25 +605,40 @@ def generate_tiles(data_dir, output_dir, zoom=DEFAULT_ZOOM, max_files=10,
         return
 
     print(f"  {len(tile_store.tile_keys)} tiles at zoom {zoom}")
+    print(f"  Using density-based coloring: red = high density, green = low density")
     saved = 0
     # Track which tiles were saved so downsampling can use the set directly
     # instead of walking the filesystem
     saved_tiles = set()
-    for tx, ty, acc, count in tile_store.iter_tiles():
-        tile_max = acc.max()
-        if tile_max == 0:
+    for tx, ty, count in tile_store.iter_tiles():
+        # Color pixels based purely on density
+        max_count = count.max()
+        if max_count == 0:
             continue
 
-        # Scale colors by track density to control opacity
-        # count tracks how many bands/tracks touched each pixel
-        # A single track = partial opacity, multiple overlapping tracks = brighter
+        # Map density to color gradient: red (HIGH) -> yellow -> green (LOW)
+        # Invert the band mapping so red = busy, green = sparse
+        count_normalized = np.minimum(count.astype(np.float32) / DENSITY_FOR_FULL_BRIGHTNESS, 1.0)
 
-        # Scale alpha by density (more tracks = more opaque)
+        # Apply inverted color gradient based on density
+        rgb = np.zeros((256, 256, 3), dtype=np.uint8)
+        for i in range(256):
+            for j in range(256):
+                if count[i, j] > 0:
+                    # Invert: high density -> band 0 (red), low density -> band 9 (green)
+                    band_frac = 1.0 - count_normalized[i, j]  # INVERTED
+                    band_idx = int(band_frac * (NUM_BANDS - 1) + 0.5)
+                    color = band_to_color(band_idx)
+                    rgb[i, j, 0] = int(color[0] * COLOR_VIBRANCY + 0.5)
+                    rgb[i, j, 1] = int(color[1] * COLOR_VIBRANCY + 0.5)
+                    rgb[i, j, 2] = int(color[2] * COLOR_VIBRANCY + 0.5)
+
+        # Alpha: scale by density but boost low-density (green) tracks to be more visible
+        # Use sqrt curve to give more opacity to sparse tracks
         alpha_scale = np.minimum(count.astype(np.float32) / DENSITY_FOR_FULL_BRIGHTNESS, 1.0)
-        alpha = (alpha_scale * 255.0).clip(0, 255).astype(np.uint8)
-
-        # Scale color brightness (vibrancy control)
-        rgb = (acc.astype(np.float32) * COLOR_VIBRANCY).clip(0, 255).astype(np.uint8)
+        # Apply sqrt to boost low values: sqrt(0.1) = 0.316, sqrt(0.5) = 0.707, sqrt(1.0) = 1.0
+        alpha_scale_boosted = np.sqrt(alpha_scale)
+        alpha = (alpha_scale_boosted * 255.0).clip(0, 255).astype(np.uint8)
         rgba = np.dstack([rgb, alpha])
 
         img = Image.fromarray(rgba, 'RGBA')

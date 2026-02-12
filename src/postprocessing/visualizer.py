@@ -23,6 +23,7 @@ from lib.map_elements import (
     CoordinateDisplay,
     build_hide_script, NATIVE_HEATMAP_SCRIPT,
     build_busyness_html, build_help_html,
+    build_quality_indicator_json,
 )
 from postprocessing.hotspot_analyzer import compute_hotspot_heatmap
 
@@ -65,136 +66,99 @@ class MapVisualizer:
         self.map_opacity = map_opacity
         self.points = []
         self.annotations = []
+        self.qualities = []  # Track quality for each point
 
-    def add_point(self, point, annotation):
+    def add_point(self, point, annotation, quality='high'):
         """
         Add a point with annotation to be visualized.
 
         Args:
             point: Tuple of (latitude, longitude)
             annotation: String description/annotation for the point
+            quality: Quality level ('high', 'medium', 'low')
         """
         self.points.append(point)
         self.annotations.append(annotation)
+        self.qualities.append(quality)
 
     def clear(self):
         """Clear all accumulated points and annotations."""
         self.points.clear()
         self.annotations.clear()
+        self.qualities.clear()
 
-    def _get_point_color(self, annotation):
+    def _get_point_color(self, quality):
         """
-        Determine point color based on annotation content.
+        Determine point color based on event quality.
 
         Args:
-            annotation: String annotation to analyze
+            quality: Quality level ('vhigh', 'high', 'medium', 'low')
 
         Returns:
             Color string for the point marker
         """
-        annotation_lower = annotation.lower()
-        if "overtake" in annotation_lower:
-            return "red"
-        elif "tbone" in annotation_lower:
-            return "red"
-        elif "headon" in annotation_lower:
-            return "red"
+        if quality == 'vhigh':
+            return "#ff00ff"
+        elif quality == 'high':
+            return "blue"
+        elif quality == 'medium':
+            return "lightblue"
+        elif quality == 'low':
+            return "white"
         else:
-            return "red"  # All LOS events are red
+            return "blue"  # Default to blue for unknown quality
 
     def add_traffic_tile_overlay(self, m, tile_dir, zoom=None, opacity=0.7,
                                  radius_nm=100):
-        """Add pre-rendered traffic density tiles as ImageOverlay layers.
+        """Add pre-rendered traffic density tiles as a TileLayer using relative URLs.
 
-        Loads tiles at multiple zoom levels covering radius_nm around the
-        map center. Uses the highest available zoom for the immediate area
-        and progressively coarser zooms for the wider region.
+        Creates a TileLayer that references tiles via relative file paths, avoiding
+        base64 embedding that bloats HTML file size.
 
         Args:
             m: Folium map object
             tile_dir: Path to tile directory containing {z}/{x}/{y}.png
             zoom: Tile zoom level to load (auto-detected from directory if None)
             opacity: Overlay opacity (0.0-1.0)
-            radius_nm: Load tiles within this radius (nm) of map center
+            radius_nm: Load tiles within this radius (nm) of map center (unused with TileLayer)
         """
-        import math
         from pathlib import Path
+        import os
 
         tile_dir = Path(tile_dir)
 
-        # Find all available zoom levels
+        # Find available zoom levels
         available_zooms = sorted([
             int(d.name) for d in tile_dir.iterdir()
             if d.is_dir() and d.name.isdigit()
-        ], reverse=True)
+        ])
         if not available_zooms:
             print(f"No tile zoom directories found in {tile_dir}")
             return
-        max_zoom = available_zooms[0]
-        print(f"Available tile zoom levels: {sorted(available_zooms)}")
 
-        def _latlon_to_tile(lat, lon, z):
-            n = 2 ** z
-            tx = int((lon + 180.0) / 360.0 * n)
-            lat_rad = math.radians(lat)
-            ty = int((1.0 - math.log(math.tan(lat_rad) + 1.0 / math.cos(lat_rad))
-                       / math.pi) / 2.0 * n)
-            return tx, ty
+        min_zoom = min(available_zooms)
+        max_zoom = max(available_zooms)
+        print(f"Available tile zoom levels: {available_zooms}")
 
-        def _tile_bounds(tx, ty, z):
-            n = 2 ** z
-            sw_lon = tx / n * 360.0 - 180.0
-            ne_lon = (tx + 1) / n * 360.0 - 180.0
-            ne_lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * ty / n))))
-            sw_lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (ty + 1) / n))))
-            return [[sw_lat, sw_lon], [ne_lat, ne_lon]]
+        # Create relative path from HTML output location to tile directory
+        # Tiles will be referenced as: tiles/{z}/{x}/{y}.png (matching symlink name)
+        tile_url = "tiles/{z}/{x}/{y}.png"
 
-        traffic_group = folium.FeatureGroup(name="Traffic Density", show=True)
-        total_count = 0
-
-        center_lat = (self.ll_lat + self.ur_lat) / 2
-        center_lon = (self.ll_lon + self.ur_lon) / 2
-
-        # Load tiles at each zoom level for progressively wider areas
-        # Highest zoom: inner area; lower zooms: fill out to radius_nm
-        covered = set()  # track parent tiles already covered by children
-        for z in available_zooms:
-            lat_offset = radius_nm / 60.0
-            lon_offset = radius_nm / (60.0 * math.cos(math.radians(center_lat)))
-
-            min_tx, min_ty = _latlon_to_tile(center_lat + lat_offset,
-                                              center_lon - lon_offset, z)
-            max_tx, max_ty = _latlon_to_tile(center_lat - lat_offset,
-                                              center_lon + lon_offset, z)
-
-            count = 0
-            for tx in range(min_tx, max_tx + 1):
-                for ty in range(min_ty, max_ty + 1):
-                    # Skip if a higher-zoom child already covers this area
-                    if (z, tx, ty) in covered:
-                        continue
-                    tile_path = tile_dir / str(z) / str(tx) / f"{ty}.png"
-                    if tile_path.exists():
-                        bounds = _tile_bounds(tx, ty, z)
-                        folium.raster_layers.ImageOverlay(
-                            image=str(tile_path),
-                            bounds=bounds,
-                            opacity=opacity,
-                        ).add_to(traffic_group)
-                        count += 1
-                        # Mark parent as covered so lower zooms skip it
-                        if z > available_zooms[-1]:
-                            covered.add((z - 1, tx // 2, ty // 2))
-
-            if count > 0:
-                total_count += count
-                print(f"  Zoom {z}: {count} tiles")
-
-        traffic_group.add_to(m)
+        # Add TileLayer with relative file:// URLs
+        folium.TileLayer(
+            tiles=tile_url,
+            attr="Traffic Density",
+            name="Traffic Density",
+            opacity=opacity,
+            min_zoom=min_zoom,
+            max_zoom=max_zoom,
+            overlay=True,
+            control=True
+        ).add_to(m)
 
         # Add opacity slider control for traffic tiles
         opacity_slider_html = """
-        <div style="position: fixed;
+        <div id="opacity-controls-box" style="position: fixed;
                     top: 10px;
                     right: 10px;
                     width: 250px;
@@ -204,8 +168,8 @@ class MapVisualizer:
                     padding: 10px;
                     border-radius: 5px;
                     box-shadow: 2px 2px 6px rgba(0,0,0,0.3);">
-            <label for="traffic-opacity-slider" style="font-weight: bold; font-size: 14px;">
-                Traffic Layer Opacity: <span id="opacity-value">""" + str(int(opacity * 100)) + """</span>%
+            <label for="traffic-opacity-slider" style="font-weight: bold; font-size: 12px;">
+                <span style="color: #00ff00; font-size: 20px; vertical-align: middle;">■</span><span style="color: #ffff00; font-size: 20px; vertical-align: middle;">■</span><span style="color: #ff0000; font-size: 20px; vertical-align: middle;">■</span> Traffic Layer Opacity: <span id="opacity-value">""" + str(int(opacity * 100)) + """</span>%
             </label><br>
             <input type="range"
                    id="traffic-opacity-slider"
@@ -224,10 +188,13 @@ class MapVisualizer:
                     valueDisplay.innerHTML = this.value;
                     var opacityValue = this.value / 100.0;
 
-                    // Find all img elements that are part of ImageOverlay (leaflet-image-layer class)
-                    var overlayImages = document.querySelectorAll('.leaflet-image-layer');
-                    overlayImages.forEach(function(img) {
-                        img.style.opacity = opacityValue;
+                    // Find the Traffic Density layer and update opacity
+                    document.querySelectorAll('.leaflet-tile-pane .leaflet-layer').forEach(function(layer) {
+                        // Check if this is the traffic layer by looking at tile src
+                        var img = layer.querySelector('img');
+                        if (img && img.src.includes('tiles/')) {
+                            layer.style.opacity = opacityValue;
+                        }
                     });
                 };
             }, 1000);
@@ -235,8 +202,9 @@ class MapVisualizer:
         """
         m.get_root().html.add_child(folium.Element(opacity_slider_html))
 
-        print(f"Added {total_count} traffic density tiles ({radius_nm}nm radius) "
-              f"from {tile_dir}")
+        print(f"Added traffic tile layer with zoom levels {min_zoom}-{max_zoom}")
+        print(f"  Tiles will be loaded from: {tile_url}")
+        print(f"  Note: Tile directory must be in same location as HTML file")
 
     def add_traffic_tracks(self, m, tracks, opacity=0.5):
         """Add traffic tracks as semi-transparent polylines.
@@ -268,6 +236,30 @@ class MapVisualizer:
         tracks_group.add_to(m)
         print(f"Added {len(tracks):,} traffic tracks with {total_points:,} points")
 
+    def add_analysis_radius_circle(self, m, center_lat, center_lon, radius_nm):
+        """Add a blue circle showing the analysis radius around the airport.
+
+        Args:
+            m: Folium map object
+            center_lat: Center latitude
+            center_lon: Center longitude
+            radius_nm: Radius in nautical miles
+        """
+        # Convert nautical miles to meters (1 nm = 1852 meters)
+        radius_meters = radius_nm * 1852
+
+        folium.Circle(
+            location=[center_lat, center_lon],
+            radius=radius_meters,
+            color='blue',
+            fill=False,
+            weight=2,
+            opacity=0.6,
+            popup=f"Analysis radius: {radius_nm}nm"
+        ).add_to(m)
+
+        print(f"Added analysis radius circle: {radius_nm}nm at ({center_lat}, {center_lon})")
+
     def visualize(self, vectorlist=None, output_file="airport_map.html",
                   open_in_browser=True, map_image=None, overlay_image=None,
                   geojson_file=None,
@@ -275,7 +267,8 @@ class MapVisualizer:
                   heatmap_radius=20, heatmap_blur=25, heatmap_min_opacity=0.3,
                   traffic_tracks=None, track_opacity=0.5,
                   traffic_tile_dir=None,
-                  busyness_data=None, data_quality=None):
+                  busyness_data=None, data_quality=None,
+                  analysis_radius_nm=None, analysis_center_lat=None, analysis_center_lon=None):
         """
         Generate and save the visualization map.
 
@@ -393,13 +386,17 @@ class MapVisualizer:
         if traffic_tracks:
             self.add_traffic_tracks(m, traffic_tracks, track_opacity)
 
+        # Add analysis radius circle if metadata is available
+        if analysis_radius_nm and analysis_center_lat and analysis_center_lon:
+            self.add_analysis_radius_circle(m, analysis_center_lat, analysis_center_lon, analysis_radius_nm)
+
         # Plot LOS points with annotations and hide functionality (if any)
         if self.points:
             # Create a feature group to hold all point markers
             points_group = folium.FeatureGroup(name="LOS Points")
 
-            for idx, ((lat, lon), annotation) in enumerate(zip(self.points, self.annotations)):
-                color = self._get_point_color(annotation)
+            for idx, ((lat, lon), annotation, quality) in enumerate(zip(self.points, self.annotations, self.qualities)):
+                color = self._get_point_color(quality)
                 # Add hide link to annotation
                 hide_link = f' - <b><a href="#" onclick="hidePoint({idx}); return false;">Hide</a></b>'
                 popup_html = annotation + hide_link
@@ -407,7 +404,8 @@ class MapVisualizer:
                 circle = folium.CircleMarker(
                     location=[lat, lon],
                     radius=4,  # pixels, not meters - consistent size at all zoom levels
-                    color=color,
+                    color='black',  # Border color
+                    weight=1,  # Border width in pixels
                     fill=True,
                     fill_color=color,
                     fill_opacity=1.0,
@@ -441,12 +439,16 @@ class MapVisualizer:
             ).add_to(m)
             print(f"Overlay image added: {overlay_image}")
 
-        # Add heatmap layer if enabled
+        # Add heatmap layer if enabled (only high and very high quality events)
         if enable_heatmap:
+            # Filter to only high and very high quality events
+            high_quality_points = [
+                p for p, q in zip(self.points, self.qualities) if q in ['high', 'vhigh']
+            ]
             # Compute heatmap using KDE from external module
             # Pass bounds=None to auto-compute from data with padding
             heatmap_data = compute_hotspot_heatmap(
-                self.points,
+                high_quality_points,
                 bounds=None,
                 bandwidth=heatmap_bandwidth
             )
@@ -471,15 +473,20 @@ class MapVisualizer:
 
                 # Add layer control to toggle heatmap
                 folium.LayerControl().add_to(m)
-                print(f"Heatmap layer added with {len(heatmap_data)} points")
+                print(f"Heatmap layer added with {len(heatmap_data)} points (high+vhigh quality only, {len(high_quality_points)} of {len(self.points)} total)")
 
         # Add native heatmap if enabled (uses raw points, recomputes on hide)
+        # Only include high and very high quality events in the heatmap
         if native_heatmap and self.points:
             heatmap_group = folium.FeatureGroup(name="Dynamic Heatmap", show=True)
+            # Filter to only high and very high quality events
+            high_quality_points = [
+                [p[0], p[1]] for p, q in zip(self.points, self.qualities) if q in ['high', 'vhigh']
+            ]
             # Blue-based color scheme to avoid conflict with red-yellow-green traffic tiles
             # Use larger radius and max parameter to make zoom-independent
             HeatMap(
-                [[p[0], p[1]] for p in self.points],
+                high_quality_points,
                 radius=25,
                 blur=35,
                 min_opacity=heatmap_min_opacity,
@@ -496,52 +503,77 @@ class MapVisualizer:
 
             m.get_root().html.add_child(folium.Element(NATIVE_HEATMAP_SCRIPT))
 
-            # Add heatmap opacity slider
+            # Add heatmap opacity slider - appends into existing box or creates new one
+            quality_json = build_quality_indicator_json(data_quality)
             heatmap_opacity_slider_html = """
-            <div style="position: fixed;
-                        top: 90px;
-                        right: 10px;
-                        width: 250px;
-                        background-color: white;
-                        border: 2px solid grey;
-                        z-index: 9999;
-                        padding: 10px;
-                        border-radius: 5px;
-                        box-shadow: 2px 2px 6px rgba(0,0,0,0.3);">
-                <label for="heatmap-opacity-slider" style="font-weight: bold; font-size: 14px;">
-                    Heatmap Opacity: <span id="heatmap-opacity-value">60</span>%
-                </label><br>
-                <input type="range"
-                       id="heatmap-opacity-slider"
-                       min="0"
-                       max="100"
-                       value="60"
-                       style="width: 100%; margin-top: 5px;">
-            </div>
             <script>
                 setTimeout(function() {
-                    var slider = document.getElementById('heatmap-opacity-slider');
-                    var valueDisplay = document.getElementById('heatmap-opacity-value');
+                    var qualityData = """ + quality_json + """;
 
+                    // Find or create the opacity controls box
+                    var box = document.getElementById('opacity-controls-box');
+                    if (!box) {
+                        box = document.createElement('div');
+                        box.id = 'opacity-controls-box';
+                        box.style.cssText = 'position: fixed; top: 10px; right: 10px; width: 250px; background-color: white; border: 2px solid grey; z-index: 9999; padding: 10px; border-radius: 5px; box-shadow: 2px 2px 6px rgba(0,0,0,0.3);';
+                        document.body.appendChild(box);
+                    }
+
+                    // Add separator if box already has content
+                    if (box.children.length > 0) {
+                        var hr = document.createElement('hr');
+                        hr.style.cssText = 'margin: 8px 0; border: none; border-top: 1px solid #ccc;';
+                        box.appendChild(hr);
+                    }
+
+                    // Add heatmap slider controls
+                    var label = document.createElement('label');
+                    label.htmlFor = 'heatmap-opacity-slider';
+                    label.style.cssText = 'font-weight: bold; font-size: 12px;';
+                    label.innerHTML = '<span style="color: white; font-size: 20px; vertical-align: middle; text-shadow: 0 0 1px black;">●</span><span style="color: lightblue; font-size: 20px; vertical-align: middle;">●</span><span style="color: blue; font-size: 20px; vertical-align: middle;">●</span><span style="color: #ff00ff; font-size: 20px; vertical-align: middle;">●</span> LOS Heatmap Opacity: <span id="heatmap-opacity-value">60</span>%';
+                    box.appendChild(label);
+                    box.appendChild(document.createElement('br'));
+
+                    var slider = document.createElement('input');
+                    slider.type = 'range';
+                    slider.id = 'heatmap-opacity-slider';
+                    slider.min = '0';
+                    slider.max = '100';
+                    slider.value = '60';
+                    slider.style.cssText = 'width: 100%; margin-top: 5px;';
+                    box.appendChild(slider);
+
+                    var valueDisplay = document.getElementById('heatmap-opacity-value');
                     slider.oninput = function() {
                         valueDisplay.innerHTML = this.value;
                         var opacityValue = this.value / 100.0;
-
-                        // Find heatmap canvas and update its opacity
                         if (nativeHeatmapLayer && nativeHeatmapLayer._canvas) {
                             nativeHeatmapLayer._canvas.style.opacity = opacityValue;
                         }
                     };
+
+                    // Add data quality indicator if available
+                    if (qualityData) {
+                        var qualityDiv = document.createElement('div');
+                        qualityDiv.style.cssText = 'margin-top: 8px; font-size: 11px; color: #555; cursor: help;';
+                        qualityDiv.title = qualityData.tooltip;
+                        qualityDiv.innerHTML = '<span style="font-weight: bold;">Data Quality:</span> ' +
+                            '<span style="color: ' + qualityData.color + '; font-size: 24px; vertical-align: middle;">●</span> ' +
+                            qualityData.label + ' (mouseover for details)';
+
+                        box.appendChild(qualityDiv);
+                    }
                 }, 1000);
             </script>
             """
             m.get_root().html.add_child(folium.Element(heatmap_opacity_slider_html))
 
-            print(f"Native heatmap enabled with {len(self.points)} points (updates on hide)")
+            high_quality_count = sum(1 for q in self.qualities if q in ['high', 'vhigh'])
+            print(f"Native heatmap enabled with {high_quality_count} high+vhigh quality points (of {len(self.points)} total, updates on hide)")
 
         # Add busyness chart panel if data is available
         if busyness_data:
-            m.get_root().html.add_child(folium.Element(build_busyness_html(busyness_data, data_quality)))
+            m.get_root().html.add_child(folium.Element(build_busyness_html(busyness_data)))
             print(f"Busyness chart added to map")
 
         # Add dynamic coordinate display (hidden behind feature flag for analysis use)
@@ -557,6 +589,30 @@ class MapVisualizer:
         # Save the map to an HTML file
         m.save(output_file)
         print(f"Map saved to {output_file}")
+
+        # Create symlink to traffic tiles if specified
+        if traffic_tile_dir:
+            from pathlib import Path
+            output_path = Path(output_file).resolve()
+            output_dir = output_path.parent
+            tile_src = Path(traffic_tile_dir).resolve()
+            tile_link = output_dir / "tiles"
+
+            # Create or update symlink
+            if tile_link.exists() or tile_link.is_symlink():
+                if tile_link.is_symlink():
+                    # Check if it points to the right place
+                    if tile_link.resolve() != tile_src:
+                        tile_link.unlink()
+                        tile_link.symlink_to(tile_src)
+                        print(f"Updated symlink: {tile_link} -> {tile_src}")
+                    else:
+                        print(f"Symlink already exists: {tile_link} -> {tile_src}")
+                else:
+                    print(f"Warning: {tile_link} exists but is not a symlink, skipping")
+            else:
+                tile_link.symlink_to(tile_src)
+                print(f"Created symlink: {tile_link} -> {tile_src}")
 
         if open_in_browser:
             webbrowser.open("file://" + os.path.realpath(output_file))
@@ -632,7 +688,22 @@ if __name__ == "__main__":
     # CSV OUTPUT FOR POSTPROCESSING: timestamp,datestring,altdatestring,lat,lon,
     #   alt,flight1,flight2,notused,link,animation,interp,audio,type,phase,,latdist,altdist,
     ctr = 0
+    analysis_radius_nm = None
+    center_lat = None
+    center_lon = None
+
     for line in sys.stdin:
+        # Parse metadata comments (formatted for easy Python parsing)
+        if line.startswith("# analysis_radius_nm = "):
+            analysis_radius_nm = float(line.split("=")[1].strip())
+            continue
+        if line.startswith("# center_lat = "):
+            center_lat = float(line.split("=")[1].strip())
+            continue
+        if line.startswith("# center_lon = "):
+            center_lon = float(line.split("=")[1].strip())
+            continue
+
         # Strip the "CSV OUTPUT FOR POSTPROCESSING:" prefix and any filename prefix from grep
         if "CSV OUTPUT FOR POSTPROCESSING:" not in line:
             continue
@@ -645,7 +716,7 @@ if __name__ == "__main__":
                 print(f"Skipping short row: {row}")
                 continue
             try:
-                # Fields: timestamp,datestr,altdatestr,lat,lon,alt,flight1,flight2,notused,link,animation,interp,audio,type,phase,,latdist,altdist,
+                # Fields: timestamp,datestr,altdatestr,lat,lon,alt,flight1,flight2,quality,link,animation,interp,audio,type,phase,quality_explanation,latdist,altdist
                 timestamp = row[0]
                 datestr = row[1]
                 lat = row[3]
@@ -653,26 +724,29 @@ if __name__ == "__main__":
                 altitude = row[5]
                 tail1 = row[6]
                 tail2 = row[7]
+                quality = row[8] if len(row) > 8 else "high"  # Default to high if missing
                 link = row[9]
                 animation = row[10] if len(row) > 10 else ""
                 los_type = row[13] if len(row) > 13 else ""
                 phase = row[14] if len(row) > 14 else ""
+                quality_explanation = row[15] if len(row) > 15 else ""
                 latdist = row[16] if len(row) > 16 else ""
                 altdist = row[17] if len(row) > 17 else ""
 
                 annotation = f"<b>{datestr}</b> {tail1}/{tail2} "
-                if latdist:
-                    annotation += f" <b>Lat sep:</b> {float(latdist):.2f}nm"
-                if altdist:
-                    annotation += f" <b>Alt sep:</b> {altdist}ft"
+                # Add quality with explanation on new line
+                if quality:
+                    annotation += f"<br><b>Event Quality:</b> {quality}"
+                    if quality_explanation:
+                        annotation += f" ({quality_explanation})"
                 if animation:
                     annotation += f"<br><b><a href='{animation}' target='_blank'>Event preview</a></b> - "
                 else:
                     annotation += "<br>"
                 annotation += f"<b><a href='{link}' target='_blank'>adsb.lol replay</a></b>"
 
-                visualizer.add_point((float(lat), float(lon)), annotation)
-                print(f"Read point {ctr} at {lat} {lon} alt: {altitude} datestr:{datestr}")
+                visualizer.add_point((float(lat), float(lon)), annotation, quality=quality)
+                print(f"Read point {ctr} at {lat} {lon} alt: {altitude} quality: {quality} datestr:{datestr}")
                 ctr += 1
             except (ValueError, IndexError) as e:
                 print(f"Parse error on row: {row} - {e}")
@@ -739,5 +813,8 @@ if __name__ == "__main__":
         track_opacity=args.track_opacity,
         traffic_tile_dir=args.traffic_tiles,
         busyness_data=busyness_data,
-        data_quality=quality_data
+        data_quality=quality_data,
+        analysis_radius_nm=analysis_radius_nm,
+        analysis_center_lat=center_lat,
+        analysis_center_lon=center_lon
     )

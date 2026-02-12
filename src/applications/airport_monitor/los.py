@@ -147,6 +147,69 @@ def process_los(flight1, flight2):
             los.id = add_los(flight1, flight2, lateral_distance,
                                alt_distance)
 
+def calculate_event_quality(los, flight1, flight2):
+    """Calculate event quality score based on duration, aircraft type, and CPA.
+
+    Very High quality: high quality + CPA < 0.2 nm and 200 ft
+    High quality: brief event with good tracks
+    Medium quality: 1 min < event duration ≤ 2 min OR helicopter involved
+    Low quality: event duration > 2 min OR track duration < 1 min
+
+    Returns: tuple of (quality_string, explanation_string)
+    """
+    # Calculate event duration (in seconds)
+    event_duration = los.last_time - los.create_time
+
+    # Calculate overall track duration (in seconds) for both flights
+    track_duration_1 = flight1.lastloc.now - flight1.firstloc.now
+    track_duration_2 = flight2.lastloc.now - flight2.firstloc.now
+    min_track_duration = min(track_duration_1, track_duration_2)
+
+    # Check for helicopter involvement (category A7)
+    cat1 = flight1.lastloc.flightdict.get('category') if flight1.lastloc.flightdict else None
+    cat2 = flight2.lastloc.flightdict.get('category') if flight2.lastloc.flightdict else None
+    is_helicopter = (cat1 == 'A7' or cat2 == 'A7')
+
+    # Get CPA (Closest Point of Approach) data
+    cpa_lateral_nm = los.min_latdist
+    cpa_vertical_ft = abs(los.min_altdist)  # Use absolute value for vertical separation
+
+    # Build explanation parts
+    reasons = []
+    event_duration_min = event_duration / 60.0
+    min_track_duration_min = min_track_duration / 60.0
+
+    # Apply quality criteria with explanations
+    if event_duration > 120:
+        reasons.append(f"long event ({event_duration_min:.1f}min - may be formation flight)")
+        quality = 'low'
+    elif min_track_duration < 60:
+        reasons.append(f"short track ({min_track_duration_min:.1f}min - insufficient data)")
+        quality = 'low'
+    elif event_duration > 60:
+        reasons.append(f"moderate duration ({event_duration_min:.1f}min)")
+        quality = 'medium'
+    elif is_helicopter:
+        reasons.append("helicopter involved")
+        quality = 'medium'
+    else:
+        reasons.append(f"brief event ({event_duration_min:.1f}min) with good tracks")
+        quality = 'high'
+
+        # Check if high quality event qualifies for very high
+        if cpa_lateral_nm < 0.2 and cpa_vertical_ft < 200:
+            quality = 'vhigh'
+            reasons.append(f"very close CPA ({cpa_lateral_nm:.2f}nm, {cpa_vertical_ft:.0f}ft)")
+
+    # Add secondary factors as additional context
+    if quality not in ['low', 'vhigh'] and min_track_duration < 120:
+        reasons.append(f"track={min_track_duration_min:.1f}min")
+    if quality not in ['medium', 'vhigh'] and is_helicopter:
+        reasons.append("helicopter")
+
+    explanation = "; ".join(reasons)
+    return quality, explanation
+
 def log_csv_record(flight1, flight2, los, datestring, altdatestring,
                    animation_path=None):
     """Put a CSV record in the log, with replay link for post-processing.
@@ -158,6 +221,9 @@ def log_csv_record(flight1, flight2, los, datestring, altdatestring,
         altdatestring: Alternate date format for replay link
         animation_path: Optional path to generated animation HTML file
     """
+    # Calculate quality score and explanation
+    quality_score, quality_explanation = calculate_event_quality(los, flight1, flight2)
+
     meanloc = Location.meanloc(los.first_loc_1, los.first_loc_2)
     replay_time = datetime.datetime.utcfromtimestamp(
         los.create_time  # Use event start time, not end time
@@ -168,12 +234,13 @@ def log_csv_record(flight1, flight2, los, datestring, altdatestring,
         f"&zoom=12'"
     )
     animation_field = os.path.basename(animation_path) if animation_path else ""
+    # CSV fields: timestamp,datestr,altdatestr,lat,lon,alt,flight1,flight2,quality,link,animation,interp,audio,type,phase,quality_explanation,latdist,altdist
     csv_line = (
         f"CSV OUTPUT FOR POSTPROCESSING: {los.first_loc_1.now},"
         f"{datestring},{altdatestring},{meanloc.lat},{meanloc.lon},"
         f"{meanloc.alt_baro},{flight1.flight_id.strip()},"
-        f"{flight2.flight_id.strip()},notused,"
-        f"{link},{animation_field},interp,audio,type,phase,,{los.min_latdist},{los.min_altdist},"
+        f"{flight2.flight_id.strip()},{quality_score},"
+        f"{link},{animation_field},interp,audio,type,phase,{quality_explanation},{los.min_latdist},{los.min_altdist},"
     )
 
     logger.info(csv_line)
