@@ -109,7 +109,7 @@ class MapVisualizer:
             return "blue"  # Default to blue for unknown quality
 
     def add_traffic_tile_overlay(self, m, tile_dir, zoom=None, opacity=0.7,
-                                 radius_nm=100):
+                                 radius_nm=100, traffic_label=None):
         """Add pre-rendered traffic density tiles as a TileLayer using relative URLs.
 
         Creates a TileLayer that references tiles via relative file paths, avoiding
@@ -176,7 +176,11 @@ class MapVisualizer:
                    min="0"
                    max="100"
                    value=\"""" + str(int(opacity * 100)) + """\"
-                   style="width: 100%; margin-top: 5px;">
+                   style="width: 100%; margin-top: 5px;">"""
+        if traffic_label:
+            opacity_slider_html += f"""
+                <span style=\"font-size: 10px;\">Data: {traffic_label}</span>"""
+        opacity_slider_html += """
         </div>
         <script>
             // Wait for map to be ready
@@ -268,7 +272,8 @@ class MapVisualizer:
                   traffic_tracks=None, track_opacity=0.5,
                   traffic_tile_dir=None,
                   busyness_data=None, data_quality=None,
-                  analysis_radius_nm=None, analysis_center_lat=None, analysis_center_lon=None):
+                  analysis_radius_nm=None, analysis_center_lat=None, analysis_center_lon=None,
+                  airport_name=None, traffic_label=None, heatmap_label=None):
         """
         Generate and save the visualization map.
 
@@ -380,7 +385,8 @@ class MapVisualizer:
 
         # Add traffic density tile overlay (pre-rendered PNG tiles)
         if traffic_tile_dir:
-            self.add_traffic_tile_overlay(m, traffic_tile_dir)
+            self.add_traffic_tile_overlay(m, traffic_tile_dir,
+                                          traffic_label=traffic_label)
 
         # Add traffic tracks BEFORE LOS points (background layer)
         if traffic_tracks:
@@ -551,11 +557,18 @@ class MapVisualizer:
                             nativeHeatmapLayer._canvas.style.opacity = opacityValue;
                         }
                     };
+                    """
+            if heatmap_label:
+                heatmap_opacity_slider_html += """
+                    var heatmap_label = document.createElement('label');
+                    heatmap_label.innerHTML = "<span style='font-size: 10px;'>Data: """+heatmap_label+"""</span>";
+                    box.appendChild(heatmap_label);"""
 
+            heatmap_opacity_slider_html += """
                     // Add data quality indicator if available
                     if (qualityData) {
                         var qualityDiv = document.createElement('div');
-                        qualityDiv.style.cssText = 'margin-top: 8px; font-size: 11px; color: #555; cursor: help;';
+                        qualityDiv.style.cssText = 'font-size: 11px; color: #555; cursor: help;';
                         qualityDiv.title = qualityData.tooltip;
                         qualityDiv.innerHTML = '<span style="font-weight: bold;">Data Quality:</span> ' +
                             '<span style="color: ' + qualityData.color + '; font-size: 24px; vertical-align: middle;">●</span> ' +
@@ -581,10 +594,7 @@ class MapVisualizer:
             m.add_child(CoordinateDisplay())
 
         # Add help window with keyboard shortcuts and generation info
-        cmd_args = ' '.join(sys.argv[1:]) if len(sys.argv) > 1 else 'none'
-        if len(cmd_args) > 200:
-            cmd_args = cmd_args[:200] + '...'
-        m.get_root().html.add_child(folium.Element(build_help_html(cmd_args)))
+        m.get_root().html.add_child(folium.Element(build_help_html(airport_name)))
 
         # Save the map to an HTML file
         m.save(output_file)
@@ -660,6 +670,12 @@ if __name__ == "__main__":
                         help="Path to busyness JSON file for traffic chart overlay")
     parser.add_argument("--data-quality", type=str, default=None,
                         help="Path to data quality JSON file for coverage badge")
+    parser.add_argument("--airport-name", type=str, default=None,
+                        help="Name of the airport (for display purposes only, does not affect map boundaries)")
+    parser.add_argument("--traffic-label", type=str, default="",
+                        help="Label for traffic data in the busyness chart (e.g., date range)")
+    parser.add_argument("--heatmap-label", type=str, default="",
+                        help="Label for heatmap data in the map legend")
     args = parser.parse_args()
 
     # Clamp opacity to valid range
@@ -816,5 +832,8 @@ if __name__ == "__main__":
         data_quality=quality_data,
         analysis_radius_nm=analysis_radius_nm,
         analysis_center_lat=center_lat,
-        analysis_center_lon=center_lon
+        analysis_center_lon=center_lon,
+        airport_name=args.airport_name,
+        heatmap_label=args.heatmap_label,
+        traffic_label=args.traffic_label
     )

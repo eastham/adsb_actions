@@ -441,24 +441,30 @@ def build_busyness_html(busyness_data):
     return panel_html + style_css + chart_js
 
 
-def build_help_html(cmd_args):
+def build_help_html(airport_name):
     """Build the help window and bounds display HTML/JS.
 
     Args:
         cmd_args: Command-line arguments string for display.
     """
+    if airport_name:
+        title_string = '<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">hotspots.aero report for ' + \
+            airport_name + '</div>\n'
+    else:
+        title_string = '<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">hotspots.aero</div>\n'
+
     help_panel = (
         '<div id="help-window" style="'
-        "position: fixed; bottom: 20px; left: 20px; width: 350px; "
+        "position: fixed; bottom: 20px; left: 20px; width: 400px; "
         "background-color: white; border: 2px solid #333; border-radius: 5px; "
         "padding: 10px; font-family: Arial, sans-serif; font-size: 12px; "
         'z-index: 9999; box-shadow: 2px 2px 6px rgba(0,0,0,0.3);">\n'
-        '<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">GA hotspots</div>\n'
-        '<div style="margin-bottom: 4px;">&bull; Click red dots for incident info</div>\n'
-        '<div style="margin-bottom: 8px;">&bull; Press <kbd>b</kbd> to toggle viewport bounds</div>\n'
+        + title_string +
+        '<div style="margin-bottom: 4px;">Colored dots = aircraft within .3nm and 400 ft. Click dot for more info. </div>\n'
         '<div style="border-top: 1px solid #ccc; padding-top: 8px; margin-top: 8px;">'
-        '<div style="font-weight: bold; font-size: 11px; margin-bottom: 4px;">'
-        'Data courtesy <a href="http://adsb.lol">adsb.lol</a>, via the Open Database License</div>\n'
+        '<div style="font-size: 11px; margin-bottom: 4px;">'
+        'Data courtesy <a href="http://adsb.lol">adsb.lol</a>, via the Open Database License<br/>\n'
+        'Data is crowdsourced and incomplete.  For informational purposes only.</div>'
         '</div>\n'
         '</div>\n'
     )

@@ -21,21 +21,14 @@ copy to network storage. The local temp file is cleaned up after sharding.
 
 Usage:
     python src/tools/batch_los_pipeline.py \\
-        --start-date 01/15/26 --end-date 01/20/26 \\
-        --airports examples/busiest_nontowered.txt \\
-        --max-airports 100 --day-filter weekday
+        --start-date 01/01/25 --end-date 01/01/26 \\
+        --airports examples/busiest_nontowered_and_local.txt \\
+        --max-airports 100
 
-    # Dry run to verify commands without executing:
+    # one airport, skip data that we don't already have downloaded/sharded:
     python src/tools/batch_los_pipeline.py \\
-        --start-date 01/15/26 --end-date 01/15/26 \\
-        --airports examples/busiest_nontowered.txt \\
-        --max-airports 3 --dry-run
-
-    # Skip download/extract, just re-run analysis on existing sharded files:
-    python src/tools/batch_los_pipeline.py \\
-        --start-date 01/15/26 --end-date 01/15/26 \\
-        --airports examples/busiest_nontowered.txt \\
-        --max-airports 3 --analysis-only
+        --start-date 06/01/25 --end-date 06/05/26 \\
+        --airports KWVI --analysis-only
 """
 
 import argparse
@@ -515,7 +508,11 @@ def aggregate_airport_results(icao: str, airport_info: dict,
         vis_cmd += f"--data-quality {quality_json} "
 
     vis_cmd += "--traffic-tiles tiles/traffic/ "
-    vis_cmd += f"--output {vis_output} --no-browser"
+    vis_cmd += f"--output {vis_output} --no-browser "
+
+    vis_cmd += "--heatmap-label '6/1/25 - 6/15/25' "  # TODO dynamic label
+    vis_cmd += "--traffic-label '6/1/25 - 8/31/25' "  # TODO dynamic label
+
     run_command(vis_cmd)
 
 
