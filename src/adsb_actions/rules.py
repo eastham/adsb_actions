@@ -262,49 +262,65 @@ class Rules:
                 return False
 
         if 'squawk' in conditions:
+            # NOTE this condition data may not be immediately available until it is
+            # periodically broadcast
             condition_value = conditions['squawk']
+            # Get squawk from flightdict
+            squawk = flight.lastloc.flightdict.get('squawk') if flight.lastloc.flightdict else None
             # condition_value can be a single squawk code or a list of codes
             if isinstance(condition_value, list):
                 squawk_list = [str(s) for s in condition_value]
             else:
                 squawk_list = [str(condition_value)]
-            result = flight.lastloc.squawk in squawk_list
+            result = squawk in squawk_list
             if not result:
                 return False
 
         if 'emergency' in conditions:
+            # NOTE this condition data may not be immediately available until it is
+            # periodically broadcast
             condition_value = conditions['emergency']
-            if flight.lastloc.emergency is None:
+            # Get emergency from flightdict
+            emergency = flight.lastloc.flightdict.get('emergency') if flight.lastloc.flightdict else None
+            if emergency is None:
                 return False
             # "any" matches any emergency status except "none"
             if condition_value == 'any':
-                result = flight.lastloc.emergency != 'none'
+                result = emergency != 'none'
             elif isinstance(condition_value, list):
-                result = flight.lastloc.emergency in condition_value
+                result = emergency in condition_value
             else:
-                result = flight.lastloc.emergency == condition_value
+                result = emergency == condition_value
             if not result:
                 return False
 
         if 'category' in conditions:
+            # NOTE this condition data may not be immediately available until it is
+            # periodically broadcast
             condition_value = conditions['category']
-            if flight.lastloc.category is None:
+            # Get category from flightdict
+            category = flight.lastloc.flightdict.get('category') if flight.lastloc.flightdict else None
+            if category is None:
                 return False
             if isinstance(condition_value, list):
-                result = flight.lastloc.category in condition_value
+                result = category in condition_value
             else:
-                result = flight.lastloc.category == condition_value
+                result = category == condition_value
             if not result:
                 return False
 
         if 'exclude_category' in conditions:
+            # NOTE this condition data may not be immediately available until it is
+            # periodically broadcast
             condition_value = conditions['exclude_category']
-            if flight.lastloc.category is not None:
+            # Get category from flightdict
+            category = flight.lastloc.flightdict.get('category') if flight.lastloc.flightdict else None
+            if category is not None:
                 if isinstance(condition_value, list):
-                    if flight.lastloc.category in condition_value:
+                    if category in condition_value:
                         return False
                 else:
-                    if flight.lastloc.category == condition_value:
+                    if category == condition_value:
                         return False
 
         if 'min_gs' in conditions:

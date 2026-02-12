@@ -154,6 +154,12 @@ class Flight:
         return altchangestr
 
     def update_loc(self, loc):
+        # Preserve flightdict from previous location if new one doesn't have it
+        # flightdict contains persistent aircraft attributes (category, squawk, emergency, etc.)
+        # Hot path optimization: direct assignment avoids creating new Location object
+        if loc.flightdict is None and self.lastloc is not None and self.lastloc.flightdict is not None:
+            loc.flightdict = self.lastloc.flightdict
+
         self.lastloc = loc
 
     def update_inside_bboxes(self, bbox_list : list[Bboxes], loc : Location):
