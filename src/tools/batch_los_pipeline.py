@@ -186,20 +186,30 @@ def generate_multi_airport_yaml(icao_codes: list[str], date_compact: str,
     return "\n".join(lines) + "\n"
 
 
-def download_tar_parts(date_obj: datetime, force: bool = False) -> bool:
-    """Download the two tar archive parts for a date, from the 
+def download_tar_parts(date_obj: datetime, data_dir: Path = None, force: bool = False) -> bool:
+    """Download the two tar archive parts for a date, from the
     adsb.lol GitHub releases.
+
+    Args:
+        date_obj: Date to download data for
+        data_dir: Directory to save downloaded files (defaults to DATA_DIR)
+        force: Force re-download even if file exists
 
     Returns True if both parts are available (downloaded or cached).
     """
+    if data_dir is None:
+        data_dir = DATA_DIR
+    else:
+        data_dir = Path(data_dir)
+
     date_iso = date_obj.strftime('%Y.%m.%d')
     full_year = date_obj.strftime('%Y')
     file_prefix = f"v{date_iso}-planes-readsb-prod-0"
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     for ext in ['aa', 'ab']:
-        local_file = DATA_DIR / f"{file_prefix}.tar.{ext}"
+        local_file = data_dir / f"{file_prefix}.tar.{ext}"
         if local_file.exists() and not force:
             print(f"✅ {local_file.name} exists. Skipping download.")
             continue
@@ -217,8 +227,25 @@ def download_tar_parts(date_obj: datetime, force: bool = False) -> bool:
             r = requests.get(url, stream=True)
 
         if r.status_code == 200:
+            total_size = int(r.headers.get('content-length', 0))
+            downloaded = 0
+            start_time = time.time()
+
             with open(local_file, 'wb') as f:
-                shutil.copyfileobj(r.raw, f)
+                for chunk in r.iter_content(chunk_size=16*1024):
+                    f.write(chunk)
+                    downloaded += len(chunk)
+
+                    # Print progress every 50MB
+                    if downloaded % (50 * 1024 * 1024) < 8192:
+                        elapsed = time.time() - start_time
+                        if elapsed > 0:
+                            speed_mbps = (downloaded / elapsed) / (1024 * 1024)
+                            if total_size > 0:
+                                pct = (downloaded / total_size) * 100
+                                print(f"  {pct:.1f}% - {downloaded / (1024*1024):.1f} MB @ {speed_mbps:.1f} MB/s")
+                            else:
+                                print(f"  {downloaded / (1024*1024):.1f} MB @ {speed_mbps:.1f} MB/s")
         else:
             print(f"⚠️ Could not download {local_file.name} "
                   f"(Status: {r.status_code})")
@@ -861,7 +888,7 @@ Examples:
                         help="Force re-download of raw tarballs")
     parser.add_argument("--aggregate-only", action="store_true",
                         help="Skip all processing, only run cross-date aggregation")
-    parser.add_argument("--timing-output", type=str, default="timing_report.json",
+    parser.add_argument("--timing-output", type=str,
                         help="Path for timing report JSON file (default: timing_report.json)")
 
     args = parser.parse_args()
@@ -943,7 +970,7 @@ Examples:
         print_visualization_summary(output_stats)
 
     # Save timing report
-    if not args.dry_run:
+    if not args.dry_run and args.timing_output:
         timer.save_report(args.timing_output)
 
 
