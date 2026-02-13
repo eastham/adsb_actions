@@ -67,18 +67,21 @@ class MapVisualizer:
         self.points = []
         self.annotations = []
         self.qualities = []  # Track quality for each point
+        self.links = []  # Track links for each point
 
-    def add_point(self, point, annotation, quality='high'):
+    def add_point(self, point, annotation, links, quality='high'):
         """
-        Add a point with annotation to be visualized.
+        Add a point/event with annotation to be visualized.
 
         Args:
             point: Tuple of (latitude, longitude)
             annotation: String description/annotation for the point
+            links: String of links for the point
             quality: Quality level ('high', 'medium', 'low')
         """
         self.points.append(point)
         self.annotations.append(annotation)
+        self.links.append(links)
         self.qualities.append(quality)
 
     def clear(self):
@@ -169,7 +172,7 @@ class MapVisualizer:
                     border-radius: 5px;
                     box-shadow: 2px 2px 6px rgba(0,0,0,0.3);">
             <label for="traffic-opacity-slider" style="font-weight: bold; font-size: 12px;">
-                <span style="color: #00ff00; font-size: 20px; vertical-align: middle;">■</span><span style="color: #ffff00; font-size: 20px; vertical-align: middle;">■</span><span style="color: #ff0000; font-size: 20px; vertical-align: middle;">■</span> Traffic Layer Opacity: <span id="opacity-value">""" + str(int(opacity * 100)) + """</span>%
+                <span style="color: #00ff00; font-size: 20px;">■</span><span style="color: #ffff00; font-size: 20px;">■</span><span style="color: #ff0000; font-size: 20px;">■</span> Traffic Layer Opacity: <span id="opacity-value">""" + str(int(opacity * 100)) + """</span>%
             </label><br>
             <input type="range"
                    id="traffic-opacity-slider"
@@ -401,11 +404,12 @@ class MapVisualizer:
             # Create a feature group to hold all point markers
             points_group = folium.FeatureGroup(name="LOS Points")
 
-            for idx, ((lat, lon), annotation, quality) in enumerate(zip(self.points, self.annotations, self.qualities)):
+            for idx, ((lat, lon), annotation, links, quality) in enumerate(zip(self.points, self.annotations, self.links, self.qualities)):
                 color = self._get_point_color(quality)
-                # Add hide link to annotation
                 hide_link = f' - <b><a href="#" onclick="hidePoint({idx}); return false;">Hide</a></b>'
-                popup_html = annotation + hide_link
+                # add horizontal rule with minimal vertical spacing
+                popup_html = annotation + "<hr style='margin: 5px 0; border-top: 1px solid #ccc;'>"
+                popup_html += "<div style='text-align: center;'>" + links + hide_link + "</div>"
 
                 circle = folium.CircleMarker(
                     location=[lat, lon],
@@ -536,7 +540,7 @@ class MapVisualizer:
                     var label = document.createElement('label');
                     label.htmlFor = 'heatmap-opacity-slider';
                     label.style.cssText = 'font-weight: bold; font-size: 12px;';
-                    label.innerHTML = '<span style="color: white; font-size: 20px; vertical-align: middle; text-shadow: 0 0 1px black;">●</span><span style="color: lightblue; font-size: 20px; vertical-align: middle;">●</span><span style="color: blue; font-size: 20px; vertical-align: middle;">●</span><span style="color: #ff00ff; font-size: 20px; vertical-align: middle;">●</span> LOS Heatmap Opacity: <span id="heatmap-opacity-value">60</span>%';
+                    label.innerHTML = '<span style="color: white; font-size: 20px; text-shadow: 0 0 1px black;">●</span><span style="color: lightblue; font-size: 20px;">●</span><span style="color: blue; font-size: 20px;">●</span><span style="color: #ff00ff; font-size: 20px;">●</span> LOS Heatmap Opacity: <span id="heatmap-opacity-value">60</span>%';
                     box.appendChild(label);
                     box.appendChild(document.createElement('br'));
 
@@ -750,18 +754,16 @@ if __name__ == "__main__":
                 altdist = row[17] if len(row) > 17 else ""
 
                 annotation = f"<b>{datestr}</b> {tail1}/{tail2} "
-                # Add quality with explanation on new line
                 if quality:
                     annotation += f"<br><b>Event Quality:</b> {quality}"
                     if quality_explanation:
                         annotation += f" ({quality_explanation})"
+                links = ""
                 if animation:
-                    annotation += f"<br><b><a href='{animation}' target='_blank'>Event preview</a></b> - "
-                else:
-                    annotation += "<br>"
-                annotation += f"<b><a href='{link}' target='_blank'>adsb.lol replay</a></b>"
+                    links += f"<b><a href='{animation}' target='_blank'>Event preview</a></b> - "
+                links += f"<b><a href='{link}' target='_blank'>adsb.lol replay</a></b>"
 
-                visualizer.add_point((float(lat), float(lon)), annotation, quality=quality)
+                visualizer.add_point((float(lat), float(lon)), annotation, links, quality=quality)
                 print(f"Read point {ctr} at {lat} {lon} alt: {altitude} quality: {quality} datestr:{datestr}")
                 ctr += 1
             except (ValueError, IndexError) as e:

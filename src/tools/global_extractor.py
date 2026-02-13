@@ -41,6 +41,7 @@ if __name__ == "__main__":
             if args.dry_run:
                 print(f"Dry run: Would extract global data for {date_str}")
             else:
+                # make global sorted JSONL
                 result = extract_traces(date)
                 if not result:
                     print(f"Failed to extract global data for {date_str}, skipping")

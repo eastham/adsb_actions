@@ -21,7 +21,7 @@ copy to network storage. The local temp file is cleaned up after sharding.
 
 Usage:
     python src/tools/batch_los_pipeline.py \\
-        --start-date 01/01/25 --end-date 01/01/26 \\
+        --start-date 07/01/25 --end-date 07/01/26 \\
         --airports examples/busiest_nontowered_and_local.txt \\
         --max-airports 100
 
@@ -248,7 +248,7 @@ def download_tar_parts(date_obj: datetime, data_dir: Path = None, force: bool = 
 
 
 def extract_traces(date_obj: datetime) -> bool:
-    """Extract trace archives to examples/generated/ directory.
+    """untar trace archives to examples/generated/ directory.
 
     Returns True on success.
     """
@@ -549,7 +549,7 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
                 print(f"[DRY-RUN] Download {file_prefix}.tar.{ext}")
         timer.end('download')
 
-        # --- Extract ---
+        # --- Extract from tarfile --
         timer.start('extract')
         # Check network storage for cached file (authoritative source)
         network_global_gz = DATA_DIR / f"{GZ_DATA_PREFIX}{date_compact}.gz"
@@ -574,7 +574,7 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
             print(f"[DRY-RUN] Extract traces")
         timer.end('extract')
 
-        # --- Convert traces (global, no spatial filter) ---
+        # --- Convert traces to global time-ordered JSONL ---
         timer.start('convert_traces')
         if not dry_run:
             if not network_global_gz.exists():
@@ -605,7 +605,7 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
                     all_shards_exist = False
                     break
 
-        if all_shards_exist and analysis_only:
+        if all_shards_exist: # and analysis_only:
             print(f"✅ All {len(icao_codes)} airport shard files already exist, skipping shard pass.")
             timer.start('shard_pass')  # For timing consistency
             timer.end('shard_pass')

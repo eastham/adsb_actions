@@ -448,19 +448,19 @@ def build_help_html(airport_name):
         cmd_args: Command-line arguments string for display.
     """
     if airport_name:
-        title_string = '<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">hotspots.aero report for ' + \
+        title_string = '<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">hotspots.aero traffic report for ' + \
             airport_name + '</div>\n'
     else:
         title_string = '<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">hotspots.aero</div>\n'
 
     help_panel = (
         '<div id="help-window" style="'
-        "position: fixed; bottom: 20px; left: 20px; width: 400px; "
+        "position: fixed; bottom: 20px; left: 20px; width: 430px; "
         "background-color: white; border: 2px solid #333; border-radius: 5px; "
         "padding: 10px; font-family: Arial, sans-serif; font-size: 12px; "
         'z-index: 9999; box-shadow: 2px 2px 6px rgba(0,0,0,0.3);">\n'
         + title_string +
-        '<div style="margin-bottom: 4px;">Colored dots = aircraft within .3nm and 400 ft. Click dot for more info. </div>\n'
+        '<div style="margin-bottom: 4px;">Colored dots = two aircraft within .3nm and 400 ft. Click dot for more info. </div>\n'
         '<div style="border-top: 1px solid #ccc; padding-top: 8px; margin-top: 8px;">'
         '<div style="font-size: 11px; margin-bottom: 4px;">'
         'Data courtesy <a href="http://adsb.lol">adsb.lol</a>, via the Open Database License<br/>\n'
