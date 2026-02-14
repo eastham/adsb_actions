@@ -153,12 +153,21 @@ class Flight:
 
         return altchangestr
 
+    # Keys in flightdict that persist across updates — ADS-B only
+    # broadcasts these periodically, not on every position report.
+    _PERSISTENT_KEYS = ('category', 'squawk', 'emergency')
+
     def update_loc(self, loc):
-        # Preserve flightdict from previous location if new one doesn't have it
-        # flightdict contains persistent aircraft attributes (category, squawk, emergency, etc.)
-        # Hot path optimization: direct assignment avoids creating new Location object
-        if loc.flightdict is None and self.lastloc is not None and self.lastloc.flightdict is not None:
-            loc.flightdict = self.lastloc.flightdict
+        # Carry forward persistent aircraft attributes from the previous
+        # flightdict when the new position report doesn't include them.
+        prev = self.lastloc.flightdict if self.lastloc else None
+        if prev:
+            if loc.flightdict is None:
+                loc.flightdict = prev
+            else:
+                for key in self._PERSISTENT_KEYS:
+                    if key not in loc.flightdict and key in prev:
+                        loc.flightdict[key] = prev[key]
 
         self.lastloc = loc
 

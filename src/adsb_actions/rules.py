@@ -161,7 +161,7 @@ class Rules:
                 return False
             if abs(flight.lastloc.lon - condition_value[2]) > lon_offset:
                 return False
-            dist = flight.lastloc.distfrom(
+            dist = flight.lastloc.distfrom_fast(
                 condition_value[1], condition_value[2])
             if condition_value[0] < dist:
                 return False

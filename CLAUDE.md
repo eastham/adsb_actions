@@ -15,7 +15,7 @@ except in tests where you should do whatever is cleanest.
 Prioritize clean, understandable code.  anything subtle should be commented.
 Docstrings per function are not required but if written should be brief.
 
-# where to find example data
+# where data lives, including convenient example data
 
 ## /tests/1hr.json simple time-sorted JSONL exemplar.
 
@@ -29,12 +29,15 @@ This file has a LOS event: tests/fixtures/KWVI/060825_KWVI_traffic.csv
 
 # common command lines
 
-## LOS research high-level pipeline run:
+## LOS research entire pipeline run:
  python src/tools/batch_los_pipeline.py \
         --start-date 08/01/25 --end-date 08/31/25 \
         --airports ./examples/busiest_nontowered_and_local.txt --max-airports 10
 
-## run the LOS visualizer which generates static HTML with a high-level map and individual html's of events:
+## individual airport/day LOS analysis (outputs CSV file of events)
+python3 src/analyzers/prox_analyze_from_files.py --yaml examples/generated/KWVI/prox_analyze_from_files.yaml --resample --sorted-file examples/generated/KWVI/080225_KWVI.gz --animate-los --animation-dir examples/generated/KWVI > examples/generated/KWVI/080225_KWVI.out 2>&1
+
+## run the LOS visualizer to use CSV LOS events to generate static HTML with a high-level map and individual html's of events:
 cat examples/generated/KWVI/KWVI_combined.csv.out | python3 src/postprocessing/visualizer.py --sw 36.76903279623333,-121.99851398823964 --ne 37.10236612956666,-121.58148784376036 --native-heatmap --heatmap-opacity 0.5 --heatmap-radius 50 --busyness-data examples/generated/KWVI/KWVI_busyness.json --data-quality examples/generated/KWVI/KWVI_quality.json --output examples/generated/KWVI/KWVI_map.html  --traffic-tiles tiles/traffic/ --no-browser
 
 # Project conventions
