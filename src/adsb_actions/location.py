@@ -1,5 +1,6 @@
 """Parsing and representation for a single position update coming from ADS-B."""
 
+import math
 import logging
 from dataclasses import dataclass, fields
 from typing import Optional
@@ -83,7 +84,7 @@ class Location:
 
     def __sub__(self, other):
         """Return distance to the other Location in nm"""
-        return self.distfrom(other.lat, other.lon)
+        return self.distfrom_fast(other.lat, other.lon)
 
     def __lt__(self, other):
         """Altitude comparison only"""
@@ -93,6 +94,20 @@ class Location:
         """Altitude comparison only"""
         return self.alt_baro > other.alt_baro
 
+    def distfrom_fast(self, lat, lon):
+        # Haversine formula, est error .5% at 1 mile.
+
+        # Convert decimal degrees to radians
+        phi1, phi2 = math.radians(self.lat), math.radians(lat)
+        dphi = math.radians(lat - self.lat)
+        dlambda = math.radians(lon - self.lon)
+
+        a = math.sin(dphi/2)**2 + \
+            math.cos(phi1) * math.cos(phi2) * math.sin(dlambda/2)**2
+
+        # 3443.92 is the Earth's radius in Nautical Miles
+        return 2 * 3443.92 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    
     def distfrom(self, lat, lon):
         """Return distance from other lat/long in nm"""
         return distance.distance((self.lat, self.lon), (lat, lon)).nm
