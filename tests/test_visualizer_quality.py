@@ -1,6 +1,5 @@
 """Test quality-based color coding in visualizer."""
 
-import pytest
 from src.postprocessing.visualizer import MapVisualizer
 
 
@@ -11,9 +10,9 @@ class TestVisualizerQuality:
         """Test adding points with different quality levels."""
         viz = MapVisualizer()
 
-        viz.add_point((37.5, -122.0), "High quality event", quality='high')
-        viz.add_point((37.6, -122.1), "Medium quality event", quality='medium')
-        viz.add_point((37.7, -122.2), "Low quality event", quality='low')
+        viz.add_point((37.5, -122.0), "High quality event", [], quality='high')
+        viz.add_point((37.6, -122.1), "Medium quality event", [], quality='medium')
+        viz.add_point((37.7, -122.2), "Low quality event", [], quality='low')
 
         assert len(viz.points) == 3
         assert len(viz.annotations) == 3
@@ -24,7 +23,7 @@ class TestVisualizerQuality:
         """Test that default quality is 'high' when not specified."""
         viz = MapVisualizer()
 
-        viz.add_point((37.5, -122.0), "Default quality event")
+        viz.add_point((37.5, -122.0), "Default quality event", [])
 
         assert len(viz.qualities) == 1
         assert viz.qualities[0] == 'high'
@@ -33,8 +32,8 @@ class TestVisualizerQuality:
         """Test that clear() removes quality data."""
         viz = MapVisualizer()
 
-        viz.add_point((37.5, -122.0), "Event", quality='high')
-        viz.add_point((37.6, -122.1), "Event", quality='medium')
+        viz.add_point((37.5, -122.0), "Event", [], quality='high')
+        viz.add_point((37.6, -122.1), "Event", [], quality='medium')
 
         assert len(viz.qualities) == 2
 
@@ -67,7 +66,7 @@ class TestVisualizerQuality:
     def test_get_point_color_vhigh(self):
         """Test color for very high quality events."""
         viz = MapVisualizer()
-        assert viz._get_point_color('vhigh') == 'purple'
+        assert viz._get_point_color('vhigh') == '#ff00ff'
 
     def test_quality_tracking_matches_points(self):
         """Test that quality list stays in sync with points list."""
@@ -81,7 +80,7 @@ class TestVisualizerQuality:
         ]
 
         for point, annotation, quality in test_data:
-            viz.add_point(point, annotation, quality)
+            viz.add_point(point, annotation, [], quality)
 
         assert len(viz.points) == len(viz.qualities)
         assert len(viz.annotations) == len(viz.qualities)

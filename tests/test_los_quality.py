@@ -1,8 +1,16 @@
 """Unit tests for LOS event quality scoring."""
 
-import pytest
 from unittest.mock import Mock
 from src.applications.airport_monitor.los import calculate_event_quality
+
+
+def _make_flight(flight_id, first_now, last_now, category='A1'):
+    """Helper to build a flight mock with required string flight_id."""
+    f = Mock()
+    f.flight_id = flight_id
+    f.firstloc = Mock(now=first_now)
+    f.lastloc = Mock(now=last_now, flightdict={'category': category})
+    return f
 
 
 class TestEventQuality:
@@ -16,13 +24,8 @@ class TestEventQuality:
         los.min_latdist = 0.5  # nm
         los.min_altdist = 500  # ft
 
-        flight1 = Mock()
-        flight1.firstloc = Mock(now=50.0)
-        flight1.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})  # 250 sec track
-
-        flight2 = Mock()
-        flight2.firstloc = Mock(now=50.0)
-        flight2.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})  # 250 sec track
+        flight1 = _make_flight('N123AB', 50.0, 300.0)
+        flight2 = _make_flight('N456CD', 50.0, 300.0)
 
         quality, explanation = calculate_event_quality(los, flight1, flight2)
         assert quality == 'low'
@@ -36,13 +39,8 @@ class TestEventQuality:
         los.min_latdist = 0.5  # nm
         los.min_altdist = 500  # ft
 
-        flight1 = Mock()
-        flight1.firstloc = Mock(now=50.0)
-        flight1.lastloc = Mock(now=90.0, flightdict={'category': 'A1'})  # 40 sec track (< 60)
-
-        flight2 = Mock()
-        flight2.firstloc = Mock(now=50.0)
-        flight2.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})  # 250 sec track
+        flight1 = _make_flight('N123AB', 50.0, 90.0)   # 40 sec track (< 60)
+        flight2 = _make_flight('N456CD', 50.0, 300.0)
 
         quality, explanation = calculate_event_quality(los, flight1, flight2)
         assert quality == 'low'
@@ -56,13 +54,8 @@ class TestEventQuality:
         los.min_latdist = 0.5  # nm
         los.min_altdist = 500  # ft
 
-        flight1 = Mock()
-        flight1.firstloc = Mock(now=50.0)
-        flight1.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})  # 250 sec track
-
-        flight2 = Mock()
-        flight2.firstloc = Mock(now=50.0)
-        flight2.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})  # 250 sec track
+        flight1 = _make_flight('N123AB', 50.0, 300.0)
+        flight2 = _make_flight('N456CD', 50.0, 300.0)
 
         quality, explanation = calculate_event_quality(los, flight1, flight2)
         assert quality == 'medium'
@@ -76,13 +69,8 @@ class TestEventQuality:
         los.min_latdist = 0.5  # nm
         los.min_altdist = 500  # ft
 
-        flight1 = Mock()
-        flight1.firstloc = Mock(now=50.0)
-        flight1.lastloc = Mock(now=300.0, flightdict={'category': 'A7'})  # Helicopter
-
-        flight2 = Mock()
-        flight2.firstloc = Mock(now=50.0)
-        flight2.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})  # Not helicopter
+        flight1 = _make_flight('N123AB', 50.0, 300.0, category='A7')
+        flight2 = _make_flight('N456CD', 50.0, 300.0)
 
         quality, explanation = calculate_event_quality(los, flight1, flight2)
         assert quality == 'medium'
@@ -96,33 +84,23 @@ class TestEventQuality:
         los.min_latdist = 0.5  # nm
         los.min_altdist = 500  # ft
 
-        flight1 = Mock()
-        flight1.firstloc = Mock(now=50.0)
-        flight1.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})  # Not helicopter
-
-        flight2 = Mock()
-        flight2.firstloc = Mock(now=50.0)
-        flight2.lastloc = Mock(now=300.0, flightdict={'category': 'A7'})  # Helicopter
+        flight1 = _make_flight('N123AB', 50.0, 300.0)
+        flight2 = _make_flight('N456CD', 50.0, 300.0, category='A7')
 
         quality, explanation = calculate_event_quality(los, flight1, flight2)
         assert quality == 'medium'
         assert 'helicopter' in explanation.lower()
 
     def test_high_quality(self):
-        """Short duration, long tracks, no helicopters should be high quality."""
+        """Short duration (<= 40s), long tracks, no helicopters should be high quality."""
         los = Mock()
         los.create_time = 100.0
-        los.last_time = 145.0  # 45 second duration (< 60)
+        los.last_time = 130.0  # 30 second duration (<= 40)
         los.min_latdist = 0.5  # nm (> 0.2, so not vhigh)
         los.min_altdist = 500  # ft (> 200, so not vhigh)
 
-        flight1 = Mock()
-        flight1.firstloc = Mock(now=50.0)
-        flight1.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})  # 250 sec track
-
-        flight2 = Mock()
-        flight2.firstloc = Mock(now=50.0)
-        flight2.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})  # 250 sec track
+        flight1 = _make_flight('N123AB', 50.0, 300.0)
+        flight2 = _make_flight('N456CD', 50.0, 300.0)
 
         quality, explanation = calculate_event_quality(los, flight1, flight2)
         assert quality == 'high'
@@ -136,35 +114,25 @@ class TestEventQuality:
         los.min_latdist = 0.5  # nm
         los.min_altdist = 500  # ft
 
-        flight1 = Mock()
-        flight1.firstloc = Mock(now=50.0)
-        flight1.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})
-
-        flight2 = Mock()
-        flight2.firstloc = Mock(now=50.0)
-        flight2.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})
+        flight1 = _make_flight('N123AB', 50.0, 300.0)
+        flight2 = _make_flight('N456CD', 50.0, 300.0)
 
         # 120 seconds should be medium (60 < 120 <= 120), not low (> 120)
         quality, _ = calculate_event_quality(los, flight1, flight2)
         assert quality == 'medium'
 
-    def test_boundary_duration_1min(self):
-        """Event duration exactly 60 seconds is NOT medium (> not >=)."""
+    def test_boundary_duration_40sec(self):
+        """Event duration exactly 40 seconds is NOT medium (> not >=)."""
         los = Mock()
         los.create_time = 100.0
-        los.last_time = 160.0  # Exactly 60 second duration
+        los.last_time = 140.0  # Exactly 40 second duration
         los.min_latdist = 0.5  # nm
         los.min_altdist = 500  # ft
 
-        flight1 = Mock()
-        flight1.firstloc = Mock(now=50.0)
-        flight1.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})
+        flight1 = _make_flight('N123AB', 50.0, 300.0)
+        flight2 = _make_flight('N456CD', 50.0, 300.0)
 
-        flight2 = Mock()
-        flight2.firstloc = Mock(now=50.0)
-        flight2.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})
-
-        # 60 seconds should be high (<=60), not medium (>60)
+        # 40 seconds should be high (<=40), not medium (>40)
         quality, _ = calculate_event_quality(los, flight1, flight2)
         assert quality == 'high'
 
@@ -176,13 +144,8 @@ class TestEventQuality:
         los.min_latdist = 0.5  # nm
         los.min_altdist = 500  # ft
 
-        flight1 = Mock()
-        flight1.firstloc = Mock(now=50.0)
-        flight1.lastloc = Mock(now=110.0, flightdict={'category': 'A1'})  # Exactly 60 sec track
-
-        flight2 = Mock()
-        flight2.firstloc = Mock(now=50.0)
-        flight2.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})
+        flight1 = _make_flight('N123AB', 50.0, 110.0)  # Exactly 60 sec track
+        flight2 = _make_flight('N456CD', 50.0, 300.0)
 
         # 60 seconds track should be high, not low (<60)
         quality, _ = calculate_event_quality(los, flight1, flight2)
@@ -192,17 +155,12 @@ class TestEventQuality:
         """High quality event with very close CPA should be vhigh."""
         los = Mock()
         los.create_time = 100.0
-        los.last_time = 145.0  # 45 second duration (< 60)
+        los.last_time = 130.0  # 30 second duration (<= 40)
         los.min_latdist = 0.15  # nm (< 0.2)
         los.min_altdist = 150  # ft (< 200)
 
-        flight1 = Mock()
-        flight1.firstloc = Mock(now=50.0)
-        flight1.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})  # 250 sec track
-
-        flight2 = Mock()
-        flight2.firstloc = Mock(now=50.0)
-        flight2.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})  # 250 sec track
+        flight1 = _make_flight('N123AB', 50.0, 300.0)
+        flight2 = _make_flight('N456CD', 50.0, 300.0)
 
         quality, explanation = calculate_event_quality(los, flight1, flight2)
         assert quality == 'vhigh'
@@ -213,17 +171,12 @@ class TestEventQuality:
         """CPA exactly 0.2 nm should NOT be vhigh (< not <=)."""
         los = Mock()
         los.create_time = 100.0
-        los.last_time = 145.0  # 45 second duration
+        los.last_time = 130.0  # 30 second duration (<= 40)
         los.min_latdist = 0.2  # nm (exactly 0.2, not < 0.2)
         los.min_altdist = 100  # ft (< 200)
 
-        flight1 = Mock()
-        flight1.firstloc = Mock(now=50.0)
-        flight1.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})
-
-        flight2 = Mock()
-        flight2.firstloc = Mock(now=50.0)
-        flight2.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})
+        flight1 = _make_flight('N123AB', 50.0, 300.0)
+        flight2 = _make_flight('N456CD', 50.0, 300.0)
 
         quality, _ = calculate_event_quality(los, flight1, flight2)
         assert quality == 'high'  # Not vhigh
@@ -232,17 +185,12 @@ class TestEventQuality:
         """CPA exactly 200 ft should NOT be vhigh (< not <=)."""
         los = Mock()
         los.create_time = 100.0
-        los.last_time = 145.0  # 45 second duration
+        los.last_time = 130.0  # 30 second duration (<= 40)
         los.min_latdist = 0.1  # nm (< 0.2)
         los.min_altdist = 200  # ft (exactly 200, not < 200)
 
-        flight1 = Mock()
-        flight1.firstloc = Mock(now=50.0)
-        flight1.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})
-
-        flight2 = Mock()
-        flight2.firstloc = Mock(now=50.0)
-        flight2.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})
+        flight1 = _make_flight('N123AB', 50.0, 300.0)
+        flight2 = _make_flight('N456CD', 50.0, 300.0)
 
         quality, _ = calculate_event_quality(los, flight1, flight2)
         assert quality == 'high'  # Not vhigh
@@ -251,24 +199,19 @@ class TestEventQuality:
         """vhigh requires BOTH lateral < 0.2nm AND vertical < 200ft."""
         los1 = Mock()
         los1.create_time = 100.0
-        los1.last_time = 145.0
+        los1.last_time = 130.0
         los1.min_latdist = 0.1  # nm (< 0.2)
         los1.min_altdist = 300  # ft (> 200) - fails vertical
 
-        flight1 = Mock()
-        flight1.firstloc = Mock(now=50.0)
-        flight1.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})
-
-        flight2 = Mock()
-        flight2.firstloc = Mock(now=50.0)
-        flight2.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})
+        flight1 = _make_flight('N123AB', 50.0, 300.0)
+        flight2 = _make_flight('N456CD', 50.0, 300.0)
 
         quality, _ = calculate_event_quality(los1, flight1, flight2)
         assert quality == 'high'  # Not vhigh - vertical too large
 
         los2 = Mock()
         los2.create_time = 100.0
-        los2.last_time = 145.0
+        los2.last_time = 130.0
         los2.min_latdist = 0.3  # nm (> 0.2) - fails lateral
         los2.min_altdist = 100  # ft (< 200)
 
@@ -279,17 +222,12 @@ class TestEventQuality:
         """vhigh should handle negative altitude differences (use absolute value)."""
         los = Mock()
         los.create_time = 100.0
-        los.last_time = 145.0
+        los.last_time = 130.0
         los.min_latdist = 0.15  # nm (< 0.2)
         los.min_altdist = -150  # ft (negative, but abs < 200)
 
-        flight1 = Mock()
-        flight1.firstloc = Mock(now=50.0)
-        flight1.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})
-
-        flight2 = Mock()
-        flight2.firstloc = Mock(now=50.0)
-        flight2.lastloc = Mock(now=300.0, flightdict={'category': 'A1'})
+        flight1 = _make_flight('N123AB', 50.0, 300.0)
+        flight2 = _make_flight('N456CD', 50.0, 300.0)
 
         quality, explanation = calculate_event_quality(los, flight1, flight2)
         assert quality == 'vhigh'

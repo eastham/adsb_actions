@@ -180,13 +180,16 @@ def calculate_event_quality(los, flight1, flight2):
     min_track_duration_min = min_track_duration / 60.0
 
     # Apply quality criteria with explanations
+    if flight1.flight_id.strip()[-2:] == flight2.flight_id.strip()[-2:]:
+        reasons.append("Tail numbers end in same two letters (may be formation flight)")
+        quality = 'low'
     if event_duration > 120:
         reasons.append(f"long event ({event_duration_min:.1f}min - may be formation flight)")
         quality = 'low'
     elif min_track_duration < 60:
         reasons.append(f"short track ({min_track_duration_min:.1f}min - insufficient data)")
         quality = 'low'
-    elif event_duration > 60:
+    elif event_duration > 40:
         reasons.append(f"moderate duration ({event_duration_min:.1f}min)")
         quality = 'medium'
     elif is_helicopter:

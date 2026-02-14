@@ -968,7 +968,7 @@ Examples:
 
     # Save timing report
     if not args.dry_run and args.timing_output:
-        timer.save_report(args.timing_output)
+        timer.save_report(args.timing_output if args.timing_output else None)
 
 
 if __name__ == "__main__":
