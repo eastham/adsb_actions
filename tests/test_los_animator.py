@@ -115,24 +115,6 @@ class TestLOSAnimator:
         assert "time" in features[0]["properties"]
         assert features[0]["properties"]["iconstyle"]["color"] == "blue"
 
-    def test_build_trail_features(self):
-        """Test trail (LineString) feature building."""
-        resampler, base_time = self._create_test_resampler()
-        animator = LOSAnimator(resampler)
-
-        positions = animator._get_positions_in_window(
-            "N12345_1", base_time, base_time + 5
-        )
-
-        trails = animator._build_trail_features(positions, "blue")
-
-        # Should have n-1 trail segments for n positions
-        assert len(trails) == 5
-        assert trails[0]["geometry"]["type"] == "LineString"
-        # First trail has 2 points, last has all 6
-        assert len(trails[0]["geometry"]["coordinates"]) == 2
-        assert len(trails[-1]["geometry"]["coordinates"]) == 6
-
     def test_animate_los_creates_file(self):
         """Test that animate_los creates an HTML file."""
         resampler, base_time = self._create_test_resampler()

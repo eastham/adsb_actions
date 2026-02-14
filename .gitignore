@@ -5,6 +5,7 @@ private.yaml
 examples/generated/
 src/tools/.cache/
 
+
 # venv
 .venv
 .env
@@ -24,7 +25,7 @@ build/
 develop-eggs/
 dist/
 eggs/
-lib/
+/lib/
 lib64/
 logs/
 parts/
@@ -41,6 +42,7 @@ var/
 *.kml
 *.out
 *.html
+*.gz
 
 # Analysis-generated HTML and maps
 src/tools/analysis/*.html
@@ -58,3 +60,8 @@ remote/
 traces/
 acas/
 heatmap/
+/tiles*
+/data*
+
+# notes
+COMMANDS

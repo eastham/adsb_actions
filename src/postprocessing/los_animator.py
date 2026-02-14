@@ -4,6 +4,7 @@ This module creates interactive HTML maps with time sliders showing
 aircraft positions before, during, and after proximity events.
 """
 
+import bisect
 import datetime
 import logging
 
@@ -21,6 +22,8 @@ class LOSAnimator:
     # Colors for the two aircraft
     AIRCRAFT1_COLOR = "blue"
     AIRCRAFT2_COLOR = "red"
+    GAP_COLOR = "gray"         # color for segments spanning a data gap
+    GAP_THRESHOLD_S = 10       # seconds; gaps larger than this are highlighted
 
     def __init__(self, resampler):
         """Initialize the animator.
@@ -109,95 +112,92 @@ class LOSAnimator:
 
         return sorted(positions, key=lambda x: x.now)
 
-    def _build_features(self, positions: List, color: str,
-                        tail_number: str = "") -> List[dict]:
-        """Build GeoJSON features for a list of positions.
-
-        Creates circle markers with embedded label data. Labels are rendered
-        via custom JavaScript injected into the map.
-
-        Args:
-            positions: List of Location objects
-            color: Color for markers (e.g., "blue", "red")
-            tail_number: Tail number for labeling
-
-        Returns:
-            List of GeoJSON Feature dicts
-        """
+    def _build_features(self, positions: List, color: str) -> List[dict]:
+        """Build GeoJSON Point features for TimestampedGeoJson animation."""
         features = []
 
         for loc in positions:
-            # Format timestamp as ISO string for TimestampedGeoJson
             time_str = datetime.datetime.utcfromtimestamp(loc.now).isoformat() + "Z"
-
-            # Build label text
-            tail = tail_number or loc.tail or loc.flight or "?"
             alt = loc.alt_baro if loc.alt_baro else 0
 
             feature = {
                 "type": "Feature",
                 "geometry": {
                     "type": "Point",
-                    "coordinates": [loc.lon, loc.lat]
+                    "coordinates": [round(loc.lon, 6), round(loc.lat, 6)]
                 },
                 "properties": {
                     "time": time_str,
-                    "popup": f"<b>{tail}</b><br>Alt: {alt} ft",
+                    "popup": f"{alt}ft",
                     "icon": "circle",
                     "iconstyle": {
                         "color": color,
                         "fillColor": color,
                         "fillOpacity": 0.9,
                         "radius": 5
-                    },
-                    "tail": tail,
-                    "alt": alt
-                }
-            }
-            features.append(feature)
-
-        return features
-
-    def _build_trail_features(self, positions: List, color: str) -> List[dict]:
-        """Build GeoJSON LineString features showing the flight path.
-
-        Args:
-            positions: List of Location objects (sorted by time)
-            color: Color for the trail line
-
-        Returns:
-            List of GeoJSON Feature dicts for the trail
-        """
-        if len(positions) < 2:
-            return []
-
-        # Build cumulative line segments - each timestamp shows path up to that point
-        features = []
-
-        for i in range(1, len(positions)):
-            # Coordinates up to this point
-            coords = [[loc.lon, loc.lat] for loc in positions[:i+1]]
-            time_str = datetime.datetime.utcfromtimestamp(
-                positions[i].now).isoformat() + "Z"
-
-            feature = {
-                "type": "Feature",
-                "geometry": {
-                    "type": "LineString",
-                    "coordinates": coords
-                },
-                "properties": {
-                    "time": time_str,
-                    "style": {
-                        "color": color,
-                        "weight": 3,
-                        "opacity": 0.6
                     }
                 }
             }
             features.append(feature)
 
         return features
+
+    def _get_real_sample_times(self, flight_id: str) -> List[float]:
+        """Return sorted real (non-interpolated) sample timestamps for a flight."""
+        locs = self.resampler.locations_by_flight_id.get(flight_id, [])
+        return sorted(loc.now for loc in locs)
+
+    def _in_interpolated_gap(self, t: float, real_times: List[float]) -> bool:
+        """Check if timestamp t falls in a gap between real samples > threshold."""
+        idx = bisect.bisect_right(real_times, t)
+        if idx == 0 or idx >= len(real_times):
+            return False
+        return (real_times[idx] - real_times[idx - 1]) > self.GAP_THRESHOLD_S
+
+    def _add_trail_polylines(self, m, positions: List, color: str,
+                               real_times: List[float] = None,
+                               weight: int = 2, opacity: float = 0.7):
+        """Add trail polylines to a map, coloring interpolated gaps grey.
+
+        Positions are resampled (1/sec), so we use real_times to detect
+        stretches that were interpolated across a data gap.
+        """
+        if len(positions) < 2:
+            return
+        if not real_times:
+            # No gap info — draw a single polyline
+            coords = [[p.lat, p.lon] for p in positions]
+            folium.PolyLine(
+                coords, color=color, weight=weight, opacity=opacity
+            ).add_to(m)
+            return
+
+        # Walk positions, grouping consecutive same-color segments
+        seg_coords = [[positions[0].lat, positions[0].lon]]
+        prev_gap = self._in_interpolated_gap(positions[0].now, real_times)
+
+        for i in range(1, len(positions)):
+            cur_gap = self._in_interpolated_gap(positions[i].now, real_times)
+            if cur_gap != prev_gap:
+                # Emit the segment we've accumulated
+                if len(seg_coords) >= 2:
+                    style = dict(color=self.GAP_COLOR, weight=weight,
+                                 opacity=opacity, dash_array="6 4") \
+                            if prev_gap else \
+                            dict(color=color, weight=weight, opacity=opacity)
+                    folium.PolyLine(seg_coords, **style).add_to(m)
+                # Start new segment, overlapping one point for continuity
+                seg_coords = [seg_coords[-1]]
+                prev_gap = cur_gap
+            seg_coords.append([positions[i].lat, positions[i].lon])
+
+        # Emit final segment
+        if len(seg_coords) >= 2:
+            style = dict(color=self.GAP_COLOR, weight=weight,
+                         opacity=opacity, dash_array="6 4") \
+                    if prev_gap else \
+                    dict(color=color, weight=weight, opacity=opacity)
+            folium.PolyLine(seg_coords, **style).add_to(m)
 
     def animate_los(self, flight1_id: str, flight2_id: str,
                     event_time: float, window_before: int = 240,
@@ -274,28 +274,18 @@ class LOSAnimator:
         tail1 = positions1[0].tail if positions1 else flight1_id
         tail2 = positions2[0].tail if positions2 else flight2_id
 
-        # Add static trail lines (always visible)
-        trail1_coords = [[p.lat, p.lon] for p in positions1]
-        trail2_coords = [[p.lat, p.lon] for p in positions2]
-
-        folium.PolyLine(
-            trail1_coords,
-            color=self.AIRCRAFT1_COLOR,
-            weight=2,
-            opacity=0.7
-        ).add_to(m)
-
-        folium.PolyLine(
-            trail2_coords,
-            color=self.AIRCRAFT2_COLOR,
-            weight=2,
-            opacity=0.7
-        ).add_to(m)
+        # Add static trail lines (always visible), with interpolated gaps in grey
+        real_times1 = self._get_real_sample_times(flight1_id)
+        real_times2 = self._get_real_sample_times(flight2_id)
+        self._add_trail_polylines(m, positions1, self.AIRCRAFT1_COLOR,
+                                  real_times=real_times1)
+        self._add_trail_polylines(m, positions2, self.AIRCRAFT2_COLOR,
+                                  real_times=real_times2)
 
         # Build animated point features with altitude labels
         features = []
-        features.extend(self._build_features(positions1, self.AIRCRAFT1_COLOR, tail1))
-        features.extend(self._build_features(positions2, self.AIRCRAFT2_COLOR, tail2))
+        features.extend(self._build_features(positions1, self.AIRCRAFT1_COLOR))
+        features.extend(self._build_features(positions2, self.AIRCRAFT2_COLOR))
 
         # Add TimestampedGeoJson layer for animated dots
         TimestampedGeoJson(
