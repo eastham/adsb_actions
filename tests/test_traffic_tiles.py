@@ -109,22 +109,22 @@ class TestAltitudeToBand:
 
 
 class TestBandToColor:
-    def test_band_zero_is_red(self):
+    def test_band_zero_is_purple(self):
         r, g, b = band_to_color(0)
-        assert r == 255.0
+        assert r == 128.0
         assert g == 0.0
-        assert b == 0.0
+        assert b == 255.0
 
-    def test_band_max_is_green(self):
+    def test_band_max_is_light_blue(self):
         r, g, b = band_to_color(NUM_BANDS - 1)
-        assert r < 10  # near zero
-        assert g >= 180  # bright green
-        assert b == 0.0
+        assert r == 150.0
+        assert g == 220.0
+        assert b == 255.0
 
-    def test_midpoint_is_yellow_orange(self):
+    def test_midpoint_is_blue(self):
         mid = NUM_BANDS // 2
         r, g, b = band_to_color(mid)
-        # Midpoint should be in the orange-yellow range (bright)
-        assert r > 200  # still bright red component
-        assert g > 100  # significant green component
-        assert b == 0.0
+        # Midpoint should be in the blue/light-blue range
+        assert r < 120
+        assert g > 50
+        assert b == 255.0

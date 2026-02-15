@@ -12,20 +12,17 @@ Usage:
 import argparse
 import csv
 import gzip
-import json
 import logging
 import math
-import random
 import shutil
 import sys
 import time
 from collections import defaultdict, OrderedDict
 from pathlib import Path
 
+import orjson
 import numpy as np
 from PIL import Image, ImageDraw
-
-INPUT_DATA_PREFIX = "global_"  # Prefix for global sorted JSONL input files from convert_traces.py
 
 # Continental US bounding box (upper-left and lower-right corners)
 # These bounds roughly cover the contiguous United States
@@ -33,10 +30,14 @@ CONUS_UPPER_LEFT = (49.5, -125.0)   # lat, lon (northwest corner near WA/Canada 
 CONUS_LOWER_RIGHT = (24.5, -66.0)   # lat, lon (southeast corner near FL/Atlantic)
 
 try:
-    from src.tools.batch_helpers import FT_MAX_ABOVE_AIRPORT, FT_MIN_BELOW_AIRPORT
+    from src.tools.batch_helpers import (FT_MAX_ABOVE_AIRPORT, FT_MIN_BELOW_AIRPORT,
+                                         validate_date, generate_date_range,
+                                         global_files_for_dates)
     from src.tools.generate_airport_config import download_with_cache, AIRPORTS_URL
 except ImportError:
-    from batch_helpers import FT_MAX_ABOVE_AIRPORT, FT_MIN_BELOW_AIRPORT
+    from batch_helpers import (FT_MAX_ABOVE_AIRPORT, FT_MIN_BELOW_AIRPORT,
+                               validate_date, generate_date_range,
+                               global_files_for_dates)
     from generate_airport_config import download_with_cache, AIRPORTS_URL
 
 logger = logging.getLogger(__name__)
@@ -47,10 +48,10 @@ MAX_GAP_SECONDS = 120
 # Altitude color bands
 NUM_BANDS = 10
 
-# Default zoom level (~160ft/pixel at 40°N)
+# Default zoom level (~190ft/pixel at 40°N; zoom 12 would be ~95ft/pixel)
 DEFAULT_ZOOM = 11
 
-DENSITY_FOR_FULL_BRIGHTNESS = 20  # adjust this: lower = brighter single tracks
+DENSITY_FOR_FULL_BRIGHTNESS = 40  # adjust this: lower = brighter single tracks
 COLOR_VIBRANCY = 0.9  # adjust this: 1.0 = full brightness, <1.0 = dimmer, >1.0 = brighter
 TRACK_WIDTH = 2  # pixels - adjust this for thicker or thinner track lines
 
@@ -153,25 +154,44 @@ def load_all_airports():
     return np.array(rows, dtype=np.float64)
 
 
-def get_tile_field_elev(tx, ty, zoom, airports, cache):
-    """Get field elevation for a tile from nearest airport.
+def precompute_tile_elevations(zoom, airports):
+    """Precompute nearest-airport elevation for all CONUS tiles at given zoom.
 
-    Uses simple Euclidean distance on lat/lon (adequate for nearest-neighbor
-    over ~70K airports). Results are cached in the provided dict.
+    Returns dict mapping (tx, ty) -> field_elev_ft.
+    Uses scipy KD-tree for fast bulk nearest-neighbor lookup.
     """
-    key = (tx, ty)
-    if key in cache:
-        return cache[key]
+    from scipy.spatial import cKDTree
 
-    lat, lon = tile_center(tx, ty, zoom)
-    # Euclidean distance in degrees (good enough for nearest-neighbor)
-    dlat = airports[:, 0] - lat
-    dlon = airports[:, 1] - lon
-    dist_sq = dlat * dlat + dlon * dlon
-    nearest_idx = np.argmin(dist_sq)
-    elev = int(airports[nearest_idx, 2])
-    cache[key] = elev
-    return elev
+    n = 2 ** zoom
+    # Compute tile index range covering CONUS
+    ul_lat, ul_lon = CONUS_UPPER_LEFT
+    lr_lat, lr_lon = CONUS_LOWER_RIGHT
+    _, ty_min, _, _ = latlon_to_tile_pixel(ul_lat, ul_lon, zoom)
+    tx_min, _, _, _ = latlon_to_tile_pixel(ul_lat, ul_lon, zoom)
+    _, ty_max, _, _ = latlon_to_tile_pixel(lr_lat, lr_lon, zoom)
+    tx_max, _, _, _ = latlon_to_tile_pixel(lr_lat, lr_lon, zoom)
+
+    # Build list of tile centers
+    tile_keys = []
+    tile_centers = []
+    for tx in range(tx_min, tx_max + 1):
+        for ty in range(ty_min, ty_max + 1):
+            lat, lon = tile_center(tx, ty, zoom)
+            tile_keys.append((tx, ty))
+            tile_centers.append((lat, lon))
+
+    tile_centers = np.array(tile_centers, dtype=np.float64)
+    print(f"  Precomputing elevations for {len(tile_keys)} CONUS tiles...")
+
+    # KD-tree on airport lat/lon for fast nearest-neighbor
+    tree = cKDTree(airports[:, :2])
+    _, indices = tree.query(tile_centers)
+
+    cache = {}
+    for i, key in enumerate(tile_keys):
+        cache[key] = int(airports[indices[i], 2])
+
+    return cache
 
 
 # --- Line clipping ---
@@ -266,29 +286,25 @@ def altitude_to_band(alt, alt_floor, alt_ceil, num_bands=NUM_BANDS):
 
 
 def band_to_color(band, num_bands=NUM_BANDS):
-    """Map band index to RGB: red -> orange -> yellow -> green.
+    """Map band index to RGB: purple -> blue -> light blue.
 
-    Uses a piecewise ramp that keeps colors bright throughout:
-      0.0 = red (255,0,0)
-      0.33 = orange (255,165,0)
-      0.66 = yellow (255,255,0)
-      1.0 = green (0,200,0)
+    Heavy traffic (band 0) = purple, light traffic (band max) = light blue.
+    Sparse end is light blue (not white) so it's visible on light basemaps.
+      0.0  = purple     (128, 0, 255)
+      0.5  = blue       (0, 64, 255)
+      1.0  = light blue (150, 220, 255)
     """
     if num_bands <= 1:
-        return (255.0, 0.0, 0.0)
+        return (128.0, 0.0, 255.0)
     frac = band / (num_bands - 1)
-    if frac < 0.33:
-        # Red to orange
-        t = frac / 0.33
-        return (255.0, 165.0 * t, 0.0)
-    elif frac < 0.66:
-        # Orange to yellow
-        t = (frac - 0.33) / 0.33
-        return (255.0, 165.0 + 90.0 * t, 0.0)
+    if frac < 0.5:
+        # Purple to blue
+        t = frac / 0.5
+        return (128.0 * (1.0 - t), 64.0 * t, 255.0)
     else:
-        # Yellow to green
-        t = (frac - 0.66) / 0.34
-        return (255.0 * (1.0 - t), 255.0 - 55.0 * t, 0.0)
+        # Blue to light blue
+        t = (frac - 0.5) / 0.5
+        return (150.0 * t, 64.0 + 156.0 * t, 255.0)
 
 
 # --- Data streaming ---
@@ -299,11 +315,11 @@ def stream_global_file(path):
     Skips records missing hex, now, lat, or lon.
     """
     try:
-        with gzip.open(path, 'rt') as f:
+        with gzip.open(path, 'rb') as f:
             for line in f:
                 try:
-                    record = json.loads(line)
-                except (json.JSONDecodeError, ValueError):
+                    record = orjson.loads(line)
+                except (orjson.JSONDecodeError, ValueError):
                     continue
                 if (record.get('hex') is not None
                         and record.get('now') is not None
@@ -424,60 +440,38 @@ def flush_segments(segments_by_tile_band, tile_store):
 
 # --- Main tile generation ---
 
-def generate_tiles(data_dir, output_dir, zoom=DEFAULT_ZOOM, max_files=10,
-                   seed=None, max_records=None, input_file=None):
+def generate_tiles(output_dir, global_files, zoom=DEFAULT_ZOOM,
+                   max_records=None):
     """Generate traffic density tiles from global ADS-B files.
 
     Colors are based on traffic density: red = high density, green = low density.
 
     Args:
-        data_dir: Directory containing global_MMDDYY.gz files
         output_dir: Where to write tiles/{z}/{x}/{y}.png
+        global_files: List of Path objects to process
         zoom: Tile zoom level (default 11)
-        max_files: Maximum number of global files to process
-        seed: Random seed for file selection (None = random)
         max_records: Stop processing each file after this many records (None = all)
-        input_file: Specific .gz file to process (overrides data_dir/max_files/seed)
     """
     output_dir = Path(output_dir)
 
-    if input_file:
-        # Use the specific file provided
-        input_path = Path(input_file)
-        if not input_path.exists():
-            print(f"Input file not found: {input_file}")
-            return
-        global_files = [input_path]
-    else:
-        data_dir = Path(data_dir)
-        # Find global files
-        global_files = sorted(data_dir.glob(f"{INPUT_DATA_PREFIX}*.gz"))
-        if not global_files:
-            print(f"No {INPUT_DATA_PREFIX}*.gz files found in {data_dir}")
-            return
-
-        # Sample files
-        if seed is not None:
-            random.seed(seed)
-        if len(global_files) > max_files:
-            global_files = random.sample(global_files, max_files)
-        else:
-            global_files = list(global_files)
+    if not global_files:
+        print("No global files to process")
+        return
 
     print(f"Processing {len(global_files)} global files at zoom {zoom}")
     for f in global_files:
         print(f"  {f.name}")
 
-    # Load airport data for per-tile elevation lookup
+    # Load airport data and precompute per-tile elevations
     print("Loading airport database...")
     airports = load_all_airports()
     print(f"  {len(airports)} airports loaded")
-    tile_elev_cache = {}
+    tile_elev_cache = precompute_tile_elevations(zoom, airports)
 
-    # Disk-backed tile storage — only ~500 tiles in RAM at a time (~256MB)
-    # Use /tmp for work dir to avoid slow network shares
+    # Disk-backed tile storage with large cache to avoid I/O thrashing.
+    # ~6000 tiles × 128KB = ~750MB RAM for a typical single-day CONUS run.
     work_dir = Path("/tmp/traffic_tiles_work")
-    tile_store = TileStore(work_dir, cache_size=1000)
+    tile_store = TileStore(work_dir, cache_size=8000)
 
     total_records = 0
     total_segments = 0
@@ -488,7 +482,7 @@ def generate_tiles(data_dir, output_dir, zoom=DEFAULT_ZOOM, max_files=10,
         print(f"\n[{file_idx+1}/{len(global_files)}] Processing {global_gz.name}...")
         t0 = time.time()
 
-        last_seen = {}  # hex -> (lat, lon, alt_int, ts)
+        last_seen = {}  # hex -> (alt_int, ts, tx, ty, px, py)
         # (tx, ty, band) -> list of (px1, py1, px2, py2)
         segments_by_tile_band = defaultdict(list)
         file_records = 0
@@ -538,16 +532,14 @@ def generate_tiles(data_dir, output_dir, zoom=DEFAULT_ZOOM, max_files=10,
                 except (ValueError, TypeError):
                     pass
 
+            # Compute tile/pixel for current point once; reuse as prev next time
+            tx2, ty2, px2, py2 = latlon_to_tile_pixel(lat, lon, zoom)
+
             if hex_id in last_seen:
-                plat, plon, palt, pts = last_seen[hex_id]
+                palt, pts, tx1, ty1, px1, py1 = last_seen[hex_id]
                 gap = ts - pts
                 if 0 < gap < MAX_GAP_SECONDS and alt_int is not None and palt is not None:
-                    # Compute tile for both endpoints
-                    tx1, ty1, px1, py1 = latlon_to_tile_pixel(plat, plon, zoom)
-                    tx2, ty2, px2, py2 = latlon_to_tile_pixel(lat, lon, zoom)
-
                     # Get all tiles this segment potentially touches
-                    # (rectangular bounding box of the two endpoints)
                     min_tx, max_tx = min(tx1, tx2), max(tx1, tx2)
                     min_ty, max_ty = min(ty1, ty2), max(ty1, ty2)
 
@@ -556,30 +548,30 @@ def generate_tiles(data_dir, output_dir, zoom=DEFAULT_ZOOM, max_files=10,
                     # Try to clip segment into each tile it might intersect
                     for ttx in range(min_tx, max_tx + 1):
                         for tty in range(min_ty, max_ty + 1):
+                            # Altitude check first (cheap cached lookup) to
+                            # skip expensive clip for filtered segments
+                            fe = tile_elev_cache[ttx, tty]
+                            alt_floor = fe + FT_MIN_BELOW_AIRPORT
+                            alt_ceil = fe + FT_MAX_ABOVE_AIRPORT
+
+                            if not (alt_floor <= avg_alt <= alt_ceil):
+                                file_filtered += 1
+                                continue
+
                             # Clip segment to this tile
                             clipped = clip_segment_to_tile(px1, py1, px2, py2,
                                                           tx1, ty1, tx2, ty2,
                                                           ttx, tty)
                             if clipped is None:
-                                continue  # Segment doesn't intersect this tile
+                                continue
 
                             clip_px1, clip_py1, clip_px2, clip_py2 = clipped
+                            band = altitude_to_band(avg_alt, alt_floor, alt_ceil)
+                            segments_by_tile_band[(ttx, tty, band)].append(
+                                (clip_px1, clip_py1, clip_px2, clip_py2))
+                            file_segments += 1
 
-                            # Per-tile altitude filter
-                            fe = get_tile_field_elev(ttx, tty, zoom, airports,
-                                                     tile_elev_cache)
-                            alt_floor = fe + FT_MIN_BELOW_AIRPORT
-                            alt_ceil = fe + FT_MAX_ABOVE_AIRPORT
-
-                            if alt_floor <= avg_alt <= alt_ceil:
-                                band = altitude_to_band(avg_alt, alt_floor, alt_ceil)
-                                segments_by_tile_band[(ttx, tty, band)].append(
-                                    (clip_px1, clip_py1, clip_px2, clip_py2))
-                                file_segments += 1
-                            else:
-                                file_filtered += 1
-
-            last_seen[hex_id] = (lat, lon, alt_int, ts)
+            last_seen[hex_id] = (alt_int, ts, tx2, ty2, px2, py2)
 
         # Final flush for remaining segments
         file_renders += flush_segments(segments_by_tile_band, tile_store)
@@ -598,14 +590,13 @@ def generate_tiles(data_dir, output_dir, zoom=DEFAULT_ZOOM, max_files=10,
     # Flush remaining cached tiles to disk before saving
     tile_store.flush_all()
 
-    # Save tiles with per-tile normalization and gamma boost
     print(f"\nSaving tiles...")
     if not tile_store.tile_keys:
         print("No tiles generated (no data)")
         return
 
     print(f"  {len(tile_store.tile_keys)} tiles at zoom {zoom}")
-    print(f"  Using density-based coloring: red = high density, green = low density")
+    print(f"  Using density-based coloring: purple = high density, white = low density")
     saved = 0
     # Track which tiles were saved so downsampling can use the set directly
     # instead of walking the filesystem
@@ -616,29 +607,32 @@ def generate_tiles(data_dir, output_dir, zoom=DEFAULT_ZOOM, max_files=10,
         if max_count == 0:
             continue
 
-        # Map density to color gradient: red (HIGH) -> yellow -> green (LOW)
-        # Invert the band mapping so red = busy, green = sparse
-        count_normalized = np.minimum(count.astype(np.float32) / DENSITY_FOR_FULL_BRIGHTNESS, 1.0)
+        # Log-scale normalization so count 1-5 spreads across the color ramp
+        # instead of clustering at the sparse end.
+        # log1p(count)/log1p(DENSITY_FOR_FULL_BRIGHTNESS) gives 0..1
+        log_max = math.log1p(DENSITY_FOR_FULL_BRIGHTNESS)
+        count_f = count.astype(np.float32)
 
-        # Apply inverted color gradient based on density
+        # Apply color gradient: high density -> band 0 (purple), low -> band max (light blue)
         rgb = np.zeros((256, 256, 3), dtype=np.uint8)
         for i in range(256):
             for j in range(256):
                 if count[i, j] > 0:
-                    # Invert: high density -> band 0 (red), low density -> band 9 (green)
-                    band_frac = 1.0 - count_normalized[i, j]  # INVERTED
+                    norm = min(math.log1p(count[i, j]) / log_max, 1.0)
+                    band_frac = 1.0 - norm  # high density -> band 0
                     band_idx = int(band_frac * (NUM_BANDS - 1) + 0.5)
                     color = band_to_color(band_idx)
                     rgb[i, j, 0] = int(color[0] * COLOR_VIBRANCY + 0.5)
                     rgb[i, j, 1] = int(color[1] * COLOR_VIBRANCY + 0.5)
                     rgb[i, j, 2] = int(color[2] * COLOR_VIBRANCY + 0.5)
 
-        # Alpha: scale by density but boost low-density (green) tracks to be more visible
-        # Use sqrt curve to give more opacity to sparse tracks
-        alpha_scale = np.minimum(count.astype(np.float32) / DENSITY_FOR_FULL_BRIGHTNESS, 1.0)
-        # Apply sqrt to boost low values: sqrt(0.1) = 0.316, sqrt(0.5) = 0.707, sqrt(1.0) = 1.0
-        alpha_scale_boosted = np.sqrt(alpha_scale)
-        alpha = (alpha_scale_boosted * 255.0).clip(0, 255).astype(np.uint8)
+        # Alpha: quadratic ramp so single tracks (count=1) are nearly invisible
+        # and density must build up before becoming prominent.
+        # count=1 -> norm~0.23 -> alpha~14, count=3 -> ~40, count=10 -> ~127
+        alpha_norm = np.minimum(np.log1p(count_f) / log_max, 1.0)
+        alpha = np.where(count > 0,
+                         (alpha_norm * alpha_norm * 255.0).clip(0, 255),
+                         0).astype(np.uint8)
         rgba = np.dstack([rgb, alpha])
 
         img = Image.fromarray(rgba, 'RGBA')
@@ -691,23 +685,26 @@ def generate_tiles(data_dir, output_dir, zoom=DEFAULT_ZOOM, max_files=10,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Generate traffic track tiles from global ADS-B data")
+    parser.add_argument("--start-date", type=validate_date, required=True,
+                        help="Start date in mm/dd/yy format")
+    parser.add_argument("--end-date", type=validate_date, required=True,
+                        help="End date in mm/dd/yy format")
+    parser.add_argument("--day-filter", type=str, default="all",
+                        choices=["all", "weekday", "weekend"],
+                        help="Filter dates by day type (default: all)")
     parser.add_argument("--data-dir", type=str, default="data",
                         help="Directory containing global_MMDDYY.gz files")
     parser.add_argument("--output-dir", type=str, default="tiles/traffic",
                         help="Output directory for tiles")
     parser.add_argument("--zoom", type=int, default=DEFAULT_ZOOM,
                         help=f"Tile zoom level (default: {DEFAULT_ZOOM})")
-    parser.add_argument("--max-files", type=int, default=10,
-                        help="Maximum number of global files to process")
-    parser.add_argument("--seed", type=int, default=123,
-                        help="Random seed for file selection")
     parser.add_argument("--max-records", type=int, default=None,
                         help="Stop processing each file after this many records")
-    parser.add_argument("--input-file", type=str, default=None,
-                        help="Specific .gz file to process (overrides --data-dir)")
     args = parser.parse_args()
 
+    dates = generate_date_range(args.start_date, args.end_date, args.day_filter)
+    global_files = global_files_for_dates(dates, Path(args.data_dir))
+
     logging.basicConfig(level=logging.INFO)
-    generate_tiles(args.data_dir, args.output_dir, args.zoom,
-                   args.max_files, args.seed, args.max_records,
-                   args.input_file)
+    generate_tiles(args.output_dir, global_files, args.zoom,
+                   args.max_records)
