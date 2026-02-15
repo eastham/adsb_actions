@@ -46,22 +46,22 @@ class TestVisualizerQuality:
     def test_get_point_color_high(self):
         """Test color for high quality events."""
         viz = MapVisualizer()
-        assert viz._get_point_color('high') == 'blue'
+        assert viz._get_point_color('high') == 'orange'
 
     def test_get_point_color_medium(self):
         """Test color for medium quality events."""
         viz = MapVisualizer()
-        assert viz._get_point_color('medium') == 'lightblue'
+        assert viz._get_point_color('medium') == 'yellow'
 
     def test_get_point_color_low(self):
         """Test color for low quality events."""
         viz = MapVisualizer()
-        assert viz._get_point_color('low') == 'white'
+        assert viz._get_point_color('low') == 'green'
 
     def test_get_point_color_unknown(self):
         """Test default color for unknown quality."""
         viz = MapVisualizer()
-        assert viz._get_point_color('unknown') == 'blue'
+        assert viz._get_point_color('unknown') == 'green'
 
     def test_get_point_color_vhigh(self):
         """Test color for very high quality events."""
