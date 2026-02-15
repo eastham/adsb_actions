@@ -11,6 +11,7 @@ FT_MAX_ABOVE_AIRPORT = 4000   # analysis ceiling relative to field elevation
 FT_MIN_BELOW_AIRPORT = -200   # negative AGL offset excludes ground traffic
 ANALYSIS_RADIUS_NM = 10       # radius around airport for trace filtering and sharding
 
+GZ_DATA_PREFIX = "global_"  # Prefix for global sorted JSONL files
 
 class SimpleTimer:
     """Simple timing utility to track phase durations."""
@@ -58,8 +59,9 @@ class SimpleTimer:
             'phases': aggregated
         }
 
-        with open(output_path, 'w') as f:
-            json.dump(report, f, indent=2)
+        if output_path:
+            with open(output_path, 'w') as f:
+                json.dump(report, f, indent=2)
 
         print(f"\n{'=' * 60}")
         print(f"Timing Report saved to {output_path}")
@@ -140,6 +142,22 @@ def generate_date_range(start: datetime, end: datetime,
         current += timedelta(days=1)
 
     return dates
+
+
+
+
+def global_files_for_dates(dates: list, data_dir: Path = None) -> list[Path]:
+    """Return list of existing global .gz file paths for the given dates."""
+    if data_dir is None:
+        data_dir = Path("data")
+    files = []
+    for date in dates:
+        gz = data_dir / f"{GZ_DATA_PREFIX}{date.strftime('%m%d%y')}.gz"
+        if gz.exists():
+            files.append(gz)
+        else:
+            print(f"⚠️ Missing {gz.name}, skipping")
+    return files
 
 
 def compute_bounds(center_lat: float, center_lon: float,

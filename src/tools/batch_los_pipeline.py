@@ -58,13 +58,14 @@ from batch_helpers import (
     FT_MAX_ABOVE_AIRPORT,
     FT_MIN_BELOW_AIRPORT,
     ANALYSIS_RADIUS_NM,
+    GZ_DATA_PREFIX,
 )
 
 # Approximate size of daily ADS-B data from adsb.lol (two tar parts combined)
 ESTIMATED_DAILY_DATA_GB = 3.0
 DATA_DIR = Path("data")
+SHARD_DIR = DATA_DIR  # Per-airport sharded .gz files (e.g. data/KWVI/060825_KWVI.gz)
 BASE_DIR = Path("examples/generated")
-GZ_DATA_PREFIX = "global_"  # Prefix for global sorted JSONL input files from convert_traces.py
 
 # Track incomplete files for cleanup on interruption
 _incomplete_files = set()
@@ -167,7 +168,7 @@ def generate_multi_airport_yaml(icao_codes: list[str], date_compact: str,
     for icao in icao_codes:
 
         lat, lon, _ = airport_info[icao]
-        output_path = f"{BASE_DIR}/{icao}/{date_compact}_{icao}.gz"
+        output_path = f"{SHARD_DIR}/{icao}/{date_compact}_{icao}.gz"
         print(f"Generating multi-airport yaml, data target dir: {output_path}")
 
         lines.append(f"  {icao}_shard:")
@@ -273,11 +274,11 @@ def extract_traces(date_obj: datetime) -> bool:
 def convert_traces_global(date_obj: datetime) -> Path:
     """Run convert_traces.py without spatial filter to produce global sorted JSONL.
 
-    Writes to local temp directory first for speed/reliability, then backgrounds
-    the copy to network storage.
+    Writes to local temp directory first for speed/reliability, then moves
+    to network storage.
 
     Returns:
-        Path to the global sorted JSONL file (local temp path for immediate use).
+        Path to the global sorted JSONL file in DATA_DIR.
     """
     date_compact = date_obj.strftime('%m%d%y')
 
@@ -292,18 +293,71 @@ def convert_traces_global(date_obj: datetime) -> Path:
     if result != 0:
         raise RuntimeError(f"convert_traces.py failed for {date_compact}")
 
-    # Background copy to network storage (don't block pipeline)
-    print(f"📦 Copying {local_temp.name} to network storage in background...")
-    run_command(
-        f"mv '{local_temp}' '{network_final}' && echo '✅ Network copy complete: {network_final.name}' &",
-        dry_run=False)
+    # Move to network storage (must complete before shard pass reads it)
+    print(f"📦 Moving {local_temp.name} to network storage...")
+    run_command(f"mv '{local_temp}' '{network_final}'", dry_run=False)
 
-    # Return local path for immediate use by shard pass
-    return local_temp
+    return network_final
 
 
-def run_shard_pass(global_gz: Path, shard_yaml_path: Path,
-                   dry_run: bool = False) -> int:
+def shard_global_to_airports(global_gz: Path, icao_codes: list[str],
+                             date_compact: str, airport_info: dict,
+                             dry_run: bool = False) -> int:
+    """Shard a global JSONL file into per-airport gzipped JSONL files.
+
+    Checks if shards already exist; if not, generates a multi-airport YAML
+    and runs the shard pass. Returns 0 on success, nonzero on failure.
+    """
+    # Filter out airports that already have valid shard files
+    if not dry_run:
+        needed = [icao for icao in icao_codes
+                  if not (SHARD_DIR / icao / f"{date_compact}_{icao}.gz").exists()
+                  or (SHARD_DIR / icao / f"{date_compact}_{icao}.gz").stat().st_size < 30]
+    else:
+        needed = list(icao_codes)
+
+    if not needed:
+        print(f"✅ All {len(icao_codes)} airport shard files already exist, skipping shard pass.")
+        return 0
+
+    skipped = len(icao_codes) - len(needed)
+    if skipped:
+        print(f"✅ {skipped} airport shards already exist, sharding {len(needed)} remaining...")
+
+    # Generate shard YAML only for airports that need it
+    shard_yaml_text = generate_multi_airport_yaml(
+        needed, date_compact, airport_info)
+    shard_yaml_path = DATA_DIR / f"shard_{date_compact}.yaml"
+
+    if not dry_run:
+        # Ensure output directories exist
+        for icao in needed:
+            (SHARD_DIR / icao).mkdir(parents=True, exist_ok=True)
+
+        with open(shard_yaml_path, 'w') as f:
+            f.write(shard_yaml_text)
+
+        # Track shard files as incomplete (for cleanup on Ctrl-C)
+        for icao in needed:
+            shard_file = SHARD_DIR / icao / f"{date_compact}_{icao}.gz"
+            _incomplete_files.add(shard_file)
+
+    print(f"🔍 Sharding {global_gz.name} -> "
+          f"{len(needed)} airports...")
+    shard_result = _run_shard_pass(global_gz, shard_yaml_path,
+                                   dry_run=dry_run)
+
+    # Mark shard files as complete
+    if shard_result == 0 and not dry_run:
+        for icao in needed:
+            shard_file = SHARD_DIR / icao / f"{date_compact}_{icao}.gz"
+            _incomplete_files.discard(shard_file)
+
+    return shard_result
+
+
+def _run_shard_pass(global_gz: Path, shard_yaml_path: Path,
+                    dry_run: bool = False) -> int:
     """Pass 1: Stream global JSONL through adsb_actions with shard YAML.
 
     Each airport's latlongring + emit_jsonl rule writes matching points
@@ -323,7 +377,7 @@ def run_airport_analysis(icao: str, date_compact: str,
     """
     lat, lon, field_alt = airport_info[icao]
     airport_dir = BASE_DIR / icao
-    trace_gz = airport_dir / f"{date_compact}_{icao}.gz"
+    trace_gz = SHARD_DIR / icao / f"{date_compact}_{icao}.gz"
 
     if not trace_gz.exists():
         print(f"⚠️ No sharded data for {icao} on {date_compact}, skipping.")
@@ -359,7 +413,7 @@ def run_airport_analysis(icao: str, date_compact: str,
            f"--yaml {airport_yaml} "
            f"--resample --sorted-file {trace_gz} --animate-los "
            f"--animation-dir {airport_dir} "
-           # f"--export-traffic-samples {traffic_samples} "
+           f"--export-traffic-samples {traffic_samples} "
            f"> {analysis_out} 2>&1")
     returncode = run_command(cmd, dry_run=dry_run)
 
@@ -388,6 +442,38 @@ def run_airport_analysis(icao: str, date_compact: str,
             print(f"  ✅ {event_count} LOS event(s) detected for {icao} on {date_compact}")
 
     return returncode
+
+
+def combine_and_downsample_traffic(traffic_files: list[Path], output: Path,
+                                   max_lines: int = 20000):
+    """Combine per-date traffic CSVs into one file, downsampling if needed.
+
+    Counts total lines first, then writes every Nth line to stay under
+    max_lines.  No temp files or long shell command lines.
+    """
+    line_count = 0
+    for tf in traffic_files:
+        with open(tf, 'r') as f:
+            line_count += sum(1 for _ in f)
+
+    sample_rate = max(1, line_count // max_lines)
+
+    written = 0
+    with open(output, 'w') as outf:
+        line_num = 0
+        for tf in traffic_files:
+            with open(tf, 'r') as inf:
+                for line in inf:
+                    if line_num % sample_rate == 0:
+                        outf.write(line)
+                        written += 1
+                    line_num += 1
+
+    if sample_rate > 1:
+        print(f"  Combined {len(traffic_files)} traffic files: {line_count:,} points "
+              f"→ downsampled to {written:,} (every {sample_rate}th)")
+    else:
+        print(f"  Combined {len(traffic_files)} traffic files: {line_count:,} points")
 
 
 def aggregate_airport_results(icao: str, airport_info: dict,
@@ -421,32 +507,12 @@ def aggregate_airport_results(icao: str, airport_info: dict,
             with open(csv_file, 'r') as inf:
                 outf.write(inf.read())
     
-    # Combine traffic samples from all dates - DISABLED
-    #combined_traffic = airport_dir / f"{icao}_traffic_combined.csv"
-    #traffic_files = sorted(airport_dir.glob("*_*_traffic.csv"))
-    combined_traffic = traffic_files = None  # Disable traffic sample combination for now
+    # Combine traffic samples from all dates
+    combined_traffic = airport_dir / f"{icao}_traffic_combined.csv"
+    traffic_files = sorted(airport_dir.glob("*_*_traffic.csv"))
 
     if traffic_files:
-        # First combine all files
-        temp_combined = airport_dir / f"{icao}_traffic_temp.csv"
-        traffic_list = " ".join(str(f) for f in traffic_files)
-        run_command(f"cat {traffic_list} > {temp_combined}")
-
-        # Check if we need to downsample the combined file
-        result = subprocess.run(f"wc -l < {temp_combined}", shell=True, capture_output=True, text=True)
-        line_count = int(result.stdout.strip())
-        max_combined_samples = 20000  # Limit for multi-day visualization (~8MB HTML)
-
-        if line_count > max_combined_samples:
-            # Downsample: take every Nth line
-            sample_rate = max(1, line_count // max_combined_samples)
-            run_command(f"awk 'NR % {sample_rate} == 0' {temp_combined} > {combined_traffic}")
-            run_command(f"rm {temp_combined}")
-            print(f"  Combined {len(traffic_files)} traffic files: {line_count:,} points "
-                  f"→ downsampled to ~{max_combined_samples:,} (every {sample_rate}th point)")
-        else:
-            run_command(f"mv {temp_combined} {combined_traffic}")
-            print(f"  Combined {len(traffic_files)} traffic files: {line_count:,} points")
+        combine_and_downsample_traffic(traffic_files, combined_traffic)
     else:
         combined_traffic = None
 
@@ -454,7 +520,8 @@ def aggregate_airport_results(icao: str, airport_info: dict,
     busyness_json = None
     try:
         from busyness import build_busyness_data
-        busyness_data = build_busyness_data(icao, airport_dir,
+        shard_dir = SHARD_DIR / icao
+        busyness_data = build_busyness_data(icao, shard_dir,
                                             metar_cache_dir=airport_dir,
                                             field_elev=field_elev)
         if busyness_data:
@@ -470,7 +537,7 @@ def aggregate_airport_results(icao: str, airport_info: dict,
     quality_json = None
     try:
         from data_quality import build_data_quality
-        quality_data = build_data_quality(icao, airport_dir,
+        quality_data = build_data_quality(icao, shard_dir,
                                           field_elev=field_elev,
                                           airport_lat=lat,
                                           airport_lon=lon)
@@ -497,10 +564,6 @@ def aggregate_airport_results(icao: str, airport_info: dict,
         f"--native-heatmap --heatmap-opacity 0.5 --heatmap-radius 25 "
     )
 
-    if combined_traffic and combined_traffic.exists():
-        vis_cmd += f"--traffic-samples {combined_traffic} "
-        print(f"  Using traffic samples: {combined_traffic.name}")
-
     if busyness_json and busyness_json.exists():
         vis_cmd += f"--busyness-data {busyness_json} "
 
@@ -511,7 +574,7 @@ def aggregate_airport_results(icao: str, airport_info: dict,
     vis_cmd += f"--output {vis_output} --no-browser "
 
     vis_cmd += "--heatmap-label '6/1/25 - 6/15/25' "  # TODO dynamic label
-    vis_cmd += "--traffic-label '6/1/25 - 8/31/25' "  # TODO dynamic label
+    vis_cmd += "--traffic-label '6/1/25 - 8/31/25 (<4000ft AGL)' "  # TODO dynamic label
 
     run_command(vis_cmd)
 
@@ -579,7 +642,6 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
         if not dry_run:
             if not network_global_gz.exists():
                 try:
-                    # Returns local /tmp path for immediate use
                     global_gz = convert_traces_global(date)
                 except RuntimeError as e:
                     timer.end('convert_traces')
@@ -596,59 +658,11 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
         timer.end('convert_traces')
 
         # --- Pass 1: Shard into per-airport JSONL gzip files ---
-        # Check if all airport shard files already exist
-        all_shards_exist = True
-        if not dry_run:
-            for icao in icao_codes:
-                airport_gz = BASE_DIR / icao / f"{date_compact}_{icao}.gz"
-                if not airport_gz.exists() or airport_gz.stat().st_size < 30:
-                    all_shards_exist = False
-                    break
-
-        if all_shards_exist: # and analysis_only:
-            print(f"✅ All {len(icao_codes)} airport shard files already exist, skipping shard pass.")
-            timer.start('shard_pass')  # For timing consistency
-            timer.end('shard_pass')
-            shard_result = 0
-        else:
-            # Generate multi-airport shard YAML
-            shard_yaml_text = generate_multi_airport_yaml(
-                icao_codes, date_compact, airport_info)
-            shard_yaml_path = DATA_DIR / f"shard_{date_compact}.yaml"
-
-            if not dry_run:
-                # Ensure output directories exist
-                for icao in icao_codes:
-                    (BASE_DIR / icao).mkdir(parents=True, exist_ok=True)
-
-                with open(shard_yaml_path, 'w') as f:
-                    f.write(shard_yaml_text)
-
-                # Track shard files as incomplete (for cleanup on Ctrl-C)
-                for icao in icao_codes:
-                    shard_file = BASE_DIR / icao / f"{date_compact}_{icao}.gz"
-                    _incomplete_files.add(shard_file)
-
-            print(f"🔍 Pass 1: Sharding {global_gz.name} -> "
-                  f"{len(icao_codes)} airports...")
-            timer.start('shard_pass')
-            shard_result = run_shard_pass(global_gz, shard_yaml_path,
-                                          dry_run=dry_run)
-            timer.end('shard_pass')
-
-            # Mark shard files as complete
-            if shard_result == 0 and not dry_run:
-                for icao in icao_codes:
-                    shard_file = BASE_DIR / icao / f"{date_compact}_{icao}.gz"
-                    _incomplete_files.discard(shard_file)
-
-        # Clean up local temp file after successful shard
-        if shard_result == 0 and not dry_run and str(global_gz).startswith('/tmp/'):
-            print(f"🧹 Cleaning up local temp file {global_gz.name}...")
-            try:
-                global_gz.unlink()
-            except Exception as e:
-                print(f"⚠️ Could not delete temp file {global_gz}: {e}")
+        timer.start('shard_pass')
+        shard_result = shard_global_to_airports(
+            global_gz, icao_codes, date_compact, airport_info,
+            dry_run=dry_run)
+        timer.end('shard_pass')
 
         if shard_result != 0 and not dry_run:
             print(f"❌ Shard pass failed for {date.strftime('%m/%d/%y')}")
@@ -671,23 +685,18 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
         num_workers = min(multiprocessing.cpu_count(), len(icao_codes))
         print(f"  Using {num_workers} worker processes")
 
-        analysis_start = time.time()
+        timer.start('parallel_per_airport_analysis')
+        completed = 0
+        total = len(icao_codes)
         with multiprocessing.Pool(processes=num_workers) as pool:
-            # Process airports in parallel
             for icao, returncode in pool.imap_unordered(_analyze_airport_worker, worker_args):
-                # Track timing for each airport (approximate, since they run in parallel)
-                timer.start(f'analyze_{icao}')
-                timer.end(f'analyze_{icao}')
-
+                completed += 1
                 if returncode == 0:
-                    print(f"  ✓ Completed {icao}")
+                    print(f"  ✅ Completed analysis for {icao} ({completed}/{total})")
                 else:
-                    print(f"  ✗ Failed {icao}")
+                    print(f"  ❌ Failed {icao} ({completed}/{total})")
                     failed_runs.append((date.strftime('%m/%d/%y'), icao, "analysis"))
-
-        analysis_elapsed = time.time() - analysis_start
-        print(f"  Parallel analysis completed in {analysis_elapsed:.1f}s "
-              f"(~{analysis_elapsed/len(icao_codes):.1f}s per airport)")
+        timer.end('parallel_per_airport_analysis')
     else:
         # Sequential execution (for single airport or dry-run)
         for icao in icao_codes:
@@ -747,10 +756,12 @@ def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
         num_workers = min(multiprocessing.cpu_count(), len(icao_codes))
         print(f"  Using {num_workers} worker processes")
 
+        completed = 0
+        total = len(icao_codes)
         with multiprocessing.Pool(processes=num_workers) as pool:
-            # Process airports in parallel, show progress as they complete
             for icao in pool.imap_unordered(_aggregate_airport_worker, worker_args):
-                print(f"  ✓ Completed {icao}")
+                completed += 1
+                print(f"  ✅ Completed aggregating {icao} ({completed}/{total})")
     else:
         # Sequential execution (for dry-run or single airport)
         for icao in icao_codes:
@@ -774,7 +785,8 @@ def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
                 num_events = 0
                 if combined_csv.exists():
                     with open(combined_csv, 'r') as f:
-                        num_events = sum(1 for _ in f)
+                        num_events = sum(1 for line in f
+                                         if not line.startswith('#'))
 
                 # Load data quality metrics
                 quality_data = None
@@ -967,7 +979,7 @@ Examples:
         print_visualization_summary(output_stats)
 
     # Save timing report
-    if not args.dry_run and args.timing_output:
+    if not args.dry_run:
         timer.save_report(args.timing_output if args.timing_output else None)
 
 
