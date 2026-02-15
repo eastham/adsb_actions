@@ -71,22 +71,25 @@ class CoordinateDisplay(MacroElement):
         """)
 
 
-def build_hide_script(points_json, map_name,
-                      heatmap_radius=20, heatmap_blur=25,
-                      heatmap_min_opacity=0.3):
+def build_hide_script(points_json, qualities_json, map_name,
+                      heatmap_radius=25, heatmap_blur=35,
+                      heatmap_min_opacity=0.3, heatmap_max=1.0):
     """Build JavaScript for hiding/showing map points and rebuilding heatmaps.
 
     Args:
         points_json: List of [lat, lon] for all points.
+        qualities_json: List of quality strings matching points_json ordering.
         map_name: Folium map JS variable name from m.get_name().
         heatmap_radius: Heatmap point radius.
         heatmap_blur: Heatmap blur amount.
         heatmap_min_opacity: Heatmap minimum opacity.
+        heatmap_max: Heatmap max intensity (must match initial heatmap).
     """
     return (
         "<script>\n"
         "var hiddenPoints = [];\n"
         "var allPoints = " + json.dumps(points_json) + ";\n"
+        "var allQualities = " + json.dumps(qualities_json) + ";\n"
         "var nativeHeatmapLayer = null;\n"
         "var heatmapParentGroup = null;\n"
         "\n"
@@ -105,8 +108,10 @@ def build_hide_script(points_json, map_name,
         "        return;\n"
         "    }\n"
         "    \n"
+        "    // Only include high/vhigh quality points, excluding hidden ones\n"
         "    var visiblePoints = allPoints.filter(function(_, idx) {\n"
-        "        return hiddenPoints.indexOf(idx) === -1;\n"
+        "        return hiddenPoints.indexOf(idx) === -1 &&\n"
+        "               (allQualities[idx] === 'high' || allQualities[idx] === 'vhigh');\n"
         "    });\n"
         "    console.log('rebuildNativeHeatmap: ' + visiblePoints.length + ' visible points, parent: ' + (heatmapParentGroup ? 'FeatureGroup' : 'map'));\n"
         "    \n"
@@ -128,9 +133,8 @@ def build_hide_script(points_json, map_name,
         "            radius: " + str(heatmap_radius) + ",\n"
         "            blur: " + str(heatmap_blur) + ",\n"
         "            minOpacity: " + str(heatmap_min_opacity) + ",\n"
-        "            max: 18,\n"
-        "            gradient: {0.0: 'white', 0.25: 'aqua', 0.5: 'cyan', "
-        "0.75: 'blue', 1.0: 'navy'}\n"
+        "            max: " + str(heatmap_max) + ",\n"
+        "            gradient: {0.0: 'green', 0.5: 'yellow', 1.0: 'red'}\n"
         "        });\n"
         "        console.log('Created new heatmap layer');\n"
         "        \n"
@@ -190,8 +194,25 @@ def build_hide_script(points_json, map_name,
         "}\n"
         "\n"
         "function showAllPoints() { location.reload(); }\n"
+        "\n"
+        "// Fade overlay panels when a popup is open so it's not occluded\n"
+        "document.addEventListener('DOMContentLoaded', function() {\n"
+        "    var panelIds = ['help-window', 'busyness-panel', 'opacity-controls-box'];\n"
+        "    function setPanelOpacity(opacity) {\n"
+        "        panelIds.forEach(function(id) {\n"
+        "            var el = document.getElementById(id);\n"
+        "            if (el) { el.style.opacity = opacity; el.style.transition = 'opacity 0.2s'; }\n"
+        "        });\n"
+        "    }\n"
+        "    var map = getMap();\n"
+        "    if (map) {\n"
+        "        map.on('popupopen', function() { setPanelOpacity('0.15'); });\n"
+        "        map.on('popupclose', function() { setPanelOpacity('1.0'); });\n"
+        "    }\n"
+        "});\n"
         "</script>\n"
     )
+
 
 
 NATIVE_HEATMAP_SCRIPT = """
@@ -259,7 +280,7 @@ def build_quality_indicator_json(data_quality):
 
     completion = data_quality.get("completionRate")
     if completion is not None:
-        comp_str = f"{completion:.0%} of low-altitude tracks fully tracked"
+        comp_str = f"{completion:.0%} of tracks completed to surface"
     else:
         comp_str = "Insufficient low-altitude track data"
 
@@ -455,7 +476,7 @@ def build_help_html(airport_name):
 
     help_panel = (
         '<div id="help-window" style="'
-        "position: fixed; bottom: 20px; left: 20px; width: 430px; "
+        "position: fixed; top: 20px; left: 20px; width: 430px; "
         "background-color: white; border: 2px solid #333; border-radius: 5px; "
         "padding: 10px; font-family: Arial, sans-serif; font-size: 12px; "
         'z-index: 9999; box-shadow: 2px 2px 6px rgba(0,0,0,0.3);">\n'

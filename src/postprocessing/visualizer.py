@@ -103,13 +103,13 @@ class MapVisualizer:
         if quality == 'vhigh':
             return "#ff00ff"
         elif quality == 'high':
-            return "blue"
+            return "orange"
         elif quality == 'medium':
-            return "lightblue"
+            return "yellow"
         elif quality == 'low':
-            return "white"
+            return "green"
         else:
-            return "blue"  # Default to blue for unknown quality
+            return "green"  # Default to blue for unknown quality
 
     def add_traffic_tile_overlay(self, m, tile_dir, zoom=None, opacity=0.7,
                                  radius_nm=100, traffic_label=None):
@@ -148,13 +148,16 @@ class MapVisualizer:
         tile_url = "tiles/{z}/{x}/{y}.png"
 
         # Add TileLayer with relative file:// URLs
+        # Use minNativeZoom/maxNativeZoom so Leaflet scales tiles for ±1 zoom
         folium.TileLayer(
             tiles=tile_url,
             attr="Traffic Density",
             name="Traffic Density",
             opacity=opacity,
-            min_zoom=min_zoom,
-            max_zoom=max_zoom,
+            min_zoom=max(0, min_zoom - 1),
+            max_zoom=15,
+            min_native_zoom=min_zoom,
+            max_native_zoom=max_zoom,
             overlay=True,
             control=True
         ).add_to(m)
@@ -172,7 +175,7 @@ class MapVisualizer:
                     border-radius: 5px;
                     box-shadow: 2px 2px 6px rgba(0,0,0,0.3);">
             <label for="traffic-opacity-slider" style="font-weight: bold; font-size: 12px;">
-                <span style="color: #00ff00; font-size: 20px;">■</span><span style="color: #ffff00; font-size: 20px;">■</span><span style="color: #ff0000; font-size: 20px;">■</span> Traffic Layer Opacity: <span id="opacity-value">""" + str(int(opacity * 100)) + """</span>%
+                <span style="color: #34c0eb; font-size: 20px;">■</span><span style="color: #0000ff; font-size: 20px;">■</span><span style="color: #7434eb; font-size: 20px;">■</span> Traffic Layer Opacity: <span id="opacity-value">""" + str(int(opacity * 100)) + """</span>%
             </label><br>
             <input type="range"
                    id="traffic-opacity-slider"
@@ -197,9 +200,8 @@ class MapVisualizer:
 
                     // Find the Traffic Density layer and update opacity
                     document.querySelectorAll('.leaflet-tile-pane .leaflet-layer').forEach(function(layer) {
-                        // Check if this is the traffic layer by looking at tile src
                         var img = layer.querySelector('img');
-                        if (img && img.src.includes('tiles/')) {
+                        if (img && img.src.match(/tiles\/\d+\/\d+\/\d+\.png/)) {
                             layer.style.opacity = opacityValue;
                         }
                     });
@@ -303,7 +305,8 @@ class MapVisualizer:
         # Create a Folium map centered on the airport
         if map_image:
             # Use a static PNG image as the map background
-            m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles=None)
+            m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles=None,
+                           zoom_control=False)
 
             folium.raster_layers.ImageOverlay(
                 image=map_image,
@@ -315,7 +318,8 @@ class MapVisualizer:
             m = folium.Map(
                 location=[center_lat, center_lon],
                 zoom_start=13,
-                tiles=None
+                tiles=None,
+                zoom_control=False
             )
             folium.TileLayer(
                 tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
@@ -328,7 +332,8 @@ class MapVisualizer:
             m = folium.Map(
                 location=[center_lat, center_lon],
                 zoom_start=13,
-                tiles=None
+                tiles=None,
+                zoom_control=False
             )
             folium.TileLayer(
                 tiles="https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}",
@@ -337,6 +342,16 @@ class MapVisualizer:
                 max_native_zoom=11,
                 max_zoom=18
             ).add_to(m)
+
+        # Add zoom control at bottom-left (disabled default top-left above)
+        from branca.element import MacroElement, Template
+        zoom_bl = MacroElement()
+        zoom_bl._template = Template(
+            '{% macro script(this, kwargs) %}'
+            'L.control.zoom({position: "bottomleft"}).addTo({{this._parent.get_name()}});'
+            '{% endmacro %}'
+        )
+        zoom_bl.add_to(m)
 
         print("Map created.")
 
@@ -406,10 +421,15 @@ class MapVisualizer:
 
             for idx, ((lat, lon), annotation, links, quality) in enumerate(zip(self.points, self.annotations, self.links, self.qualities)):
                 color = self._get_point_color(quality)
-                hide_link = f' - <b><a href="#" onclick="hidePoint({idx}); return false;">Hide</a></b>'
+                hide_link = f' - <b><a href="#" onclick="hidePoint({idx}); return false;">Hide this event from heatmap</a></b>'
                 # add horizontal rule with minimal vertical spacing
                 popup_html = annotation + "<hr style='margin: 5px 0; border-top: 1px solid #ccc;'>"
-                popup_html += "<div style='text-align: center;'>" + links + hide_link + "</div>"
+                # Insert hide_link right after the adsb.lol replay link, before any iframe
+                links_with_hide = links.replace('</a></b><div', '</a></b>' + hide_link + '<div')
+                if links_with_hide == links:
+                    # No iframe present, just append hide_link
+                    links_with_hide = links + hide_link
+                popup_html += "<div style='text-align: center;'>" + links_with_hide + "</div>"
 
                 circle = folium.CircleMarker(
                     location=[lat, lon],
@@ -420,7 +440,7 @@ class MapVisualizer:
                     fill_color=color,
                     fill_opacity=1.0,
                     opacity=1.0,
-                    popup=folium.Popup(popup_html, max_width=400)
+                    popup=folium.Popup(popup_html, max_width=500)
                 )
                 # Store index as a property for JavaScript access
                 circle._name = f"point_{idx}"
@@ -433,10 +453,13 @@ class MapVisualizer:
 
         # Add JavaScript for hiding points (only if we have points)
         points_json = [[p[0], p[1]] for p in self.points] if self.points else []
+        qualities_json = list(self.qualities) if self.qualities else []
         map_name = m.get_name()
-        hide_script = build_hide_script(points_json, map_name,
-                                        heatmap_radius, heatmap_blur,
-                                        heatmap_min_opacity)
+        # Use the same radius/blur/max as the native heatmap (hardcoded 25/35/1.0)
+        hide_script = build_hide_script(points_json, qualities_json, map_name,
+                                        heatmap_radius=25, heatmap_blur=35,
+                                        heatmap_min_opacity=heatmap_min_opacity,
+                                        heatmap_max=1.0)
         m.get_root().html.add_child(folium.Element(hide_script))
 
         # Add overlay image if provided
@@ -453,7 +476,7 @@ class MapVisualizer:
         if enable_heatmap:
             # Filter to only high and very high quality events
             high_quality_points = [
-                p for p, q in zip(self.points, self.qualities) if q in ['high', 'vhigh']
+                p for p, q in zip(self.points, self.qualities) if q in ['high', 'vhigh', 'medium']
             ]
             # Compute heatmap using KDE from external module
             # Pass bounds=None to auto-compute from data with padding
@@ -472,11 +495,8 @@ class MapVisualizer:
                     min_opacity=heatmap_min_opacity,
                     max_zoom=13,
                     gradient={
-                        '0.0': 'blue',
-                        '0.3': 'cyan',
-                        '0.5': 'lime',
-                        '0.7': 'yellow',
-                        '0.9': 'orange',
+                        '0.0': 'green',
+                        '0.5': 'yellow',
                         '1.0': 'red'
                     }
                 ).add_to(m)
@@ -491,7 +511,7 @@ class MapVisualizer:
             heatmap_group = folium.FeatureGroup(name="Dynamic Heatmap", show=True)
             # Filter to only high and very high quality events
             high_quality_points = [
-                [p[0], p[1]] for p, q in zip(self.points, self.qualities) if q in ['high', 'vhigh']
+                [p[0], p[1]] for p, q in zip(self.points, self.qualities) if q in ['high', 'vhigh', 'medium']
             ]
             # Blue-based color scheme to avoid conflict with red-yellow-green traffic tiles
             # Use larger radius and max parameter to make zoom-independent
@@ -502,11 +522,9 @@ class MapVisualizer:
                 min_opacity=heatmap_min_opacity,
                 max=1.0,  # Maximum point intensity (affects color mapping)
                 gradient={
-                    '0.0': 'white',
-                    '0.25': 'aqua',
-                    '0.5': 'cyan',
-                    '0.75': 'blue',
-                    '1.0': 'navy'
+                    '0.0': 'green',
+                    '0.5': 'yellow',
+                    '1.0': 'red'
                 }
             ).add_to(heatmap_group)
             heatmap_group.add_to(m)
@@ -540,7 +558,7 @@ class MapVisualizer:
                     var label = document.createElement('label');
                     label.htmlFor = 'heatmap-opacity-slider';
                     label.style.cssText = 'font-weight: bold; font-size: 12px;';
-                    label.innerHTML = '<span style="color: white; font-size: 20px; text-shadow: 0 0 1px black;">●</span><span style="color: lightblue; font-size: 20px;">●</span><span style="color: blue; font-size: 20px;">●</span><span style="color: #ff00ff; font-size: 20px;">●</span> LOS Heatmap Opacity: <span id="heatmap-opacity-value">60</span>%';
+                    label.innerHTML = '<span style="color: green; font-size: 20px; text-shadow: 0 0 1px black;">●</span><span style="color: yellow; font-size: 20px;">●</span><span style="color: orange; font-size: 20px;">●</span><span style="color: #ff00ff; font-size: 20px;">●</span> LOS Heatmap Opacity: <span id="heatmap-opacity-value">60</span>%';
                     box.appendChild(label);
                     box.appendChild(document.createElement('br'));
 
@@ -572,12 +590,20 @@ class MapVisualizer:
                     // Add data quality indicator if available
                     if (qualityData) {
                         var qualityDiv = document.createElement('div');
-                        qualityDiv.style.cssText = 'font-size: 11px; color: #555; cursor: help;';
-                        qualityDiv.title = qualityData.tooltip;
-                        qualityDiv.innerHTML = '<span style="font-weight: bold;">Data Quality:</span> ' +
-                            '<span style="color: ' + qualityData.color + '; font-size: 24px; vertical-align: middle;">●</span> ' +
-                            qualityData.label + ' (mouseover for details)';
-
+                        qualityDiv.style.cssText = 'font-size: 11px; color: #555; position: relative; user-select: none;';
+                        var qualitySpan = document.createElement('span');
+                        qualitySpan.style.cssText = 'color: blue; text-decoration: underline; cursor: pointer;';
+                        qualitySpan.textContent = qualityData.label;
+                        var tipDiv = document.createElement('div');
+                        tipDiv.style.cssText = 'display:none; background:#fff; border:1px solid #ccc; padding:6px 8px; margin-top:4px; font-size:11px; color:#333; border-radius:4px; box-shadow:0 2px 6px rgba(0,0,0,0.15);';
+                        tipDiv.textContent = qualityData.tooltip;
+                        qualitySpan.onclick = function() {
+                            tipDiv.style.display = tipDiv.style.display === 'block' ? 'none' : 'block';
+                        };
+                        qualityDiv.innerHTML = '<span style="font-weight: bold;">ADS-B Data Quality:</span> ' +
+                            '<span style="color: ' + qualityData.color + '; font-size: 24px; vertical-align: middle;">●</span> ';
+                        qualityDiv.appendChild(qualitySpan);
+                        qualityDiv.appendChild(tipDiv);
                         box.appendChild(qualityDiv);
                     }
                 }, 1000);
@@ -760,8 +786,13 @@ if __name__ == "__main__":
                         annotation += f" ({quality_explanation})"
                 links = ""
                 if animation:
-                    links += f"<b><a href='{animation}' target='_blank'>Event preview</a></b> - "
+                    links += f"<b><a href='{animation}' target='_blank'>View this preview fullscreen</a></b> - "
                 links += f"<b><a href='{link}' target='_blank'>adsb.lol replay</a></b>"
+                if animation:
+                    links += (f"<div style='margin-top: 6px;'>"
+                              f"<iframe src='{animation}' "
+                              f"style='width: 460px; height: 300px; border: 1px solid #ccc; "
+                              f"border-radius: 3px;'></iframe></div>")
 
                 visualizer.add_point((float(lat), float(lon)), annotation, links, quality=quality)
                 print(f"Read point {ctr} at {lat} {lon} alt: {altitude} quality: {quality} datestr:{datestr}")

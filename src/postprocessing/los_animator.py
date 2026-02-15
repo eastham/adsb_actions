@@ -292,26 +292,50 @@ class LOSAnimator:
             {"type": "FeatureCollection", "features": features},
             period="PT1S",           # 1-second intervals
             duration="PT1S",         # Each point visible for 1 second
-            transition_time=200,     # 200ms animation between frames
+            transition_time=100,     # 100ms between frames (10 fps)
             auto_play=False,         # Start paused
             add_last_point=False,    # Don't add default markers
             loop=False,
             max_speed=10,
             loop_button=True,
-            time_slider_drag_update=True
+            time_slider_drag_update=True,
+            speed_slider=False
         ).add_to(m)
 
-        # Hide the time display (shows browser local time which is confusing)
-        hide_time_css = '''
+        # Hide the time display (shows browser local time which is confusing).
+        # CSS hides it, JS removes it as a fallback after the control renders.
+        hide_time_html = '''
         <style>
-        .leaflet-control-container output,
-        .time-text,
-        span[style*="font-size: 11px"] {
+        .leaflet-bar-timecontrol a.timecontrol-date,
+        a.timecontrol-date {
+            display: none !important;
+        }
+        .leaflet-bar-timecontrol .timecontrol-dateslider .slider {
+            width: 100px !important;
+        }
+        .leaflet-bottom.leaflet-left .leaflet-bar-timecontrol {
+            float: right;
+        }
+        .leaflet-bottom.leaflet-left {
+            left: auto !important;
+            right: 5px !important;
+            bottom: 5px !important;
+        }
+        .timecontrol-speed:before {
             display: none !important;
         }
         </style>
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(function() {
+                document.querySelectorAll('.timecontrol-date, a.timecontrol-date').forEach(function(el) {
+                    el.style.display = 'none';
+                });
+            }, 500);
+        });
+        </script>
         '''
-        m.get_root().html.add_child(folium.Element(hide_time_css))
+        m.get_root().html.add_child(folium.Element(hide_time_html))
 
         # Add altitude labels along the track every 20 seconds
         label_interval = 20  # seconds
@@ -347,9 +371,9 @@ class LOSAnimator:
 
         # Add legend with tail numbers
         legend_html = f'''
-        <div style="position: fixed; bottom: 50px; left: 50px; z-index: 1000;
+        <div style="position: fixed; bottom: 5px; left: 5px; z-index: 1000;
                     background-color: white; padding: 10px; border-radius: 5px;
-                    border: 2px solid gray; font-size: 14px;">
+                    border: 2px solid gray; font-size: 12px;">
             <b>LOS Event</b><br>
             <span style="color: {self.AIRCRAFT1_COLOR};">●</span> {tail1}<br>
             <span style="color: {self.AIRCRAFT2_COLOR};">●</span> {tail2}<br>

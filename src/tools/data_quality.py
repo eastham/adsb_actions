@@ -32,13 +32,11 @@ SURFACE_AGL = 200             # Below this = track reached near the surface
 # Gap metric
 MAX_TRACK_GAP_S = 300         # Gaps above this excluded from gap statistics
 
-# Scoring thresholds
-TERM_GREEN = 0.25
-TERM_YELLOW = 0.50
-GAP_GREEN = 5.0
-GAP_YELLOW = 15.0
-DAYS_GREEN = 5
-DAYS_YELLOW = 3
+# Scoring thresholds — overall score is the worst of termination and gap scores
+TERM_GREEN = 0.25             # track-loss rate below this → green
+TERM_YELLOW = 0.50            # below this → yellow, above → red
+GAP_GREEN = 5.0               # median gap (seconds) below this → green
+GAP_YELLOW = 15.0             # below this → yellow, above → red
 
 # Nautical miles per degree of latitude
 NM_PER_DEG_LAT = 60.0
@@ -107,7 +105,7 @@ def analyze_shard_quality(shard_gz: Path, field_elev: int = 0,
                 all_gaps.append(gap)
 
         # Track-loss metric: check if any point is in the low-altitude
-        # corridor (within 5nm, 800-1500ft AGL)
+        # range (within 5nm, 800-1500ft AGL)
         in_low_alt = False
         reached_surface = False
         for p in pts:
@@ -167,8 +165,7 @@ def build_data_quality(icao: str, airport_dir: Path,
             "completedTracks": int,
             "details": {
                 "terminationScore": "green"|"yellow"|"red",
-                "gapScore": "green"|"yellow"|"red",
-                "confidenceScore": "green"|"yellow"|"red"
+                "gapScore": "green"|"yellow"|"red"
             }
         }
     Or None if no data is available.
@@ -214,8 +211,7 @@ def build_data_quality(icao: str, airport_dir: Path,
 
     term_score = _score_termination(weighted_lost_rate)
     gap_score = _score_gap(agg_median_gap)
-    conf_score = _score_confidence(num_dates)
-    overall = _overall_score(term_score, gap_score, conf_score)
+    overall = _overall_score(term_score, gap_score)
 
     result = {
         "icao": icao,
@@ -230,7 +226,6 @@ def build_data_quality(icao: str, airport_dir: Path,
         "details": {
             "terminationScore": term_score,
             "gapScore": gap_score,
-            "confidenceScore": conf_score,
         },
     }
 
@@ -263,18 +258,10 @@ def _score_gap(median_gap: float | None) -> str:
     return "red"
 
 
-def _score_confidence(num_dates: int) -> str:
-    if num_dates >= DAYS_GREEN:
-        return "green"
-    if num_dates >= DAYS_YELLOW:
-        return "yellow"
-    return "red"
-
-
 _SCORE_ORDER = {"green": 0, "yellow": 1, "red": 2}
 
 
-def _overall_score(term_score: str, gap_score: str, conf_score: str) -> str:
-    worst = max(term_score, gap_score, conf_score,
+def _overall_score(term_score: str, gap_score: str) -> str:
+    worst = max(term_score, gap_score,
                 key=lambda s: _SCORE_ORDER[s])
     return worst
