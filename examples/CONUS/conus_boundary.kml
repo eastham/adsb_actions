@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>CONUS Boundary</name>
+	<open>1</open>
+	<StyleMap id="failed">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#failed1</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#failed0</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="failed0">
+	</Style>
+	<Style id="failed1">
+	</Style>
+	<Folder>
+		<name>CONUS</name>
+		<open>1</open>
+		<Placemark>
+			<name>CONUS: -1000-14154 0-360</name>
+			<styleUrl>#failed</styleUrl>
+			<Polygon>
+				<tessellate>1</tessellate>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-125.7164479712917,49.9789068199377,0 -124.9613765280599,41.9235124620382,0 -122.0768533371515,33.42741862848345,0 -97.5,25.8,0 -81.8,24.5,0 -80,25,0 -67,35,0 -64.2113566794402,48.68408072636239,0 -94.51738119306523,49.97057935963957,0 -125.7164479712917,49.9789068199377,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+	</Folder>
+</Document>
+</kml>

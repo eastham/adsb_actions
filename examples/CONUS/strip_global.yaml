@@ -1,0 +1,11 @@
+
+config:
+  kmls:
+    - examples/CONUS/conus_boundary.kml
+
+rules:
+  stripper:
+    conditions:
+      regions: [ "CONUS" ]
+    actions:
+      emit_jsonl: "output/CONUS.gz"

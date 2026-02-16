@@ -31,6 +31,13 @@ class Bbox:
     endhdg: int
     name: str
 
+    def __post_init__(self):
+        # Pre-compute outer bounding box (min_x, max_x, min_y, max_y) for
+        # fast rejection in contains()
+        xs = [c[0] for c in self.polygon_coords]
+        ys = [c[1] for c in self.polygon_coords]
+        self._bbox = (min(xs), max(xs), min(ys), max(ys))
+
 class Bboxes:
     """
     A collection of Bbox objects, defined by a KML file with polygons inside.
@@ -95,10 +102,15 @@ class Bboxes:
     def contains(self, lat, long, hdg, alt):
         """returns index of first matching bounding box, or -1 if not found"""
         for i, box in enumerate(self.boxes):
+            # Fast bounding-box rejection before expensive polygon test
+            min_x, max_x, min_y, max_y = box._bbox
+            if long < min_x or long > max_x or lat < min_y or lat > max_y:
+                continue
+            if (alt < box.minalt or alt > box.maxalt):
+                continue
             if (point_in_polygon(long, lat, box.polygon_coords) and
                 Bboxes.hdg_contains(hdg, box.starthdg, box.endhdg)):
-                if (alt >= box.minalt and alt <= box.maxalt):
-                    return i
+                return i
         return -1
 
     @classmethod
@@ -159,6 +171,9 @@ def point_in_any_bbox(lat: float, lon: float, bboxes_list: list,
     if bboxes_list:
         for bbox_container in bboxes_list:
             for box in bbox_container.boxes:
+                min_x, max_x, min_y, max_y = box._bbox
+                if lon < min_x or lon > max_x or lat < min_y or lat > max_y:
+                    continue
                 if point_in_polygon(lon, lat, box.polygon_coords):
                     return True
 
