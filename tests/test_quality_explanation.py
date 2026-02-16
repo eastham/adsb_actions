@@ -10,6 +10,7 @@ def _make_flight(flight_id, first_now, last_now, category='A1'):
     f.flight_id = flight_id
     f.firstloc = Mock(now=first_now)
     f.lastloc = Mock(now=last_now, flightdict={'category': category})
+    f.flags = {}
     return f
 
 

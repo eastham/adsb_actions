@@ -136,3 +136,81 @@ def test_resampler_interpolation_increases_points():
     assert resampled_points_after4 == resampled_points + 1, (
         f"Expected resampling growth of only 1 point, got {resampled_points_after4 - resampled_points}"
     )
+
+
+def test_suspicious_position_teleport():
+    """Position jump implying > 600 kts should mark location suspicious."""
+    from adsb_actions.resampler import Resampler
+    from adsb_actions.location import Location
+
+    resampler = Resampler()
+
+    # Normal first point
+    loc1 = Location(lat=37.0, lon=-122.0, alt_baro=2000, now=1000.0,
+                    tail="N999ZZ", gs=80.0, track=90.0)
+    resampler.add_location(loc1)
+
+    # Second point 5 seconds later, ~1 degree away (~60nm in 5 sec = ~43000 kts)
+    loc2 = Location(lat=38.0, lon=-122.0, alt_baro=2000, now=1005.0,
+                    tail="N999ZZ", gs=80.0, track=90.0)
+    resampler.add_location(loc2)
+
+    assert loc2.suspicious, "Position teleport should be flagged suspicious"
+
+    # Check interpolated points are also flagged
+    for t in range(1001, 1005):
+        locs = resampler.locations_by_time.get(t, [])
+        for loc in locs:
+            if loc.tail == "N999ZZ":
+                assert loc.suspicious, f"Interpolated point at t={t} should be suspicious"
+
+
+def test_suspicious_speed_change():
+    """Implied speed change > 100 kts between segments should flag suspicious."""
+    from adsb_actions.resampler import Resampler
+    from adsb_actions.location import Location
+
+    resampler = Resampler()
+
+    # Three points: first two have normal speed, third implies sudden jump.
+    # ~0.01 degree in 10 seconds = ~0.6 nm / (10/3600 hr) = ~216 kts
+    loc1 = Location(lat=37.0, lon=-122.0, alt_baro=2000, now=1000.0,
+                    tail="N888YY", gs=80.0, track=0.0)
+    resampler.add_location(loc1)
+
+    # 10 seconds later, moved slightly north (~0.004 deg = ~0.24nm, ~86 kts implied)
+    loc2 = Location(lat=37.004, lon=-122.0, alt_baro=2000, now=1010.0,
+                    tail="N888YY", gs=80.0, track=0.0)
+    resampler.add_location(loc2)
+    assert not loc2.suspicious, "Normal speed should not be suspicious"
+
+    # 10 seconds later, moved a lot more (~0.06 deg = ~3.6nm, ~1296 kts implied)
+    # Change from ~86 kts to ~1296 kts = ~1210 kts change, well over 100 kts
+    loc3 = Location(lat=37.064, lon=-122.0, alt_baro=2000, now=1020.0,
+                    tail="N888YY", gs=80.0, track=0.0)
+    resampler.add_location(loc3)
+    assert loc3.suspicious, "Speed change > 100 kts should be flagged suspicious"
+
+
+def test_normal_track_not_suspicious():
+    """Normal GA flight should not be flagged."""
+    from adsb_actions.resampler import Resampler
+    from adsb_actions.location import Location
+
+    resampler = Resampler()
+
+    # Simulate a GA aircraft doing ~100 kts (0.001667 deg/sec northward ~= 100 kts)
+    loc1 = Location(lat=37.0, lon=-122.0, alt_baro=2000, now=1000.0,
+                    tail="N777XX", gs=100.0, track=0.0)
+    resampler.add_location(loc1)
+
+    # 10 seconds at ~100 kts = ~0.28 nm = ~0.0046 degrees
+    loc2 = Location(lat=37.0046, lon=-122.0, alt_baro=2100, now=1010.0,
+                    tail="N777XX", gs=100.0, track=0.0)
+    resampler.add_location(loc2)
+    assert not loc2.suspicious
+
+    loc3 = Location(lat=37.0092, lon=-122.0, alt_baro=2200, now=1020.0,
+                    tail="N777XX", gs=100.0, track=0.0)
+    resampler.add_location(loc3)
+    assert not loc3.suspicious

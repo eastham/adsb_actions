@@ -179,11 +179,26 @@ def calculate_event_quality(los, flight1, flight2):
     event_duration_min = event_duration / 60.0
     min_track_duration_min = min_track_duration / 60.0
 
+    # Check for suspicious track data (position/speed anomalies)
+    suspicious_1 = flight1.flags.get('suspicious') if hasattr(flight1, 'flags') else False
+    suspicious_2 = flight2.flags.get('suspicious') if hasattr(flight2, 'flags') else False
+
     # Apply quality criteria with explanations
-    if flight1.flight_id.strip()[-2:] == flight2.flight_id.strip()[-2:]:
+    if suspicious_1 or suspicious_2:
+        bad_flights = []
+        if suspicious_1:
+            bad_flights.append(flight1.flight_id.strip())
+        if suspicious_2:
+            bad_flights.append(flight2.flight_id.strip())
+        reasons.append(f"suspicious track data ({', '.join(bad_flights)})")
+        quality = 'low'
+    elif flight1.flight_id.strip()[-2:] == flight2.flight_id.strip()[-2:]:
         reasons.append("Tail numbers end in same two letters (may be formation flight)")
         quality = 'low'
-    if event_duration > 120:
+    #elif los.last_time == flight1.lastloc.now or los.last_time == flight2.lastloc.now:
+    #    reasons.append("closest approach at end of track, possible poor signal")
+    #    quality = 'low'
+    elif event_duration > 120:
         reasons.append(f"long event ({event_duration_min:.1f}min - may be formation flight)")
         quality = 'low'
     elif min_track_duration < 60:

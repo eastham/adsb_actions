@@ -77,6 +77,9 @@ class Flights:
                 # can iterate from oldest and stop early.
                 self.flight_dict.move_to_end(loc.tail)
 
+            if loc.suspicious:
+                flight.flags['suspicious'] = True
+
             flight.update_inside_bboxes(self.bboxes, loc)
             rules.process_flight(flight)
 

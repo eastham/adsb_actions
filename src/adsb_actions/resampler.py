@@ -19,6 +19,10 @@ EXPIRE_TIME = 20 # seconds to keep stale position reports around for interpolati
 DEFAULT_MIN_ALTITUDE = 0  # default minimum altitude for resampling
 DEFAULT_MAX_ALTITUDE = 10000  # default maximum altitude for resampling
 
+# Trace sanity thresholds
+MAX_IMPLIED_SPEED_KTS = 600  # implied speed above this = position teleport
+MAX_SPEED_CHANGE_KTS = 100   # implied speed change above this = anomaly
+
 class Resampler:
     """Stores / resamples locations, then can check for proximity events.
     """
@@ -147,6 +151,29 @@ class Resampler:
                 # 2. Gap is greater than 1 second (need at least 2+ second gap to interpolate)
                 time_gap = now - prev_location.now
                 if time_gap <= MAX_INTERPOLATE_SECS and time_gap > 1:
+                    # Check for position teleporting
+                    implied_speed_kts = (prev_location.distfrom_fast(
+                        location.lat, location.lon) / (time_gap / 3600))
+                    if implied_speed_kts > MAX_IMPLIED_SPEED_KTS:
+                        location.suspicious = True
+                        logger.warning("Suspicious track: %s implied %.0f kts",
+                                       flight_id, implied_speed_kts)
+
+                    # Check for sudden speed change vs previous segment
+                    if not location.suspicious and len(prev_locations) >= 2:
+                        prev_prev = prev_locations[-2]
+                        prev_gap = prev_location.now - prev_prev.now
+                        if 0 < prev_gap <= MAX_INTERPOLATE_SECS:
+                            prev_implied = (prev_prev.distfrom_fast(
+                                prev_location.lat, prev_location.lon)
+                                / (prev_gap / 3600))
+                            if abs(implied_speed_kts - prev_implied) > MAX_SPEED_CHANGE_KTS:
+                                location.suspicious = True
+                                logger.warning(
+                                    "Suspicious track: %s speed change "
+                                    "%.0f→%.0f kts", flight_id,
+                                    prev_implied, implied_speed_kts)
+
                     # Fill in the gap between the last location and the new one
                     for t in range(int(prev_location.now) + 1, int(now)):
                         if t not in self.locations_by_time:
@@ -154,10 +181,12 @@ class Resampler:
                         interp_location = interpolate_location(
                             prev_location, location, t)
                         if interp_location:
+                            if location.suspicious:
+                                interp_location.suspicious = True
                             self.locations_by_time[t].append(interp_location)
                             self.resample_ctr += 1
                         logger.debug("Resampled location for %s at ts=%d / %s",
-                                     flight_id, t, 
+                                     flight_id, t,
                                      datetime.datetime.fromtimestamp(t, datetime.UTC))
         
         # Add the current (real, not resampled) location to the histories

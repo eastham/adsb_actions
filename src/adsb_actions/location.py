@@ -29,6 +29,7 @@ class Location:
     category: Optional[str] = None  # emitter category (A1-A7, B1-B7, etc.)
     baro_rate: Optional[int] = None  # vertical rate (feet/minute)
     on_ground: bool = False  # True when alt_baro == "ground"
+    suspicious: bool = False  # True if position/speed anomaly detected
     flightdict: Optional[dict] = None
 
     def __post_init__(self):

@@ -4,12 +4,13 @@ from unittest.mock import Mock
 from src.applications.airport_monitor.los import calculate_event_quality
 
 
-def _make_flight(flight_id, first_now, last_now, category='A1'):
+def _make_flight(flight_id, first_now, last_now, category='A1', suspicious=False):
     """Helper to build a flight mock with required string flight_id."""
     f = Mock()
     f.flight_id = flight_id
     f.firstloc = Mock(now=first_now)
     f.lastloc = Mock(now=last_now, flightdict={'category': category})
+    f.flags = {'suspicious': True} if suspicious else {}
     return f
 
 
@@ -232,3 +233,49 @@ class TestEventQuality:
         quality, explanation = calculate_event_quality(los, flight1, flight2)
         assert quality == 'vhigh'
         assert 'close cpa' in explanation.lower()
+
+    def test_low_quality_suspicious_flight1(self):
+        """Suspicious track on flight1 should downgrade to low quality."""
+        los = Mock()
+        los.create_time = 100.0
+        los.last_time = 130.0  # 30 sec (would be high normally)
+        los.min_latdist = 0.15
+        los.min_altdist = 150  # would be vhigh normally
+
+        flight1 = _make_flight('N123AB', 50.0, 300.0, suspicious=True)
+        flight2 = _make_flight('N456CD', 50.0, 300.0)
+
+        quality, explanation = calculate_event_quality(los, flight1, flight2)
+        assert quality == 'low'
+        assert 'suspicious' in explanation.lower()
+        assert 'N123AB' in explanation
+
+    def test_low_quality_suspicious_flight2(self):
+        """Suspicious track on flight2 should also downgrade."""
+        los = Mock()
+        los.create_time = 100.0
+        los.last_time = 130.0
+        los.min_latdist = 0.5
+        los.min_altdist = 500
+
+        flight1 = _make_flight('N123AB', 50.0, 300.0)
+        flight2 = _make_flight('N456CD', 50.0, 300.0, suspicious=True)
+
+        quality, explanation = calculate_event_quality(los, flight1, flight2)
+        assert quality == 'low'
+        assert 'suspicious' in explanation.lower()
+        assert 'N456CD' in explanation
+
+    def test_quality_unchanged_without_suspicious(self):
+        """Non-suspicious flights should not be affected by the new check."""
+        los = Mock()
+        los.create_time = 100.0
+        los.last_time = 130.0
+        los.min_latdist = 0.5
+        los.min_altdist = 500
+
+        flight1 = _make_flight('N123AB', 50.0, 300.0)
+        flight2 = _make_flight('N456CD', 50.0, 300.0)
+
+        quality, _ = calculate_event_quality(los, flight1, flight2)
+        assert quality == 'high'

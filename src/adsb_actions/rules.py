@@ -3,6 +3,7 @@
 import datetime
 import gzip
 import json
+import orjson
 import logging
 import os
 import shlex
@@ -586,11 +587,12 @@ class Rules:
                 output_path = action_value
                 if output_path not in self._emit_files:
                     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                    self._emit_files[output_path] = gzip.open(output_path, 'wt')
+                    self._emit_files[output_path] = gzip.open(output_path, 'wb',
+                                                                compresslevel=1)
                     logger.info("emit_jsonl: opened %s", output_path)
                 if flight.lastloc.flightdict:
                     self._emit_files[output_path].write(
-                        json.dumps(flight.lastloc.flightdict) + '\n')
+                        orjson.dumps(flight.lastloc.flightdict) + b'\n')
 
             else:
                 logger.warning("Unmatched action: %s", action_name)
