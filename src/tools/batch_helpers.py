@@ -1,6 +1,9 @@
 """Helper utilities for batch LOS pipeline processing."""
 
+import gzip
+import io
 import json
+import re
 import subprocess
 import time
 from datetime import datetime, timedelta
@@ -11,7 +14,10 @@ FT_MAX_ABOVE_AIRPORT = 4000   # analysis ceiling relative to field elevation
 FT_MIN_BELOW_AIRPORT = -200   # negative AGL offset excludes ground traffic
 ANALYSIS_RADIUS_NM = 10       # radius around airport for trace filtering and sharding
 
-GZ_DATA_PREFIX = "global_"  # Prefix for global sorted JSONL files
+# GZ_DATA_PREFIX = "global_"  # Dataset being analyzed
+GZ_DATA_PREFIX = "CONUS_"    # File prefix for dataset being analyzed
+GZ_GLOBAL_DATA_PREFIX = "global_"  # File prefix for global sorted JSONL files
+
 
 class SimpleTimer:
     """Simple timing utility to track phase durations."""
@@ -83,6 +89,14 @@ class SimpleTimer:
             else:
                 print(f"  {phase_name}: {stats['total_seconds']:.1f}s ({pct:.1f}%)")
         print(f"{'=' * 60}")
+
+
+def write_empty_gz(path) -> None:
+    """Write a valid empty gzip file to path."""
+    buf = io.BytesIO()
+    gzip.GzipFile(fileobj=buf, mode='wb').close()
+    with open(path, 'wb') as f:
+        f.write(buf.getvalue())
 
 
 def faa_to_icao(faa_code: str) -> str:
@@ -300,3 +314,28 @@ def print_completion_summary(dates: list[datetime], icao_codes: list[str],
                 print(f"  - {date_str} {icao} ({stage})")
             else:
                 print(f"  - {entry}")
+
+
+def load_airport_list(filepath: str, max_airports: int = None) -> list[str]:
+    """Load airport codes from text file (one code per line).
+
+    Extracts the first 2-4 character alphanumeric token from each line,
+    skipping blank lines and comments.
+
+    Returns list of FAA/ICAO codes.
+    """
+    airports = []
+    print(f"Loading airport list from {filepath}...")
+    with open(filepath, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            match = re.match(r'[A-Za-z0-9]{2,4}', line)
+            if match:
+                airports.append(match.group(0))
+
+    if max_airports:
+        airports = airports[:max_airports]
+
+    return airports

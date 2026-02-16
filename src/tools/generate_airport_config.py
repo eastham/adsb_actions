@@ -61,6 +61,24 @@ def download_with_cache(url: str, filename: str) -> Path:
     return cache_path
 
 
+# Cached airport lookup index: maps uppercase code -> row dict.
+# Built once on first call, keyed by ident, gps_code, and local_code
+# (ident takes priority via insertion order).
+_airport_index = None
+
+def _build_airport_index():
+    global _airport_index
+    airports_path = download_with_cache(AIRPORTS_URL, "airports.csv")
+    _airport_index = {}
+    with open(airports_path, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            # Insert in reverse priority so higher-priority keys overwrite
+            for key in ('local_code', 'gps_code', 'ident'):
+                code = row.get(key, '').upper().strip()
+                if code:
+                    _airport_index[code] = row
+
 def load_airport(icao: str) -> dict | None:
     """Load airport data by ICAO code or local code.
 
@@ -68,21 +86,10 @@ def load_airport(icao: str) -> dict | None:
     the identifier differs from the OurAirports ident (e.g., KREG -> KL38,
     S50 -> KS50).
     """
-    airports_path = download_with_cache(AIRPORTS_URL, "airports.csv")
-    icao_upper = icao.upper()
-
-    with open(airports_path, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            if row['ident'].upper() == icao_upper:
-                return row
-            # Also check gps_code for airports like KREG (ident=KL38, gps_code=KREG)
-            if row.get('gps_code', '').upper() == icao_upper:
-                return row
-            # Also check local_code for airports like S50 (ident=KS50, local_code=S50)
-            if row.get('local_code', '').upper() == icao_upper:
-                return row
-    return None
+    global _airport_index
+    if _airport_index is None:
+        _build_airport_index()
+    return _airport_index.get(icao.upper())
 
 
 def load_runways(icao: str) -> list[dict]:

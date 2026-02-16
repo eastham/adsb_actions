@@ -34,7 +34,6 @@ Usage:
 import argparse
 import multiprocessing
 import os
-import re
 import shutil
 import signal
 import subprocess
@@ -55,10 +54,13 @@ from batch_helpers import (
     estimate_download_size,
     print_pipeline_summary,
     print_completion_summary,
+    load_airport_list,
     FT_MAX_ABOVE_AIRPORT,
     FT_MIN_BELOW_AIRPORT,
     ANALYSIS_RADIUS_NM,
     GZ_DATA_PREFIX,
+    write_empty_gz,
+    GZ_GLOBAL_DATA_PREFIX,
 )
 
 # Approximate size of daily ADS-B data from adsb.lol (two tar parts combined)
@@ -72,6 +74,11 @@ _incomplete_files = set()
 _cleanup_registered = False
 
 
+def _worker_init():
+    """Restore default SIGINT in pool workers so subprocesses are killable."""
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+
 def register_cleanup_handler():
     """Register signal handler for cleanup on Ctrl-C."""
     global _cleanup_registered
@@ -80,6 +87,7 @@ def register_cleanup_handler():
 
     def cleanup_handler(_signum, _frame):
         """Clean up incomplete files on interruption."""
+        print("\n\n🧹 Interrupted! Checking incomplete files...")
         if _incomplete_files:
             print("\n\n🧹 Interrupted! Cleaning up incomplete files...")
             for filepath in _incomplete_files:
@@ -94,30 +102,6 @@ def register_cleanup_handler():
     signal.signal(signal.SIGINT, cleanup_handler)
     signal.signal(signal.SIGTERM, cleanup_handler)
     _cleanup_registered = True
-
-
-def load_airport_list(filepath: str, max_airports: int = None) -> list[str]:
-    """Load airport codes from text file (one code per line).
-
-    Extracts the first 2-4 character alphanumeric token from each line,
-    skipping blank lines and comments.
-
-    Returns list of FAA/ICAO codes.
-    """
-    airports = []
-    with open(filepath, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            match = re.match(r'[A-Za-z0-9]{2,4}', line)
-            if match:
-                airports.append(match.group(0))
-
-    if max_airports:
-        airports = airports[:max_airports]
-
-    return airports
 
 
 def cleanup_traces():
@@ -135,6 +119,7 @@ def load_airport_info(icao: str) -> tuple[float, float, int]:
     Returns:
         Tuple of (lat, lon, field_elevation_ft)
     """
+
     airport = generate_airport_config.load_airport(icao)
     # If K-prefixed lookup fails, try without K (for Alaska PA* airports etc.)
     if not airport and icao.startswith('K') and len(icao) == 4:
@@ -249,7 +234,7 @@ def download_tar_parts(date_obj: datetime, data_dir: Path = None, force: bool = 
 
 
 def extract_traces(date_obj: datetime) -> bool:
-    """untar trace archives to examples/generated/ directory.
+    """untar trace archives to examples/generated/ directory without filtering.
 
     Returns True on success.
     """
@@ -283,8 +268,8 @@ def convert_traces_global(date_obj: datetime) -> Path:
     date_compact = date_obj.strftime('%m%d%y')
 
     # Use local temp directory for fast, reliable I/O
-    local_temp = Path("/tmp") / f"{GZ_DATA_PREFIX}{date_compact}.gz"
-    network_final = DATA_DIR / f"{GZ_DATA_PREFIX}{date_compact}.gz"
+    local_temp = Path("/tmp") / f"{GZ_GLOBAL_DATA_PREFIX}{date_compact}.gz"
+    network_final = DATA_DIR / f"{GZ_GLOBAL_DATA_PREFIX}{date_compact}.gz"
 
     print(f"⚙️ Converting traces to {local_temp} (local temp)...")
     traces_dir = BASE_DIR / "traces"
@@ -302,17 +287,20 @@ def convert_traces_global(date_obj: datetime) -> Path:
 
 def shard_global_to_airports(global_gz: Path, icao_codes: list[str],
                              date_compact: str, airport_info: dict,
-                             dry_run: bool = False) -> int:
+                             dry_run: bool = False,
+                             force: bool = False) -> int:
     """Shard a global JSONL file into per-airport gzipped JSONL files.
 
     Checks if shards already exist; if not, generates a multi-airport YAML
     and runs the shard pass. Returns 0 on success, nonzero on failure.
+    If force=True, overwrites existing shard files.
     """
     # Filter out airports that already have valid shard files
-    if not dry_run:
+    if force:
+        needed = list(icao_codes)
+    elif not dry_run:
         needed = [icao for icao in icao_codes
-                  if not (SHARD_DIR / icao / f"{date_compact}_{icao}.gz").exists()
-                  or (SHARD_DIR / icao / f"{date_compact}_{icao}.gz").stat().st_size < 30]
+                  if not (SHARD_DIR / icao / f"{date_compact}_{icao}.gz").exists()]
     else:
         needed = list(icao_codes)
 
@@ -336,11 +324,14 @@ def shard_global_to_airports(global_gz: Path, icao_codes: list[str],
 
         with open(shard_yaml_path, 'w') as f:
             f.write(shard_yaml_text)
-
+        print(f"Generated multi-airport YAML for {len(needed)} airports, at file {shard_yaml_path}")
         # Track shard files as incomplete (for cleanup on Ctrl-C)
         for icao in needed:
             shard_file = SHARD_DIR / icao / f"{date_compact}_{icao}.gz"
             _incomplete_files.add(shard_file)
+            # Create empty gz as "no traffic" sentinel; survives if emit_jsonl
+            # never opens the file (airport had no matching records).
+            write_empty_gz(shard_file)
 
     print(f"🔍 Sharding {global_gz.name} -> "
           f"{len(needed)} airports...")
@@ -615,7 +606,7 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
         # --- Extract from tarfile --
         timer.start('extract')
         # Check network storage for cached file (authoritative source)
-        network_global_gz = DATA_DIR / f"{GZ_DATA_PREFIX}{date_compact}.gz"
+        network_global_gz = DATA_DIR / f"{GZ_GLOBAL_DATA_PREFIX}{date_compact}.gz"
         global_gz = network_global_gz
 
         print(f"🔍 Checking for existing JSONL file in network storage: {network_global_gz}...")
@@ -688,7 +679,8 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
         timer.start('parallel_per_airport_analysis')
         completed = 0
         total = len(icao_codes)
-        with multiprocessing.Pool(processes=num_workers) as pool:
+        with multiprocessing.Pool(processes=num_workers,
+                                   initializer=_worker_init) as pool:
             for icao, returncode in pool.imap_unordered(_analyze_airport_worker, worker_args):
                 completed += 1
                 if returncode == 0:
@@ -758,7 +750,8 @@ def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
 
         completed = 0
         total = len(icao_codes)
-        with multiprocessing.Pool(processes=num_workers) as pool:
+        with multiprocessing.Pool(processes=num_workers,
+                                   initializer=_worker_init) as pool:
             for icao in pool.imap_unordered(_aggregate_airport_worker, worker_args):
                 completed += 1
                 print(f"  ✅ Completed aggregating {icao} ({completed}/{total})")
@@ -895,6 +888,8 @@ Examples:
                              "re-run analysis on existing sharded files")
     parser.add_argument("--force-download", action="store_true",
                         help="Force re-download of raw tarballs")
+    parser.add_argument("--no-download", action="store_true",
+                        help="Skip download step, use existing tar files")
     parser.add_argument("--aggregate-only", action="store_true",
                         help="Skip all processing, only run cross-date aggregation")
     parser.add_argument("--timing-output", type=str,

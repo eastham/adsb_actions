@@ -10,7 +10,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "tools"))
 
 from tools.batch_los_pipeline import (
-    load_airport_list,
     generate_multi_airport_yaml,
     ESTIMATED_DAILY_DATA_GB,
     ANALYSIS_RADIUS_NM,
@@ -23,6 +22,7 @@ from tools.batch_helpers import (
     compute_bounds,
     print_pipeline_summary,
     print_completion_summary,
+    load_airport_list,
 )
 
 
