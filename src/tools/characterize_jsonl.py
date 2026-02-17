@@ -61,22 +61,56 @@ def read_all_records(shard_gz: Path):
                 continue
 
 
-def characterize(shard_gz: Path, field_elev: int = 0):
-    records = list(read_all_records(shard_gz))
-    if not records:
-        print("No records found.")
-        return
+class RunningStats:
+    """Track min/max/sum/count for a numeric stream without storing values."""
+    def __init__(self):
+        self.min = float('inf')
+        self.max = float('-inf')
+        self.sum = 0.0
+        self.count = 0
+        self._values_for_median = []  # only used if median needed
 
-    # --- Collect basic fields ---
-    lats, lons, alts, timestamps = [], [], [], []
-    by_hex: dict[str, list[dict]] = defaultdict(list)
-    flights_seen: dict[str, set[str]] = defaultdict(set)  # hex -> set of callsigns
+    def add(self, val, keep_for_median=False):
+        if val < self.min:
+            self.min = val
+        if val > self.max:
+            self.max = val
+        self.sum += val
+        self.count += 1
+        if keep_for_median:
+            self._values_for_median.append(val)
+
+    @property
+    def mean(self):
+        return self.sum / self.count if self.count else 0
+
+    @property
+    def median(self):
+        if self._values_for_median:
+            return statistics.median(self._values_for_median)
+        return None
+
+
+def characterize(shard_gz: Path, field_elev: int = 0):
+    # Stream through records once, accumulating only stats (not raw records)
+    lat_stats = RunningStats()
+    lon_stats = RunningStats()
+    alt_stats = RunningStats()
+    ts_stats = RunningStats()
+
+    # Per-aircraft: only track point count and time range
+    ac_pts: dict[str, int] = defaultdict(int)
+    ac_time_min: dict[str, float] = {}
+    ac_time_max: dict[str, float] = {}
+    flights_seen: dict[str, set[str]] = defaultdict(set)
     categories = defaultdict(int)
+    total_points = 0
     ground_count = 0
     no_position_count = 0
     no_alt_count = 0
 
-    for r in records:
+    for r in read_all_records(shard_gz):
+        total_points += 1
         ts = r.get("now")
         hex_id = r.get("hex")
         lat = r.get("lat")
@@ -86,16 +120,21 @@ def characterize(shard_gz: Path, field_elev: int = 0):
         cat = r.get("category")
 
         if ts is not None:
-            timestamps.append(ts)
+            ts_stats.add(ts)
 
         if hex_id:
-            by_hex[hex_id].append(r)
+            ac_pts[hex_id] += 1
+            if ts is not None:
+                if hex_id not in ac_time_min or ts < ac_time_min[hex_id]:
+                    ac_time_min[hex_id] = ts
+                if hex_id not in ac_time_max or ts > ac_time_max[hex_id]:
+                    ac_time_max[hex_id] = ts
             if flight:
                 flights_seen[hex_id].add(flight)
 
         if lat is not None and lon is not None:
-            lats.append(lat)
-            lons.append(lon)
+            lat_stats.add(lat)
+            lon_stats.add(lon)
         else:
             no_position_count += 1
 
@@ -103,7 +142,7 @@ def characterize(shard_gz: Path, field_elev: int = 0):
             ground_count += 1
         elif alt is not None:
             try:
-                alts.append(int(alt))
+                alt_stats.add(int(alt), keep_for_median=True)
             except (ValueError, TypeError):
                 pass
         else:
@@ -112,33 +151,35 @@ def characterize(shard_gz: Path, field_elev: int = 0):
         if cat:
             categories[cat] += 1
 
+    if total_points == 0:
+        print("No records found.")
+        return
+
     # --- Derived values ---
-    total_points = len(records)
-    unique_aircraft = len(by_hex)
+    unique_aircraft = len(ac_pts)
     unique_callsigns = sum(len(cs) for cs in flights_seen.values())
 
-    # Points per aircraft
-    pts_per_ac = [len(pts) for pts in by_hex.values()]
+    pts_per_ac = list(ac_pts.values())
 
-    # Track durations per aircraft
+    # Track durations from min/max timestamps per aircraft
     durations = []
-    for hex_id, pts in by_hex.items():
-        times = sorted(r.get("now", 0) for r in pts if r.get("now") is not None)
-        if len(times) >= 2:
-            durations.append(times[-1] - times[0])
+    for hex_id in ac_pts:
+        if hex_id in ac_time_min and hex_id in ac_time_max:
+            dur = ac_time_max[hex_id] - ac_time_min[hex_id]
+            if dur > 0:
+                durations.append(dur)
 
     # --- Print report ---
     print(f"=== File: {shard_gz.name} ===\n")
 
     # Time info
     print("--- Time ---")
-    if timestamps:
-        t_min, t_max = min(timestamps), max(timestamps)
-        dt_min = datetime.fromtimestamp(t_min, tz=timezone.utc)
-        dt_max = datetime.fromtimestamp(t_max, tz=timezone.utc)
-        span_h = (t_max - t_min) / 3600
-        print(f"  First point:  {dt_min.strftime('%Y-%m-%d %H:%M:%S UTC')} (epoch {t_min})")
-        print(f"  Last point:   {dt_max.strftime('%Y-%m-%d %H:%M:%S UTC')} (epoch {t_max})")
+    if ts_stats.count:
+        dt_min = datetime.fromtimestamp(ts_stats.min, tz=timezone.utc)
+        dt_max = datetime.fromtimestamp(ts_stats.max, tz=timezone.utc)
+        span_h = (ts_stats.max - ts_stats.min) / 3600
+        print(f"  First point:  {dt_min.strftime('%Y-%m-%d %H:%M:%S UTC')} (epoch {ts_stats.min})")
+        print(f"  Last point:   {dt_max.strftime('%Y-%m-%d %H:%M:%S UTC')} (epoch {ts_stats.max})")
         print(f"  Time span:    {span_h:.1f} hours")
     print()
 
@@ -158,18 +199,18 @@ def characterize(shard_gz: Path, field_elev: int = 0):
 
     # Geography
     print("--- Geography ---")
-    if lats:
-        cent_lat = statistics.mean(lats)
-        cent_lon = statistics.mean(lons)
+    if lat_stats.count:
+        cent_lat = lat_stats.mean
+        cent_lon = lon_stats.mean
         print(f"  Centroid:     {cent_lat:.4f}, {cent_lon:.4f}")
-        print(f"  Lat range:    {min(lats):.4f} to {max(lats):.4f}  "
-              f"(span {max(lats)-min(lats):.4f} deg)")
-        print(f"  Lon range:    {min(lons):.4f} to {max(lons):.4f}  "
-              f"(span {max(lons)-min(lons):.4f} deg)")
+        print(f"  Lat range:    {lat_stats.min:.4f} to {lat_stats.max:.4f}  "
+              f"(span {lat_stats.max-lat_stats.min:.4f} deg)")
+        print(f"  Lon range:    {lon_stats.min:.4f} to {lon_stats.max:.4f}  "
+              f"(span {lon_stats.max-lon_stats.min:.4f} deg)")
         # Approximate bounding box size in nm
-        lat_span_nm = (max(lats) - min(lats)) * 60
-        avg_lat = (max(lats) + min(lats)) / 2
-        lon_span_nm = (max(lons) - min(lons)) * 60 * math.cos(math.radians(avg_lat))
+        lat_span_nm = (lat_stats.max - lat_stats.min) * 60
+        avg_lat = (lat_stats.max + lat_stats.min) / 2
+        lon_span_nm = (lon_stats.max - lon_stats.min) * 60 * math.cos(math.radians(avg_lat))
         print(f"  Bounding box: ~{lat_span_nm:.1f} x {lon_span_nm:.1f} nm")
         print(f"  No-position points: {no_position_count:,} "
               f"({100*no_position_count/total_points:.1f}%)")
@@ -179,13 +220,13 @@ def characterize(shard_gz: Path, field_elev: int = 0):
 
     # Altitude
     print("--- Altitude ---")
-    if alts:
-        print(f"  Range:        {min(alts):,} to {max(alts):,} ft")
-        print(f"  Median:       {statistics.median(alts):,.0f} ft")
-        print(f"  Mean:         {statistics.mean(alts):,.0f} ft")
+    if alt_stats.count:
+        print(f"  Range:        {alt_stats.min:,} to {alt_stats.max:,} ft")
+        alt_median = alt_stats.median
+        print(f"  Median:       {alt_median:,.0f} ft" if alt_median is not None else "  Median:       N/A")
+        print(f"  Mean:         {alt_stats.mean:,.0f} ft")
         if field_elev:
-            agl_alts = [a - field_elev for a in alts]
-            print(f"  AGL range:    {min(agl_alts):,} to {max(agl_alts):,} ft "
+            print(f"  AGL range:    {alt_stats.min - field_elev:,} to {alt_stats.max - field_elev:,} ft "
                   f"(field elev {field_elev} ft)")
     else:
         print("  No altitude data")
@@ -203,9 +244,9 @@ def characterize(shard_gz: Path, field_elev: int = 0):
 
     # Data quality (from analyze_shard_quality)
     print(f"--- Data Quality (analyze_shard_quality) NOTE using field_elev {field_elev} ---")
-    if lats:
-        cent_lat = statistics.mean(lats)
-        cent_lon = statistics.mean(lons)
+    if lat_stats.count:
+        cent_lat = lat_stats.mean
+        cent_lon = lon_stats.mean
         quality = analyze_shard_quality(
             shard_gz, field_elev=field_elev,
             airport_lat=cent_lat, airport_lon=cent_lon

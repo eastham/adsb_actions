@@ -1,16 +1,14 @@
 # Project context:
-adsb-actions turns aircraft tracking data into automated actions.  It all
-
-This module allows you to apply conditions and actions to JSON flight
+adsb-actions turns aircraft tracking data from ADS-B into automated actions.  It allows you to apply conditions and actions to JSON flight
 data coming from [readsb](https://github.com/wiedehopf/readsb), API provider, or saved historical data. The conditions and actions are
 specified in a simple human-readable YAML format.
 
-A big downstream focus is detecting and mapping Loss Of Separation (LOS) events, which has
-been used to improve safety in the real world at actual airports.
+A big focus of this work is detecting and mapping Loss Of Separation (LOS) events, which has been used to improve safety in the real world at actual airports.  
+
+The user is actively conducting research with this code and generaling the work so this it can improve safety at airports globally.
 
 # Project rules
-Use similar style as surrounding code unless it's really bad (and flag if so), 
-except in tests where you should do whatever is cleanest.
+Use similar style as surrounding code unless it's really bad (and flag if so), except in tests where you should do whatever is cleanest.
 
 Prioritize clean, understandable code.  anything subtle should be commented.
 Docstrings per function are not required but if written should be brief.
@@ -47,3 +45,7 @@ Always activate the venv before running Python commands:
 ```
 source .venv/bin/activate && <command>
 ```
+
+## Code locations
+core code in src/adsb_actions including resampler
+analysis code in src/analyzers

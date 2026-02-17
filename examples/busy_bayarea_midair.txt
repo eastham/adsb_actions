@@ -1,35 +1,5 @@
 
-# bay area
-WVI
-CVH
-C83
-HAF
-TCY
-O27
-VCB
-EDU
-E16
-
-# historical midairs or high risk
-DCA
-GIF
-VGT
-#WVI
-SAN
-BUR
-PDK
-
-# busiest GA towered
-MYF
-LGB
-DVT
-FFZ
-HWO
-TMB
-VNY
-APA
-
-# busiest untowered
+# 160 Busiest Untowered Airports in the US
 DWA
 DVO
 LSN
@@ -126,6 +96,7 @@ LHZ
 TTA
 1H0
 LVJ
+#WVI
 AVQ
 DWA
 RMG
@@ -189,3 +160,35 @@ RZT
 HII
 5R4
 AKR
+
+
+# SF Bay Area Untowered Airports
+WVI
+CVH
+C83
+HAF
+TCY
+O27
+VCB
+EDU
+E16
+
+
+# Busiest GA Airports with towers (note: LOS events in a controlled environment may not be unsafe)
+MYF
+LGB
+DVT
+FFZ
+HWO
+TMB
+VNY
+APA
+
+# Airports with a history of LOS concerns (some towered)
+DCA
+GIF
+VGT
+#WVI
+SAN
+BUR
+PDK
