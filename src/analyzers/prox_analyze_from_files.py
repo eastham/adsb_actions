@@ -87,6 +87,7 @@ if __name__ == "__main__":
             LOS.animator = LOSAnimator(adsb_actions.resampler)
             print(f"Animation generation enabled, output to: {LOS.animation_output_dir}")
 
+        LOS.resampler = adsb_actions.resampler
         prox_events = adsb_actions.do_resampled_prox_checks(los_gc)
 
         # Export traffic samples for visualization if requested

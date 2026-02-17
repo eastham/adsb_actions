@@ -400,6 +400,7 @@ def interpolate_location(loc1: Location, loc2: Location, timestamp: float) -> Op
         hex=loc1.hex,
         tail=loc1.tail,
         gs=gs,
-        track=track
+        track=track,
+        resampled=True
     )
     return new_loc

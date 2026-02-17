@@ -38,6 +38,7 @@ class LOS:
     quit = False
     animator = None  # Set by caller to enable animation generation
     animation_output_dir = ANIMATION_OUTPUT_DIR
+    resampler = None  # Set by caller to enable location history on finalized events
 
     def __init__(self, flight1, flight2, latdist, altdist, create_time):
         # Keep flight1/flight2 in a universal order to enforce lock ordering
@@ -50,7 +51,7 @@ class LOS:
             self.flight2 = flight2
 
         # Make a deep copy of the current location to remember the location
-        # of the event
+        # of the event.  sometimes updated at closest approach.
         self.first_loc_1 = copy.deepcopy(flight1.lastloc)
         self.first_loc_2 = copy.deepcopy(flight2.lastloc)
 
@@ -62,6 +63,9 @@ class LOS:
         self.create_time = self.last_time = create_time
         self.cpa_time = create_time
         self.id = None
+        # Populated at finalization: {flight_id: [Location, ...]} for both flights
+        # contains real locations only (not resampled)
+        self.event_locations = {}
 
     def update(self, latdist, altdist, last_time, flight1, flight2,
                update_loc_at_closest_approach=True):
@@ -84,6 +88,20 @@ class LOS:
         key = "%s %s" % (self.flight1.flight_id.strip(),
             self.flight2.flight_id.strip())
         return key
+
+    def populate_event_locations(self):
+        """Attach full location histories for both flights from the resampler.
+        Uses first_loc_1/2.flight which carry the resampler-assigned flight_id
+        (e.g. "N12345_1")."""
+        if not LOS.resampler:
+            return
+        locs_by_fid = LOS.resampler.locations_by_flight_id
+        for loc in (self.first_loc_1, self.first_loc_2):
+            fid = loc.flight
+            if fid in locs_by_fid:
+                self.event_locations[fid] = locs_by_fid[fid]
+            else:
+                logger.warning("populate_event_locations: no locations for %s", fid)
 
 def process_los_launch(flight1, flight2, do_threading=True):
     """Saw an LOS event -- in streaming mode, start a thread to 
@@ -147,13 +165,22 @@ def process_los(flight1, flight2):
             los.id = add_los(flight1, flight2, lateral_distance,
                                alt_distance)
 
+def _count_real_reports(locations, start, end):
+    """Count real (non-resampled) ADS-B reports in a time window."""
+    return sum(1 for loc in locations if start <= loc.now <= end)
+
+CPA_WINDOW_S = 10  # seconds around CPA to check for real data
+SPARSE_DATA_THRESHOLD = 0.75  # require 75% real data during LOS
+
 def calculate_event_quality(los, flight1, flight2):
     """Calculate event quality score based on duration, aircraft type, and CPA.
 
     Very High quality: high quality + CPA < 0.2 nm and 200 ft
     High quality: brief event with good tracks
     Medium quality: 1 min < event duration ≤ 2 min OR helicopter involved
+                    OR >25% resampled data during LOS (caps high/vhigh → medium)
     Low quality: event duration > 2 min OR track duration < 1 min
+                 OR no real data near CPA
 
     Returns: tuple of (quality_string, explanation_string)
     """
@@ -179,33 +206,15 @@ def calculate_event_quality(los, flight1, flight2):
     event_duration_min = event_duration / 60.0
     min_track_duration_min = min_track_duration / 60.0
 
-    # Check for suspicious track data (position/speed anomalies)
-    suspicious_1 = flight1.flags.get('suspicious') if hasattr(flight1, 'flags') else False
-    suspicious_2 = flight2.flags.get('suspicious') if hasattr(flight2, 'flags') else False
-
     # Apply quality criteria with explanations
-    if suspicious_1 or suspicious_2:
-        bad_flights = []
-        if suspicious_1:
-            bad_flights.append(flight1.flight_id.strip())
-        if suspicious_2:
-            bad_flights.append(flight2.flight_id.strip())
-        reasons.append(f"suspicious track data ({', '.join(bad_flights)})")
-        quality = 'low'
-    elif flight1.flight_id.strip()[-2:] == flight2.flight_id.strip()[-2:]:
-        reasons.append("Tail numbers end in same two letters (may be formation flight)")
-        quality = 'low'
-    #elif los.last_time == flight1.lastloc.now or los.last_time == flight2.lastloc.now:
-    #    reasons.append("closest approach at end of track, possible poor signal")
-    #    quality = 'low'
-    elif event_duration > 120:
-        reasons.append(f"long event ({event_duration_min:.1f}min - may be formation flight)")
+    if event_duration > 60:
+        reasons.append(f"long duration ({event_duration_min:.1f}min - may be formation flight)")
         quality = 'low'
     elif min_track_duration < 60:
         reasons.append(f"short track ({min_track_duration_min:.1f}min - insufficient data)")
         quality = 'low'
-    elif event_duration > 40:
-        reasons.append(f"moderate duration ({event_duration_min:.1f}min)")
+    elif event_duration > 30:
+        reasons.append(f"moderate duration ({event_duration_min:.1f}min - may be formation flight)")
         quality = 'medium'
     elif is_helicopter:
         reasons.append("helicopter involved")
@@ -218,6 +227,33 @@ def calculate_event_quality(los, flight1, flight2):
         if cpa_lateral_nm < 0.2 and cpa_vertical_ft < 200:
             quality = 'vhigh'
             reasons.append(f"very close CPA ({cpa_lateral_nm:.2f}nm, {cpa_vertical_ft:.0f}ft)")
+
+    # Location-level quality checks (only when event_locations populated, i.e. batch mode)
+    event_locs = getattr(los, 'event_locations', {})
+    cpa_time = getattr(los, 'cpa_time', None)
+
+    if event_locs and cpa_time is not None:
+        # Heuristic B: no real data near CPA → low quality
+        # Check both flights for real reports within ±CPA_WINDOW_S of CPA
+        for fid, locs in event_locs.items():
+            near_cpa = _count_real_reports(locs, cpa_time - CPA_WINDOW_S,
+                                           cpa_time + CPA_WINDOW_S)
+            if near_cpa == 0:
+                quality = 'low'
+                reasons.append(f"no real data near CPA ({fid}: 0 real in ±{CPA_WINDOW_S}s)")
+                break
+
+        # Heuristic A: sparse data during LOS → cap at medium
+        if quality in ('high', 'vhigh') and event_duration > 0:
+            for fid, locs in event_locs.items():
+                real_count = _count_real_reports(locs, los.create_time, los.last_time)
+                # Expected ~1 report/sec with typical ADS-B; compare to interval
+                real_frac = real_count / event_duration
+                if real_frac < SPARSE_DATA_THRESHOLD:
+                    quality = 'medium'
+                    reasons.append(
+                        f"sparse data during LOS ({fid}: {real_count} real of {event_duration:.0f}s)")
+                    break
 
     # Add secondary factors as additional context
     if quality not in ['low', 'vhigh'] and min_track_duration < 120:
@@ -337,6 +373,9 @@ def los_gc(ts):
             # do database update
             update_los(flight1, flight2, los.min_latdist, los.min_altdist,
                        los.create_time, los.id)
+
+            # Attach full location histories for quality analysis
+            los.populate_event_locations()
 
             # Generate animation if animator is available
             animation_path = None

@@ -5,11 +5,15 @@ Used by batch_los_pipeline.py during the aggregation phase.
 """
 
 import gzip
-import json
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+
+try:
+    import orjson as _json
+except ImportError:
+    import json as _json
 
 try:
     from src.tools.metar_history import get_flight_categories
@@ -32,11 +36,11 @@ def read_shard_records(shard_gz: Path, field_elev: int = 0):
     alt_floor = field_elev + FT_MIN_BELOW_AIRPORT
 
     try:
-        with gzip.open(shard_gz, "rt") as f:
+        with gzip.open(shard_gz, "rb") as f:
             for line in f:
                 try:
-                    record = json.loads(line)
-                except (json.JSONDecodeError, ValueError):
+                    record = _json.loads(line)
+                except ValueError:
                     continue
 
                 ts = record.get("now")
@@ -61,18 +65,30 @@ def read_shard_records(shard_gz: Path, field_elev: int = 0):
         logger.warning(f"Error reading {shard_gz}: {e} (using partial data)")
 
 
+def read_all_shards(airport_dir: Path, field_elev: int = 0
+                     ) -> dict[Path, list[dict]]:
+    """Read all date-matching shards once, returning {shard_path: [records]}."""
+    shard_files = sorted(airport_dir.glob("*_*.gz"))
+    shard_files = [f for f in shard_files if parse_date_from_shard(f.name)]
+    result = {}
+    for shard in shard_files:
+        result[shard] = list(read_shard_records(shard, field_elev))
+    return result
+
+
 def count_hourly_traffic(shard_gz: Path,
-                         field_elev: int = 0) -> dict[int, int]:
+                         field_elev: int = 0,
+                         records: list[dict] | None = None
+                         ) -> dict[int, int]:
     """Count unique aircraft per UTC hour from a single gzipped JSONL shard.
 
-    Filters to aircraft within FT_MAX_ABOVE_AIRPORT/FT_MIN_BELOW_AIRPORT of
-    field_elev to exclude high-altitude overflights and ground targets.
-
+    If records is provided, uses those instead of reading from disk.
     Returns {hour: unique_aircraft_count} for hours 0-23.
     """
     hex_by_hour: dict[int, set[str]] = defaultdict(set)
 
-    for record in read_shard_records(shard_gz, field_elev):
+    for record in (records if records is not None
+                   else read_shard_records(shard_gz, field_elev)):
         hour = datetime.fromtimestamp(record["now"], tz=timezone.utc).hour
         hex_by_hour[hour].add(record["hex"])
 
@@ -99,20 +115,21 @@ def parse_date_from_shard(filename: str) -> str | None:
 def build_busyness_data(icao: str, airport_dir: Path,
                         metar_year: int = 2025,
                         metar_cache_dir: Path | None = None,
-                        field_elev: int = 0
+                        field_elev: int = 0,
+                        preloaded_shards: dict[Path, list[dict]] | None = None
                         ) -> dict | None:
     """Build the full busyness JSON structure for one airport.
 
-    Reads .gz shards for traffic counts, fetches/caches METAR data,
-    joins them, and aggregates by (hour, day_type, flight_category).
+    If preloaded_shards is provided, uses those instead of reading from disk.
 
     Returns a dict suitable for JSON embedding in the HTML chart, or None
     if no data is available.
     """
-    # Find all shard files
-    shard_files = sorted(airport_dir.glob("*_*.gz"))
-    # Exclude any that don't match the date pattern
-    shard_files = [f for f in shard_files if parse_date_from_shard(f.name)]
+    if preloaded_shards is not None:
+        shard_files = sorted(preloaded_shards.keys())
+    else:
+        shard_files = sorted(airport_dir.glob("*_*.gz"))
+        shard_files = [f for f in shard_files if parse_date_from_shard(f.name)]
 
     if not shard_files:
         logger.warning(f"No shard files found for {icao}")
@@ -135,7 +152,9 @@ def build_busyness_data(icao: str, airport_dir: Path,
         if not date_str:
             continue
 
-        hourly = count_hourly_traffic(shard, field_elev=field_elev)
+        shard_records = preloaded_shards.get(shard) if preloaded_shards else None
+        hourly = count_hourly_traffic(shard, field_elev=field_elev,
+                                      records=shard_records)
         if not hourly:
             continue
 

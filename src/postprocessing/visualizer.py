@@ -779,7 +779,7 @@ if __name__ == "__main__":
                 latdist = row[16] if len(row) > 16 else ""
                 altdist = row[17] if len(row) > 17 else ""
 
-                annotation = f"<b>{datestr}</b> {tail1}/{tail2} "
+                annotation = f"{tail1}/{tail2} Closest Point of Approach (CPA) at: <b>{datestr}</b>  "
                 if quality:
                     annotation += f"<br><b>Event Quality:</b> {quality}"
                     if quality_explanation:

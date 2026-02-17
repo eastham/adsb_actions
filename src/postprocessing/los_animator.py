@@ -4,11 +4,10 @@ This module creates interactive HTML maps with time sliders showing
 aircraft positions before, during, and after proximity events.
 """
 
-import bisect
 import datetime
 import logging
 
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import folium
 from folium.plugins import TimestampedGeoJson
@@ -33,54 +32,6 @@ class LOSAnimator:
         """
         self.resampler = resampler
 
-    def _find_flight_id(self, tail: str, event_time: float) -> Optional[str]:
-        """Find the resampler flight_id that matches a tail number near event time.
-
-        The resampler uses flight_ids like "N12345_1" while LOS stores just "N12345".
-        This finds the matching suffixed ID by looking for data near the event time.
-
-        Args:
-            tail: Tail number (e.g., "N12345")
-            event_time: Unix timestamp of the event
-
-        Returns:
-            Matching flight_id or None if not found
-        """
-        # Search locations_by_time near event_time to find matching flight_ids
-        candidates = set()
-        search_window = 120  # seconds to search around event
-
-        for t in range(int(event_time) - search_window, int(event_time) + search_window):
-            if t not in self.resampler.locations_by_time:
-                continue
-            for loc in self.resampler.locations_by_time[t]:
-                if loc.flight and (loc.flight.startswith(tail + "_") or loc.flight == tail):
-                    candidates.add(loc.flight)
-
-        if not candidates:
-            logger.warning("No flight_ids found matching tail %s near time %d", tail, int(event_time))
-            return None
-
-        if len(candidates) == 1:
-            return list(candidates)[0]
-
-        # Multiple candidates - find the one with data closest to event_time
-        best_fid = None
-        best_dist = float('inf')
-        for t in range(int(event_time) - search_window, int(event_time) + search_window):
-            if t not in self.resampler.locations_by_time:
-                continue
-            for loc in self.resampler.locations_by_time[t]:
-                if loc.flight in candidates:
-                    dist = abs(loc.now - event_time)
-                    if dist < best_dist:
-                        best_dist = dist
-                        best_fid = loc.flight
-
-        logger.debug("Multiple candidates for %s, chose %s (dist=%.0fs from event)",
-                    tail, best_fid, best_dist)
-        return best_fid
-
     def _get_positions_in_window(self, flight_id: str, start_time: float,
                                   end_time: float) -> List:
         """Extract positions for a flight within a time window.
@@ -103,7 +54,6 @@ class LOSAnimator:
             if t not in self.resampler.locations_by_time:
                 continue
             for loc in self.resampler.locations_by_time[t]:
-                # Match by flight field (which contains the suffixed ID like N12345_1)
                 if loc.flight == flight_id:
                     positions.append(loc)
 
@@ -142,68 +92,80 @@ class LOSAnimator:
 
         return features
 
-    def _get_real_sample_times(self, flight_id: str) -> List[float]:
-        """Return sorted real (non-interpolated) sample timestamps for a flight."""
-        locs = self.resampler.locations_by_flight_id.get(flight_id, [])
-        return sorted(loc.now for loc in locs)
-
-    def _in_interpolated_gap(self, t: float, real_times: List[float]) -> bool:
-        """Check if timestamp t falls in a gap between real samples > threshold."""
-        idx = bisect.bisect_right(real_times, t)
-        if idx == 0 or idx >= len(real_times):
-            return False
-        return (real_times[idx] - real_times[idx - 1]) > self.GAP_THRESHOLD_S
-
     def _add_trail_polylines(self, m, positions: List, color: str,
-                               real_times: List[float] = None,
-                               weight: int = 2, opacity: float = 0.7):
-        """Add trail polylines to a map, coloring interpolated gaps grey.
+                               weight: int = 2, opacity: float = 0.7,
+                               los_start: float = None, los_end: float = None):
+        """Add trail polylines to a map with visual distinction for:
+        - Interpolated gaps (grey dashed)
+        - Active LOS interval (bold weight)
+        - Context before/after LOS (normal weight)
 
-        Positions are resampled (1/sec), so we use real_times to detect
-        stretches that were interpolated across a data gap.
+        Uses Location.resampled flag to detect stretches interpolated
+        across a data gap (> GAP_THRESHOLD_S consecutive resampled points).
         """
         if len(positions) < 2:
             return
-        if not real_times:
-            # No gap info — draw a single polyline
-            coords = [[p.lat, p.lon] for p in positions]
-            folium.PolyLine(
-                coords, color=color, weight=weight, opacity=opacity
-            ).add_to(m)
-            return
 
-        # Walk positions, grouping consecutive same-color segments
+        GAP_WEIGHT_MULT = 1
+        LOS_WEIGHT_MULT = 4
+
+        # Determine which positions are in a significant interpolated gap.
+        in_gap = [False] * len(positions)
+        i = 0
+        while i < len(positions):
+            if positions[i].resampled:
+                run_start = i
+                while i < len(positions) and positions[i].resampled:
+                    i += 1
+                run_duration = positions[i - 1].now - positions[run_start].now
+                if run_duration > self.GAP_THRESHOLD_S:
+                    for j in range(run_start, i):
+                        in_gap[j] = True
+            else:
+                i += 1
+
+        def _style_key(idx):
+            """Return a tuple representing the visual style for position idx."""
+            gap = in_gap[idx]
+            in_los = (los_start is not None and los_end is not None and
+                      los_start <= positions[idx].now <= los_end)
+            return (gap, in_los)
+
+        def _make_style(key):
+            gap, in_los = key
+            if gap:
+                return dict(color=self.GAP_COLOR, weight=weight * GAP_WEIGHT_MULT,
+                            opacity=opacity, dash_array="6 4")
+            if in_los:
+                return dict(color="magenta", weight=weight * LOS_WEIGHT_MULT,
+                            opacity=opacity)
+            return dict(color=color, weight=weight, opacity=opacity)
+
+        # Walk positions, grouping consecutive same-style segments
         seg_coords = [[positions[0].lat, positions[0].lon]]
-        prev_gap = self._in_interpolated_gap(positions[0].now, real_times)
+        prev_key = _style_key(0)
 
         for i in range(1, len(positions)):
-            cur_gap = self._in_interpolated_gap(positions[i].now, real_times)
-            if cur_gap != prev_gap:
-                # Emit the segment we've accumulated
+            cur_key = _style_key(i)
+            if cur_key != prev_key:
                 if len(seg_coords) >= 2:
-                    style = dict(color=self.GAP_COLOR, weight=weight,
-                                 opacity=opacity, dash_array="6 4") \
-                            if prev_gap else \
-                            dict(color=color, weight=weight, opacity=opacity)
-                    folium.PolyLine(seg_coords, **style).add_to(m)
-                # Start new segment, overlapping one point for continuity
+                    folium.PolyLine(seg_coords, **_make_style(prev_key)).add_to(m)
+                # Overlap one point for continuity
                 seg_coords = [seg_coords[-1]]
-                prev_gap = cur_gap
+                prev_key = cur_key
             seg_coords.append([positions[i].lat, positions[i].lon])
 
         # Emit final segment
         if len(seg_coords) >= 2:
-            style = dict(color=self.GAP_COLOR, weight=weight,
-                         opacity=opacity, dash_array="6 4") \
-                    if prev_gap else \
-                    dict(color=color, weight=weight, opacity=opacity)
-            folium.PolyLine(seg_coords, **style).add_to(m)
+            folium.PolyLine(seg_coords, **_make_style(prev_key)).add_to(m)
 
     def animate_los(self, flight1_id: str, flight2_id: str,
                     event_time: float, window_before: int = 240,
                     window_after: int = 60,
                     output_file: str = "los_animation.html",
-                    map_type: str = "sectional") -> Optional[str]:
+                    map_type: str = "sectional",
+                    los_start: float = None,
+                    los_end: float = None) -> Optional[str]:
         """Create animated map showing two aircraft around an LOS event.
 
         Args:
@@ -214,6 +176,8 @@ class LOSAnimator:
             window_after: Seconds after event to show (default 60)
             output_file: Output HTML file path
             map_type: Base map type ("sectional" or "satellite")
+            los_start: Start of LOS event (create_time); trail drawn bold during event
+            los_end: End of LOS event (last_time)
 
         Returns:
             Output file path if successful, None otherwise
@@ -275,12 +239,10 @@ class LOSAnimator:
         tail2 = positions2[0].tail if positions2 else flight2_id
 
         # Add static trail lines (always visible), with interpolated gaps in grey
-        real_times1 = self._get_real_sample_times(flight1_id)
-        real_times2 = self._get_real_sample_times(flight2_id)
         self._add_trail_polylines(m, positions1, self.AIRCRAFT1_COLOR,
-                                  real_times=real_times1)
+                                  los_start=los_start, los_end=los_end)
         self._add_trail_polylines(m, positions2, self.AIRCRAFT2_COLOR,
-                                  real_times=real_times2)
+                                  los_start=los_start, los_end=los_end)
 
         # Build animated point features with altitude labels
         features = []
@@ -377,8 +339,9 @@ class LOSAnimator:
             <b>LOS Event</b><br>
             <span style="color: {self.AIRCRAFT1_COLOR};">●</span> {tail1}<br>
             <span style="color: {self.AIRCRAFT2_COLOR};">●</span> {tail2}<br>
-            <small>CPA: {datetime.datetime.utcfromtimestamp(event_time).strftime("%H:%M:%S")} UTC</small><br>
-            <small>Click dots for altitude</small>
+            <small><span style="color:orange;">⭕</span> CPA: {datetime.datetime.utcfromtimestamp(event_time).strftime("%H:%M:%S")} UTC</small><br>
+            <small><span style="color:magenta;">▬</span> LOS duration: {int(los_end - los_start) if los_start and los_end else "?"} sec</small><br>
+            <small>Total duration shown: {end_time - start_time} sec</small><br>
         </div>
         '''
         m.get_root().html.add_child(folium.Element(legend_html))
@@ -418,21 +381,13 @@ class LOSAnimator:
         Returns:
             Output file path if successful, None otherwise
         """
-        tail1 = los.flight1.flight_id.strip()
-        tail2 = los.flight2.flight_id.strip()
-
-        # Use create_time as the event time (when LOS was first detected)
+        # first_loc_1/2 carry the resampler-assigned flight_id (e.g. "N12345_1")
+        flight1_id = los.first_loc_1.flight
+        flight2_id = los.first_loc_2.flight
         event_time = los.cpa_time
 
-        # Find the resampler flight_ids (with _N suffix) that match these tails
-        flight1_id = self._find_flight_id(tail1, event_time)
-        flight2_id = self._find_flight_id(tail2, event_time)
-
-        if not flight1_id:
-            print(f"  Skipping: Could not find resampler data for {tail1}")
-            return None
-        if not flight2_id:
-            print(f"  Skipping: Could not find resampler data for {tail2}")
+        if not flight1_id or not flight2_id:
+            print(f"  Skipping: missing flight ID on LOS locations")
             return None
 
         if output_file is None:
@@ -441,7 +396,8 @@ class LOSAnimator:
 
         result = self.animate_los(
             flight1_id, flight2_id, event_time,
-            window_before, window_after, output_file
+            window_before, window_after, output_file,
+            los_start=los.create_time, los_end=los.last_time
         )
 
         if result:

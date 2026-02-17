@@ -7,8 +7,6 @@ gaps.  Produces a green/yellow/red score for the visualizer.
 Used by batch_los_pipeline.py during the aggregation phase.
 """
 
-import gzip
-import json
 import logging
 import math
 from collections import defaultdict
@@ -16,10 +14,8 @@ from pathlib import Path
 
 try:
     from src.tools.busyness import read_shard_records, parse_date_from_shard
-    from src.tools.batch_helpers import FT_MAX_ABOVE_AIRPORT, FT_MIN_BELOW_AIRPORT
 except ImportError:
     from busyness import read_shard_records, parse_date_from_shard
-    from batch_helpers import FT_MAX_ABOVE_AIRPORT, FT_MIN_BELOW_AIRPORT
 
 logger = logging.getLogger(__name__)
 
@@ -54,19 +50,11 @@ def _fast_distance_nm(lat1, lon1, lat2, lon2):
 
 def analyze_shard_quality(shard_gz: Path, field_elev: int = 0,
                           airport_lat: float = 0.0,
-                          airport_lon: float = 0.0) -> dict | None:
+                          airport_lon: float = 0.0,
+                          records: list[dict] | None = None) -> dict | None:
     """Analyze data quality metrics from a single gzipped JSONL shard.
 
-    Returns dict with:
-        lost_rate: float (0.0-1.0) or None if no low-altitude tracks found
-        low_alt_tracks: int (total seen in the corridor)
-        completed_tracks: int (also seen at the surface)
-        lost_tracks: int (never seen at the surface)
-        median_gap_s: float or None
-        p90_gap_s: float or None
-        total_tracks: int
-        total_gaps: int
-    Or None if the shard cannot be read or has no data.
+    If records is provided, uses those instead of reading from disk.
     """
     low_alt_min = field_elev + LOW_ALT_MIN_AGL
     low_alt_max = field_elev + LOW_ALT_MAX_AGL
@@ -75,7 +63,8 @@ def analyze_shard_quality(shard_gz: Path, field_elev: int = 0,
     # Group records by aircraft
     by_hex: dict[str, list[dict]] = defaultdict(list)
 
-    for record in read_shard_records(shard_gz, field_elev):
+    for record in (records if records is not None
+                   else read_shard_records(shard_gz, field_elev)):
         hex_id = record["hex"]
         alt_int = record.get("_alt_int")
         ts = record["now"]
@@ -149,38 +138,29 @@ def analyze_shard_quality(shard_gz: Path, field_elev: int = 0,
 def build_data_quality(icao: str, airport_dir: Path,
                        field_elev: int = 0,
                        airport_lat: float = 0.0,
-                       airport_lon: float = 0.0) -> dict | None:
+                       airport_lon: float = 0.0,
+                       preloaded_shards: dict[Path, list[dict]] | None = None
+                       ) -> dict | None:
     """Build data quality JSON structure for one airport across all dates.
 
-    Returns a dict suitable for JSON embedding in the HTML:
-        {
-            "icao": str,
-            "score": "green" | "yellow" | "red",
-            "lostRate": float or None,
-            "completionRate": float or None,
-            "medianGapS": float or None,
-            "p90GapS": float or None,
-            "numDates": int,
-            "totalLowAltTracks": int,
-            "completedTracks": int,
-            "details": {
-                "terminationScore": "green"|"yellow"|"red",
-                "gapScore": "green"|"yellow"|"red"
-            }
-        }
-    Or None if no data is available.
+    If preloaded_shards is provided, uses those instead of reading from disk.
     """
-    shard_files = sorted(airport_dir.glob("*_*.gz"))
-    shard_files = [f for f in shard_files if parse_date_from_shard(f.name)]
+    if preloaded_shards is not None:
+        shard_files = sorted(preloaded_shards.keys())
+    else:
+        shard_files = sorted(airport_dir.glob("*_*.gz"))
+        shard_files = [f for f in shard_files if parse_date_from_shard(f.name)]
 
     if not shard_files:
         return None
 
     all_results = []
     for shard in shard_files:
+        shard_records = preloaded_shards.get(shard) if preloaded_shards else None
         result = analyze_shard_quality(shard, field_elev=field_elev,
                                        airport_lat=airport_lat,
-                                       airport_lon=airport_lon)
+                                       airport_lon=airport_lon,
+                                       records=shard_records)
         if result:
             all_results.append(result)
 
