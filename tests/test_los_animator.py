@@ -56,32 +56,6 @@ class TestLOSAnimator:
 
         return resampler, base_time
 
-    def test_find_flight_id_exact_match(self):
-        """Test that exact flight_id match works."""
-        resampler, base_time = self._create_test_resampler()
-        animator = LOSAnimator(resampler)
-
-        # Should find exact match (searches locations_by_time)
-        fid = animator._find_flight_id("N12345_1", base_time + 60)
-        assert fid == "N12345_1"
-
-    def test_find_flight_id_tail_lookup(self):
-        """Test that tail number lookup finds suffixed flight_id."""
-        resampler, base_time = self._create_test_resampler()
-        animator = LOSAnimator(resampler)
-
-        # Should find N12345_1 from just N12345
-        fid = animator._find_flight_id("N12345", base_time + 60)
-        assert fid == "N12345_1"
-
-    def test_find_flight_id_not_found(self):
-        """Test that missing tail returns None."""
-        resampler, base_time = self._create_test_resampler()
-        animator = LOSAnimator(resampler)
-
-        fid = animator._find_flight_id("NXXXXX", base_time + 60)
-        assert fid is None
-
     def test_get_positions_in_window(self):
         """Test extracting positions within a time window."""
         resampler, base_time = self._create_test_resampler()
@@ -171,11 +145,16 @@ class MockFlight:
 
 class MockLOS:
     """Mock LOS object for testing."""
-    def __init__(self, tail1, tail2, create_time):
+    def __init__(self, tail1, tail2, create_time, flight1_id=None, flight2_id=None):
         self.flight1 = MockFlight(tail1)
         self.flight2 = MockFlight(tail2)
         self.create_time = create_time
-        self.cpa_time = create_time  # Initialize to same as create_time
+        self.last_time = create_time + 20  # 20 second event duration
+        self.cpa_time = create_time
+        # first_loc_1/2 carry the resampler-assigned flight_id
+        self.first_loc_1 = Location(flight=flight1_id or f"{tail1}_1")
+        self.first_loc_2 = Location(flight=flight2_id or f"{tail2}_1")
+        self.event_locations = {}
 
 
 class TestAnimateFromLOS:

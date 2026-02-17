@@ -44,6 +44,7 @@ from datetime import datetime
 from pathlib import Path
 
 import generate_airport_config
+import generate_batch_outputs
 from batch_helpers import (
     SimpleTimer,
     faa_to_icao,
@@ -435,7 +436,7 @@ def run_airport_analysis(icao: str, date_compact: str,
     return returncode
 
 
-def combine_and_downsample_traffic(traffic_files: list[Path], output: Path,
+def combine_and_downsample_traffic(icao: str, traffic_files: list[Path], output: Path,
                                    max_lines: int = 20000):
     """Combine per-date traffic CSVs into one file, downsampling if needed.
 
@@ -461,13 +462,14 @@ def combine_and_downsample_traffic(traffic_files: list[Path], output: Path,
                     line_num += 1
 
     if sample_rate > 1:
-        print(f"  Combined {len(traffic_files)} traffic files: {line_count:,} points "
+        print(f"  Combined {icao} {len(traffic_files)} traffic files: {line_count:,} points "
               f"→ downsampled to {written:,} (every {sample_rate}th)")
     else:
-        print(f"  Combined {len(traffic_files)} traffic files: {line_count:,} points")
+        print(f"  Combined {icao} {len(traffic_files)} traffic files: {line_count:,} points")
 
 
 def aggregate_airport_results(icao: str, airport_info: dict,
+                              build_quality: bool,
                               dry_run: bool = False):
     """Cross-date aggregation: combine CSV outputs and generate visualization."""
     lat, lon, field_elev = airport_info[icao]
@@ -498,52 +500,67 @@ def aggregate_airport_results(icao: str, airport_info: dict,
             with open(csv_file, 'r') as inf:
                 outf.write(inf.read())
     
-    # Combine traffic samples from all dates
-    combined_traffic = airport_dir / f"{icao}_traffic_combined.csv"
-    traffic_files = sorted(airport_dir.glob("*_*_traffic.csv"))
-
-    if traffic_files:
-        combine_and_downsample_traffic(traffic_files, combined_traffic)
-    else:
-        combined_traffic = None
-
-    # Build busyness data (traffic counts + METAR weather categories)
     busyness_json = None
-    try:
-        from busyness import build_busyness_data
-        shard_dir = SHARD_DIR / icao
-        busyness_data = build_busyness_data(icao, shard_dir,
-                                            metar_cache_dir=airport_dir,
-                                            field_elev=field_elev)
-        if busyness_data:
-            import json
-            busyness_json = airport_dir / f"{icao}_busyness.json"
-            busyness_json.write_text(json.dumps(busyness_data))
-            print(f"  Busyness data: {busyness_data['numDates']} dates, "
-                  f"max={busyness_data['globalMax']} aircraft/hr")
-    except Exception as e:
-        print(f"  Warning: busyness data generation failed: {e}")
-
-    # Build data quality assessment
     quality_json = None
-    try:
-        from data_quality import build_data_quality
-        quality_data = build_data_quality(icao, shard_dir,
-                                          field_elev=field_elev,
-                                          airport_lat=lat,
-                                          airport_lon=lon)
-        if quality_data:
-            import json
-            quality_json = airport_dir / f"{icao}_quality.json"
-            quality_json.write_text(json.dumps(quality_data))
-            lost = quality_data['lostRate']
-            lost_str = f"{lost:.0%}" if lost is not None else "N/A"
-            gap = quality_data['medianGapS']
-            gap_str = f"{gap:.1f}s" if gap is not None else "N/A"
-            print(f"  Data quality: {quality_data['score']} "
-                  f"(lost={lost_str}, gap={gap_str})")
-    except Exception as e:
-        print(f"  Warning: data quality assessment failed: {e}")
+
+    if build_quality:
+        # Combine traffic samples from all dates
+        combined_traffic = airport_dir / f"{icao}_traffic_combined.csv"
+        traffic_files = sorted(airport_dir.glob("*_*_traffic.csv"))
+
+        if traffic_files:
+            combine_and_downsample_traffic(icao, traffic_files, combined_traffic)
+        else:
+            combined_traffic = None
+
+        # Read all shards once for both busyness and data-quality analysis
+        # XXX change this to load only downsampled traffic files
+        print(f"  Preloading shard data for {icao} for busyness and data quality analysis...")
+        shard_dir = SHARD_DIR / icao
+        try:
+            from busyness import build_busyness_data, read_all_shards
+            preloaded = read_all_shards(shard_dir, field_elev=field_elev) # XXX date range?
+        except Exception as e:
+            print(f"  Warning: shard reading failed: {e}")
+            preloaded = {}
+
+        # Build busyness data (traffic counts + METAR weather categories)
+        print(f"  Building busyness data for {icao}...")
+        try:
+            busyness_data = build_busyness_data(icao, shard_dir,
+                                                metar_cache_dir=airport_dir,
+                                                field_elev=field_elev,
+                                                preloaded_shards=preloaded or None)
+            if busyness_data:
+                import json
+                busyness_json = airport_dir / f"{icao}_busyness.json"
+                busyness_json.write_text(json.dumps(busyness_data))
+                print(f"  {icao} Busyness data: {busyness_data['numDates']} dates, "
+                    f"max={busyness_data['globalMax']} aircraft/hr")
+        except Exception as e:
+            print(f"  Warning: busyness data generation failed: {e}")
+
+        # Build data quality assessment
+        print(f"  Assessing data quality for {icao}...")
+        try:
+            from data_quality import build_data_quality
+            quality_data = build_data_quality(icao, shard_dir,
+                                            field_elev=field_elev,
+                                            airport_lat=lat,
+                                            airport_lon=lon,
+                                            preloaded_shards=preloaded or None)
+            if quality_data:
+                import json
+                quality_json = airport_dir / f"{icao}_quality.json"
+                quality_json.write_text(json.dumps(quality_data))
+                lost = quality_data['lostRate']
+                lost_str = f"{lost:.0%}" if lost is not None else "N/A"
+                gap = quality_data['medianGapS']
+                gap_str = f"{gap:.1f}s" if gap is not None else "N/A"
+                print(f"  Data quality: {quality_data['score']} "
+                    f"(lost={lost_str}, gap={gap_str})")
+        except Exception as e:
+            print(f"  Warning: data quality assessment failed: {e}")
 
     sw_lat, sw_lon, ne_lat, ne_lon = compute_bounds(lat, lon, ANALYSIS_RADIUS_NM)
     vis_output = airport_dir / f"{icao}_map.html"
@@ -712,13 +729,14 @@ def _analyze_airport_worker(args):
 
 def _aggregate_airport_worker(args):
     """Worker function for parallel aggregation (must be top-level for pickling)."""
-    icao, airport_info, dry_run = args
-    aggregate_airport_results(icao, airport_info, dry_run=dry_run)
+    icao, airport_info, build_quality, dry_run = args
+    aggregate_airport_results(icao, airport_info, build_quality, dry_run=dry_run)
     return icao
 
 
 def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
-                         timer: SimpleTimer, dry_run: bool = False, parallel: bool = True) -> dict:
+                          timer: SimpleTimer, dry_run: bool = False,
+                          parallel: bool = True, build_quality: bool = False) -> dict:
     """Run cross-date aggregation for all airports.
 
     Args:
@@ -727,6 +745,7 @@ def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
         timer: Timer instance for tracking
         dry_run: Whether this is a dry run
         parallel: Whether to run aggregations in parallel (default: True)
+        build_quality: Whether to build data quality metrics
 
     Returns:
         Dict mapping ICAO to output stats (num_events, data_quality, html_path)
@@ -742,7 +761,7 @@ def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
         print(f"  Running {len(icao_codes)} aggregations in parallel...")
 
         # Prepare arguments for worker processes
-        worker_args = [(icao, airport_info, dry_run) for icao in icao_codes]
+        worker_args = [(icao, airport_info, build_quality, dry_run) for icao in icao_codes]
 
         # Use all available CPUs
         num_workers = min(multiprocessing.cpu_count(), len(icao_codes))
@@ -759,89 +778,17 @@ def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
         # Sequential execution (for dry-run or single airport)
         for icao in icao_codes:
             print(f"\n  Aggregating results for {icao}...")
-            aggregate_airport_results(icao, airport_info, dry_run=dry_run)
+            aggregate_airport_results(icao, airport_info, build_quality, dry_run=dry_run)
 
     timer.end('aggregation')
 
     # Collect output statistics from generated files
     output_stats = {}
     if not dry_run:
-        import json
-        for icao in icao_codes:
-            airport_dir = BASE_DIR / icao
-            html_path = airport_dir / f"{icao}_map.html"
-            combined_csv = airport_dir / f"{icao}_combined.csv.out"
-            quality_json = airport_dir / f"{icao}_quality.json"
-
-            if html_path.exists():
-                # Count LOS events from combined CSV
-                num_events = 0
-                if combined_csv.exists():
-                    with open(combined_csv, 'r') as f:
-                        num_events = sum(1 for line in f
-                                         if not line.startswith('#'))
-
-                # Load data quality metrics
-                quality_data = None
-                if quality_json.exists():
-                    try:
-                        quality_data = json.loads(quality_json.read_text())
-                    except Exception:
-                        pass
-
-                output_stats[icao] = {
-                    'html_path': html_path,
-                    'num_events': num_events,
-                    'quality_data': quality_data
-                }
+        output_stats = generate_batch_outputs.collect_output_stats(
+            icao_codes, BASE_DIR, airport_info)
 
     return output_stats
-
-
-def print_visualization_summary(output_stats: dict):
-    """Print summary of generated HTML visualizations with stats.
-
-    Args:
-        output_stats: Dict mapping ICAO to {html_path, num_events, quality_data}
-    """
-    if not output_stats:
-        return
-
-    print("\n" + "=" * 80)
-    print("GENERATED VISUALIZATIONS")
-    print("=" * 80)
-
-    for icao in sorted(output_stats.keys()):
-        stats = output_stats[icao]
-        html_path = stats['html_path']
-        num_events = stats['num_events']
-        quality_data = stats.get('quality_data')
-
-        print(f"\n{icao}: {html_path}")
-        print(f"  LOS Events: {num_events}", end="")
-
-        if quality_data:
-            score = quality_data.get('score', 'N/A')
-            completion = (quality_data.get('completionRate') or 0) * 100
-            median_gap = quality_data.get('medianGapS') or 0
-
-            # Color-code the score
-            if score == 'green':
-                score_display = '🟢 Green (Excellent)'
-            elif score == 'yellow':
-                score_display = '🟡 Yellow (Good)'
-            elif score == 'red':
-                score_display = '🔴 Red (Poor)'
-            else:
-                score_display = score
-
-            print(f"  Data Quality: {score_display}")
-            print(f"  Completion Rate: {completion:.1f}%", end="")
-            print(f"  Median Gap: {median_gap:.1f}s")
-        else:
-            print(f"  Data Quality: No quality data available")
-
-    print("\n" + "=" * 80)
 
 
 def main():
@@ -892,6 +839,8 @@ Examples:
                         help="Skip download step, use existing tar files")
     parser.add_argument("--aggregate-only", action="store_true",
                         help="Skip all processing, only run cross-date aggregation")
+    parser.add_argument("--build-quality", action="store_true",
+                        help="Build data quality metrics during aggregation phase")
     parser.add_argument("--timing-output", type=str,
                         help="Path for timing report JSON file (default: timing_report.json)")
 
@@ -963,15 +912,18 @@ Examples:
             )
 
     # --- Cross-date aggregation ---
-    output_stats = run_aggregation_phase(icao_codes, airport_info, timer, dry_run=args.dry_run)
+    output_stats = run_aggregation_phase(icao_codes, airport_info, timer, 
+                                         dry_run=args.dry_run, 
+                                         build_quality=args.build_quality)
 
     # Summary
     timer.end('total_pipeline')
     print_completion_summary(dates, icao_codes, failed_runs)
 
-    # Print visualization summary with stats
+    # Print visualization summary and generate HTML index
     if output_stats and not args.dry_run:
-        print_visualization_summary(output_stats)
+        generate_batch_outputs.generate_batch_outputs(
+            output_stats, BASE_DIR, args.airports)
 
     # Save timing report
     if not args.dry_run:

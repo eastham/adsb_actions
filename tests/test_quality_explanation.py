@@ -18,7 +18,7 @@ def test_quality_explanations():
     """Demonstrate the various quality explanations."""
 
     # Test 1: Long event (formation flight)
-    los = Mock()
+    los = Mock(event_locations={})
     los.create_time = 100.0
     los.last_time = 250.0  # 150 seconds = 2.5 minutes
     los.min_latdist = 0.5
@@ -33,7 +33,7 @@ def test_quality_explanations():
     assert 'formation' in explanation.lower()
 
     # Test 2: Short track (insufficient data)
-    los = Mock()
+    los = Mock(event_locations={})
     los.create_time = 100.0
     los.last_time = 145.0  # 45 seconds
     los.min_latdist = 0.5
@@ -48,7 +48,7 @@ def test_quality_explanations():
     assert 'short track' in explanation.lower() or 'insufficient' in explanation.lower()
 
     # Test 3: Moderate duration
-    los = Mock()
+    los = Mock(event_locations={})
     los.create_time = 100.0
     los.last_time = 190.0  # 90 seconds
     los.min_latdist = 0.5
@@ -63,7 +63,7 @@ def test_quality_explanations():
     assert 'moderate duration' in explanation.lower()
 
     # Test 4: Helicopter
-    los = Mock()
+    los = Mock(event_locations={})
     los.create_time = 100.0
     los.last_time = 130.0  # 30 seconds
     los.min_latdist = 0.5
@@ -78,7 +78,7 @@ def test_quality_explanations():
     assert 'helicopter' in explanation.lower()
 
     # Test 5: High quality
-    los = Mock()
+    los = Mock(event_locations={})
     los.create_time = 100.0
     los.last_time = 130.0  # 30 seconds (<= 40)
     los.min_latdist = 0.5
