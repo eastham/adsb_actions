@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADS-B Loss of Separation Analysis</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    background: #f8fafc; color: #1e293b; line-height: 1.6;
+  }
+  .navbar {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; gap: 24px;
+    padding: 12px 24px; background: #0f172a;
+    border-bottom: 1px solid #1e293b;
+  }
+  .navbar-brand {
+    font-size: 1.1rem; font-weight: 700; color: #fff;
+    text-decoration: none; margin-right: auto;
+  }
+  .navbar a {
+    color: #cbd5e1; text-decoration: none; font-size: 0.95rem;
+    font-weight: 500;
+  }
+  .navbar a:hover { color: #fff; }
+  .container { max-width: 960px; margin: 0 auto; padding: 40px 24px; }
+  h1 {
+    font-size: 2rem; font-weight: 700; color: #0f172a;
+    margin-bottom: 4px;
+  }
+  .tagline {
+    font-size: 1.1rem; color: #64748b; margin-bottom: 20px;
+  }
+  .description {
+    color: #475569; margin-bottom: 32px;
+  }
+  .description p {
+    margin: 16px 0;
+  }
+  .description ul {
+    margin: 8px 0; padding-left: 24px;
+  }
+  .stats-bar {
+    display: flex; gap: 32px; justify-content: center;
+    margin-bottom: 32px; padding: 16px 24px; background: #fff;
+    border: 1px solid #e2e8f0; border-radius: 10px;
+  }
+  .stat-item { text-align: center; }
+  .stat-value {
+    font-size: 1.6rem; font-weight: 700; color: #0f172a;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-label { font-size: 0.8rem; color: #94a3b8; text-transform: uppercase;
+                letter-spacing: 0.05em; }
+  .section { margin-bottom: 12px; }
+  .section-toggle {
+    width: 100%; display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px; background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 10px; cursor: pointer; font-size: 1rem;
+    transition: background 0.15s, box-shadow 0.15s;
+    text-align: left;
+  }
+  .section-toggle:hover { background: #f1f5f9;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .toggle-icon {
+    font-size: 0.75rem; color: #94a3b8; transition: transform 0.2s;
+    display: inline-block; width: 16px;
+  }
+  .toggle-icon.open { transform: rotate(90deg); }
+  .section-title { font-weight: 600; color: #1e293b; flex: 1; }
+  .section-count {
+    font-size: 0.85rem; color: #94a3b8; white-space: nowrap;
+  }
+  .section-content {
+    margin-top: 4px; padding: 0 4px;
+    animation: slideDown 0.2s ease-out;
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  table {
+    width: 100%; border-collapse: collapse; background: #fff;
+    border: 1px solid #e2e8f0; border-radius: 8px;
+    overflow: hidden;
+  }
+  thead th {
+    padding: 10px 16px; font-size: 0.8rem; font-weight: 600;
+    color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;
+    background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+    white-space: nowrap;
+  }
+  /* Column widths — keep Name from dominating */
+  th:nth-child(1) { width: 10%; }
+  th:nth-child(2) { width: 45%; }
+  th:nth-child(3) { width: 15%; }
+  th:nth-child(4) { width: 15%; }
+  th:nth-child(5) { width: 15%; }
+  tbody td {
+    padding: 10px 16px; border-bottom: 1px solid #f1f5f9;
+    font-size: 0.95rem;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #f8fafc; }
+  tbody tr.no-data:hover { background: #fff; }
+  a { color: #2563eb; text-decoration: none; font-weight: 500; }
+  a:hover { text-decoration: underline; }
+  .footer {
+    margin-top: 48px; padding-top: 20px; border-top: 1px solid #e2e8f0;
+    font-size: 0.85rem; color: #94a3b8;
+  }
+  /* Search box */
+  .search-bar {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 24px; padding: 12px 20px;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+  }
+  .search-bar label {
+    font-size: 0.9rem; font-weight: 600; color: #475569;
+    white-space: nowrap;
+  }
+  .search-bar input {
+    width: 120px; padding: 6px 12px; font-size: 1rem;
+    border: 1px solid #cbd5e1; border-radius: 6px;
+    text-transform: uppercase;
+  }
+  .search-bar input:focus { outline: none; border-color: #2563eb; }
+  .search-bar button {
+    padding: 6px 16px; font-size: 0.9rem; font-weight: 600;
+    color: #fff; background: #2563eb; border: none; border-radius: 6px;
+    cursor: pointer;
+  }
+  .search-bar button:hover { background: #1d4ed8; }
+  /* Sortable table headers */
+  table.sortable thead th {
+    cursor: pointer; user-select: none;
+  }
+  table.sortable thead th:after {
+    content: " \25B4\25BE"; font-size: 2em; color: #c0c8d0;
+    margin-left: 4px;
+  }
+  table.sortable thead th[aria-sort="ascending"]:after {
+    content: " \25B4"; color: #2563eb;
+  }
+  table.sortable thead th[aria-sort="descending"]:after {
+    content: " \25BE"; color: #2563eb;
+  }
+  /* Tooltip for th[title] */
+  thead th[title] {
+    text-decoration: underline dotted #94a3b8;
+    text-underline-offset: 3px;
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/gh/tofsjonas/sortable@3.2.3/sortable.min.js"></script>
+</head>
+<body>
+<nav class="navbar">
+  <a class="navbar-brand" href="index.html">hotspots.aero</a>
+  <a href="methodology.html">Methodology</a>
+  <a href="faq.html">FAQ</a>
+  <a href="contact.html">Contact</a>
+</nav>
+<div class="container">
+  <h1>hotspots.aero: Crowdsourced ADS-B Hazard Analysis for Untowered Airports</h1>
+  <!--<p class="tagline">Two airplanes near each other = bad!  Sometimes!</p>-->
+
+
+
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-value"><!--BEGIN:airports_with_data-->127<!--END:airports_with_data--></div>
+      <div class="stat-label">Airports Analyzed</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value"><!--BEGIN:total_events-->1,842<!--END:total_events--></div>
+      <div class="stat-label">Loss-of-Separation Events</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">7.2 Billion</div>
+      <div class="stat-label">Crowdsourced data points analyzed</div>
+    </div>
+  </div>
+
+
+  <div class="description">
+    <p>Thanks to the fine folks at <a href="https://adsb.lol">adsb.lol</a>, high-resolution historical ADS-B data is
+    now available for research and analysis.  Here I have analyzed US data for
+    June-August 2025 to find places where airplanes tend to come close to each other.
+    My hope is that this can increase pilot awareness, and give airport managers more data when designing their recommended procedures.</p>
+
+    <p>Of course, not every event like this represents a safety issue.  Common benign scenarios:</p>
+    <p align="center"><b>Formation flights -- Parallel runways -- Helicopters operating opposite a fixed-wing pattern -- Noisy ADS-B data</b></p>
+
+    <p><a href="methodology.html">More about my methodology here</a></p>
+  </div>
+
+
+  <div class="search-bar">
+    <label for="airport-search">Go to Airport:</label>
+    <input type="text" id="airport-search" maxlength="4"
+           placeholder="e.g. WVI" autocomplete="off">
+    <button onclick="searchAirport()">Go</button>
+  </div>
+<!--BEGIN:section_blocks-->
+    <div class="section">
+      <button class="section-toggle" onclick="toggleSection('section-0')">
+        <span class="toggle-icon" id="icon-section-0">&#9654;</span>
+        <span class="section-title">Sample Region</span>
+        <span class="section-count">2 of 3 airports</span>
+      </button>
+      <div class="section-content" id="section-0" style="display:none">
+        <table class="sortable">
+          <thead>
+            <tr>
+              <th>Airport</th>
+              <th>Name</th>
+              <th>State</th>
+              <th style="text-align:right" title="Aircraft within .3nm and 400ft vertically, within 5nm of the airport, &#39;medium&#39; event quality or better">LOS Events</th>
+              <th style="text-align:center">Data Quality</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><a href="KWVI/KWVI_map.html" target="_blank">KWVI</a></td><td>Watsonville Muni</td><td>CA</td><td style="text-align:right;font-variant-numeric:tabular-nums">24</td><td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:0.85em;font-weight:600;color:#16a34a;background:#d1fae5">Good</span></td></tr>
+            <tr><td><a href="KPAO/KPAO_map.html" target="_blank">KPAO</a></td><td>Palo Alto</td><td>CA</td><td style="text-align:right;font-variant-numeric:tabular-nums">12</td><td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:0.85em;font-weight:600;color:#ca8a04;background:#fef9c3">Fair</span></td></tr>
+            <tr class="no-data"><td>KSQL</td><td colspan="4" style="color:#9ca3af;font-style:italic">No data available</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+<!--END:section_blocks-->
+
+  <div class="footer">
+    A service of forty-two ventures LLC
+  </div>
+</div>
+<script>
+function toggleSection(id) {
+  var el = document.getElementById(id);
+  var icon = document.getElementById('icon-' + id);
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    icon.classList.add('open');
+  } else {
+    el.style.display = 'none';
+    icon.classList.remove('open');
+  }
+}
+
+function searchAirport() {
+  var raw = document.getElementById('airport-search').value.trim().toUpperCase();
+  if (!raw) return;
+  // Normalize to ICAO: prepend K for 3-letter US identifiers
+  var icao = raw;
+  if (/^[A-Z]{3}$/.test(raw) || /^[A-Z][0-9][A-Z0-9]$/.test(raw)) {
+    icao = 'K' + raw;
+  }
+  var url = icao + '/' + icao + '_map.html';
+  fetch(url, {method: 'HEAD'}).then(function(resp) {
+    if (resp.ok) {
+      window.open(url, '_blank');
+    } else {
+      window.location.href = 'unavailable.html?id=' + encodeURIComponent(icao);
+    }
+  }).catch(function() {
+    window.location.href = 'unavailable.html?id=' + encodeURIComponent(icao);
+  });
+}
+
+// Allow Enter key in search box
+document.getElementById('airport-search').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') searchAirport();
+});
+</script>
+</body>
+</html>

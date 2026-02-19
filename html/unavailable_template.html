@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Airport Not Available</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    background: #f8fafc; color: #1e293b; line-height: 1.6;
+  }
+  .container {
+    max-width: 560px; margin: 80px auto; padding: 40px 32px;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+    text-align: center;
+  }
+  h1 { font-size: 1.5rem; color: #0f172a; margin-bottom: 8px; }
+  .icao { font-size: 2rem; font-weight: 700; color: #2563eb; margin: 12px 0; }
+  p { color: #475569; margin-bottom: 20px; }
+  .btn {
+    display: inline-block; padding: 10px 28px; font-size: 1rem;
+    font-weight: 600; color: #fff; background: #2563eb; border: none;
+    border-radius: 8px; cursor: pointer; text-decoration: none;
+  }
+  .btn:hover { background: #1d4ed8; }
+  .btn-secondary {
+    background: #f1f5f9; color: #475569; margin-left: 12px;
+  }
+  .btn-secondary:hover { background: #e2e8f0; }
+  .msg {
+    margin-top: 16px; padding: 10px 16px; border-radius: 8px;
+    font-size: 0.9rem; display: none;
+  }
+  .msg.success { display: block; background: #d1fae5; color: #059669; }
+  .msg.error { display: block; background: #fee2e2; color: #dc2626; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Airport Not Available</h1>
+  <div class="icao" id="airport-id"></div>
+  <p>Analysis data for this airport is not currently available.</p>
+
+  <!-- Netlify detects this form at deploy time (data-netlify="true") -->
+  <form name="airport-request" method="POST" data-netlify="true"
+        style="display:inline" id="request-form">
+    <input type="hidden" name="airport" id="airport-field">
+    <button type="submit" class="btn" id="request-btn">
+      Request Analysis
+    </button>
+  </form>
+  <a class="btn btn-secondary" href="index.html">Back</a>
+  <div class="msg" id="msg"></div>
+</div>
+<script>
+var params = new URLSearchParams(window.location.search);
+var airportId = (params.get('id') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+document.getElementById('airport-id').textContent = airportId || '?';
+document.getElementById('airport-field').value = airportId;
+document.title = (airportId || 'Unknown') + ' - Not Available';
+
+document.getElementById('request-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  if (!airportId) return;
+  var btn = document.getElementById('request-btn');
+  var msg = document.getElementById('msg');
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+
+  var body = 'form-name=airport-request&airport=' + encodeURIComponent(airportId);
+  fetch('/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: body
+  }).then(function(resp) {
+    if (resp.ok) {
+      msg.className = 'msg success';
+      msg.textContent = 'Analysis requested for ' + airportId + '.';
+      btn.textContent = 'Requested';
+    } else {
+      throw new Error('Server returned ' + resp.status);
+    }
+  }).catch(function(err) {
+    msg.className = 'msg error';
+    msg.textContent = 'Could not submit request: ' + err.message;
+    btn.disabled = false;
+    btn.textContent = 'Request Analysis';
+  });
+});
+</script>
+</body>
+</html>
