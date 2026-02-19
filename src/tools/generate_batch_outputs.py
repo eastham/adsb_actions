@@ -9,6 +9,7 @@ import json
 import math
 import os
 import re
+import shutil
 from html import escape
 from pathlib import Path
 
@@ -17,6 +18,18 @@ from batch_helpers import faa_to_icao
 
 NM_PER_DEG_LAT = 60.0
 NEAR_AIRPORT_RADIUS_NM = 5
+
+# html/ directory at project root (two levels up from src/tools/)
+_HTML_DIR = Path(__file__).resolve().parent.parent.parent / "html"
+
+
+def _render_template(template_name, replacements):
+    """Load an HTML template and replace <!--BEGIN:key-->...<!--END:key--> markers."""
+    template_text = (_HTML_DIR / template_name).read_text()
+    for key, value in replacements.items():
+        pattern = f"<!--BEGIN:{key}-->.*?<!--END:{key}-->"
+        template_text = re.sub(pattern, str(value), template_text, flags=re.DOTALL)
+    return template_text
 
 
 def _fast_distance_nm(lat1, lon1, lat2, lon2):
@@ -319,215 +332,11 @@ def generate_index_html(sections, output_stats, output_path):
     total_events = sum(s['num_events'] for s in output_stats.values())
     airports_with_data = len(output_stats)
 
-    html = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ADS-B Loss of Separation Analysis</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-                 "Helvetica Neue", Arial, sans-serif;
-    background: #f8fafc; color: #1e293b; line-height: 1.6;
-  }
-  .container { max-width: 960px; margin: 0 auto; padding: 40px 24px; }
-  h1 {
-    font-size: 2rem; font-weight: 700; color: #0f172a;
-    margin-bottom: 4px;
-  }
-  .tagline {
-    font-size: 1.1rem; color: #64748b; margin-bottom: 20px;
-  }
-  .description {
-    color: #475569; margin-bottom: 32px; max-width: 720px;
-  }
-  .stats-bar {
-    display: flex; gap: 32px; margin-bottom: 32px;
-    padding: 16px 24px; background: #fff;
-    border: 1px solid #e2e8f0; border-radius: 10px;
-  }
-  .stat-item { text-align: center; }
-  .stat-value {
-    font-size: 1.6rem; font-weight: 700; color: #0f172a;
-    font-variant-numeric: tabular-nums;
-  }
-  .stat-label { font-size: 0.8rem; color: #94a3b8; text-transform: uppercase;
-                letter-spacing: 0.05em; }
-  .section { margin-bottom: 12px; }
-  .section-toggle {
-    width: 100%; display: flex; align-items: center; gap: 12px;
-    padding: 14px 20px; background: #fff; border: 1px solid #e2e8f0;
-    border-radius: 10px; cursor: pointer; font-size: 1rem;
-    transition: background 0.15s, box-shadow 0.15s;
-    text-align: left;
-  }
-  .section-toggle:hover { background: #f1f5f9;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-  .toggle-icon {
-    font-size: 0.75rem; color: #94a3b8; transition: transform 0.2s;
-    display: inline-block; width: 16px;
-  }
-  .toggle-icon.open { transform: rotate(90deg); }
-  .section-title { font-weight: 600; color: #1e293b; flex: 1; }
-  .section-count {
-    font-size: 0.85rem; color: #94a3b8; white-space: nowrap;
-  }
-  .section-content {
-    margin-top: 4px; padding: 0 4px;
-    animation: slideDown 0.2s ease-out;
-  }
-  @keyframes slideDown {
-    from { opacity: 0; transform: translateY(-4px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  table {
-    width: 100%; border-collapse: collapse; background: #fff;
-    border: 1px solid #e2e8f0; border-radius: 8px;
-    overflow: hidden;
-  }
-  thead th {
-    padding: 10px 16px; font-size: 0.8rem; font-weight: 600;
-    color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;
-    background: #f8fafc; border-bottom: 1px solid #e2e8f0;
-  }
-  tbody td {
-    padding: 10px 16px; border-bottom: 1px solid #f1f5f9;
-    font-size: 0.95rem;
-  }
-  tbody tr:last-child td { border-bottom: none; }
-  tbody tr:hover { background: #f8fafc; }
-  tbody tr.no-data:hover { background: #fff; }
-  a { color: #2563eb; text-decoration: none; font-weight: 500; }
-  a:hover { text-decoration: underline; }
-  .footer {
-    margin-top: 48px; padding-top: 20px; border-top: 1px solid #e2e8f0;
-    font-size: 0.85rem; color: #94a3b8;
-  }
-  /* Search box */
-  .search-bar {
-    display: flex; align-items: center; gap: 12px;
-    margin-bottom: 24px; padding: 12px 20px;
-    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
-  }
-  .search-bar label {
-    font-size: 0.9rem; font-weight: 600; color: #475569;
-    white-space: nowrap;
-  }
-  .search-bar input {
-    width: 120px; padding: 6px 12px; font-size: 1rem;
-    border: 1px solid #cbd5e1; border-radius: 6px;
-    text-transform: uppercase;
-  }
-  .search-bar input:focus { outline: none; border-color: #2563eb; }
-  .search-bar button {
-    padding: 6px 16px; font-size: 0.9rem; font-weight: 600;
-    color: #fff; background: #2563eb; border: none; border-radius: 6px;
-    cursor: pointer;
-  }
-  .search-bar button:hover { background: #1d4ed8; }
-  /* Sortable table headers */
-  table.sortable thead th {
-    cursor: pointer; user-select: none;
-  }
-  table.sortable thead th:after {
-    content: " \\25B4\\25BE"; font-size: 0.6em; color: #c0c8d0;
-    margin-left: 4px;
-  }
-  table.sortable thead th[aria-sort="ascending"]:after {
-    content: " \\25B4"; color: #2563eb;
-  }
-  table.sortable thead th[aria-sort="descending"]:after {
-    content: " \\25BE"; color: #2563eb;
-  }
-  /* Tooltip for th[title] */
-  thead th[title] {
-    text-decoration: underline dotted #94a3b8;
-    text-underline-offset: 3px;
-  }
-</style>
-<script src="https://cdn.jsdelivr.net/gh/tofsjonas/sortable@3.2.3/sortable.min.js"></script>
-</head>
-<body>
-<div class="container">
-  <h1>ADS-B Loss of Separation Analysis</h1>
-  <p class="tagline">Automated detection of aircraft proximity events at US airports</p>
-  <p class="description">
-    This dashboard summarizes Loss of Separation (LOS) events detected from
-    ADS-B surveillance data. Each airport link below opens a detailed map
-    showing individual events, traffic patterns, and data quality metrics.
-  </p>
-
-  <div class="stats-bar">
-    <div class="stat-item">
-      <div class="stat-value">""" + str(airports_with_data) + """</div>
-      <div class="stat-label">Airports Analyzed</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-value">""" + str(total_events) + """</div>
-      <div class="stat-label">LOS Events</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-value">7.2 Billion</div>
-      <div class="stat-label">Crowdsourced data points analyzed</div>
-    </div>
-  </div>
-
-  <div class="search-bar">
-    <label for="airport-search">Airport Identifier:</label>
-    <input type="text" id="airport-search" maxlength="4"
-           placeholder="e.g. WVI" autocomplete="off">
-    <button onclick="searchAirport()">Go</button>
-  </div>
-
-""" + "\n".join(section_blocks) + """
-
-  <div class="footer">
-    Generated by adsb-actions batch pipeline
-  </div>
-</div>
-<script>
-function toggleSection(id) {
-  var el = document.getElementById(id);
-  var icon = document.getElementById('icon-' + id);
-  if (el.style.display === 'none') {
-    el.style.display = 'block';
-    icon.classList.add('open');
-  } else {
-    el.style.display = 'none';
-    icon.classList.remove('open');
-  }
-}
-
-function searchAirport() {
-  var raw = document.getElementById('airport-search').value.trim().toUpperCase();
-  if (!raw) return;
-  // Normalize to ICAO: prepend K for 3-letter US identifiers
-  var icao = raw;
-  if (/^[A-Z]{3}$/.test(raw) || /^[A-Z][0-9][A-Z0-9]$/.test(raw)) {
-    icao = 'K' + raw;
-  }
-  var url = icao + '/' + icao + '_map.html';
-  fetch(url, {method: 'HEAD'}).then(function(resp) {
-    if (resp.ok) {
-      window.open(url, '_blank');
-    } else {
-      window.location.href = 'unavailable.html?id=' + encodeURIComponent(icao);
-    }
-  }).catch(function() {
-    window.location.href = 'unavailable.html?id=' + encodeURIComponent(icao);
-  });
-}
-
-// Allow Enter key in search box
-document.getElementById('airport-search').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') searchAirport();
-});
-</script>
-</body>
-</html>
-"""
+    html = _render_template("index_template.html", {
+        "airports_with_data": airports_with_data,
+        "total_events": total_events,
+        "section_blocks": "\n".join(section_blocks),
+    })
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -546,102 +355,7 @@ def _generate_unavailable_html(output_path):
     wires up serverless form handling automatically.  Submissions appear
     in the Netlify dashboard under Forms > airport-request.
     """
-    html = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Airport Not Available</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-                 "Helvetica Neue", Arial, sans-serif;
-    background: #f8fafc; color: #1e293b; line-height: 1.6;
-  }
-  .container {
-    max-width: 560px; margin: 80px auto; padding: 40px 32px;
-    background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
-    text-align: center;
-  }
-  h1 { font-size: 1.5rem; color: #0f172a; margin-bottom: 8px; }
-  .icao { font-size: 2rem; font-weight: 700; color: #2563eb; margin: 12px 0; }
-  p { color: #475569; margin-bottom: 20px; }
-  .btn {
-    display: inline-block; padding: 10px 28px; font-size: 1rem;
-    font-weight: 600; color: #fff; background: #2563eb; border: none;
-    border-radius: 8px; cursor: pointer; text-decoration: none;
-  }
-  .btn:hover { background: #1d4ed8; }
-  .btn-secondary {
-    background: #f1f5f9; color: #475569; margin-left: 12px;
-  }
-  .btn-secondary:hover { background: #e2e8f0; }
-  .msg {
-    margin-top: 16px; padding: 10px 16px; border-radius: 8px;
-    font-size: 0.9rem; display: none;
-  }
-  .msg.success { display: block; background: #d1fae5; color: #059669; }
-  .msg.error { display: block; background: #fee2e2; color: #dc2626; }
-</style>
-</head>
-<body>
-<div class="container">
-  <h1>Airport Not Available</h1>
-  <div class="icao" id="airport-id"></div>
-  <p>Analysis data for this airport is not currently available.</p>
-
-  <!-- Netlify detects this form at deploy time (data-netlify="true") -->
-  <form name="airport-request" method="POST" data-netlify="true"
-        style="display:inline" id="request-form">
-    <input type="hidden" name="airport" id="airport-field">
-    <button type="submit" class="btn" id="request-btn">
-      Request Analysis
-    </button>
-  </form>
-  <a class="btn btn-secondary" href="index.html">Back</a>
-  <div class="msg" id="msg"></div>
-</div>
-<script>
-var params = new URLSearchParams(window.location.search);
-var airportId = (params.get('id') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-document.getElementById('airport-id').textContent = airportId || '?';
-document.getElementById('airport-field').value = airportId;
-document.title = (airportId || 'Unknown') + ' - Not Available';
-
-document.getElementById('request-form').addEventListener('submit', function(e) {
-  e.preventDefault();
-  if (!airportId) return;
-  var btn = document.getElementById('request-btn');
-  var msg = document.getElementById('msg');
-  btn.disabled = true;
-  btn.textContent = 'Submitting...';
-
-  var body = 'form-name=airport-request&airport=' + encodeURIComponent(airportId);
-  fetch('/', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-    body: body
-  }).then(function(resp) {
-    if (resp.ok) {
-      msg.className = 'msg success';
-      msg.textContent = 'Analysis requested for ' + airportId + '.';
-      btn.textContent = 'Requested';
-    } else {
-      throw new Error('Server returned ' + resp.status);
-    }
-  }).catch(function(err) {
-    msg.className = 'msg error';
-    msg.textContent = 'Could not submit request: ' + err.message;
-    btn.disabled = false;
-    btn.textContent = 'Request Analysis';
-  });
-});
-</script>
-</body>
-</html>
-"""
-    Path(output_path).write_text(html)
+    shutil.copy2(_HTML_DIR / "unavailable_template.html", output_path)
 
 
 def generate_batch_outputs(output_stats, base_dir, airport_list_file):

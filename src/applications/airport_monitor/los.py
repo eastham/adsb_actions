@@ -65,7 +65,7 @@ class LOS:
         self.id = None
         # Populated at finalization: {flight_id: [Location, ...]} for both flights
         # contains real locations only (not resampled)
-        self.event_locations = {}
+        self.location_history = {}
 
     def update(self, latdist, altdist, last_time, flight1, flight2,
                update_loc_at_closest_approach=True):
@@ -99,7 +99,7 @@ class LOS:
         for loc in (self.first_loc_1, self.first_loc_2):
             fid = loc.flight
             if fid in locs_by_fid:
-                self.event_locations[fid] = locs_by_fid[fid]
+                self.location_history[fid] = locs_by_fid[fid]
             else:
                 logger.warning("populate_event_locations: no locations for %s", fid)
 
@@ -130,7 +130,7 @@ def process_los(flight1, flight2):
     # Check if either flight's data is stale relative to the other.
     # If timestamps differ significantly, one aircraft stopped reporting
     # and we shouldn't trust the distance calculation.
-    MIN_FRESH = 10  # seconds - must match flights.py
+    MIN_FRESH = 5 # seconds - must match flights.py
     now1 = flight1.lastloc.now
     now2 = flight2.lastloc.now
     if abs(now1 - now2) > MIN_FRESH:
@@ -168,6 +168,39 @@ def process_los(flight1, flight2):
 def _count_real_reports(locations, start, end):
     """Count real (non-resampled) ADS-B reports in a time window."""
     return sum(1 for loc in locations if start <= loc.now <= end)
+
+def _count_sane_reports(locations, start, end, cpa_loc, max_dist_nm=0.5):
+    """Count real reports in a time window that are also near the CPA location.
+    Filters out reports that are in the time window but spatially far from
+    CPA, which indicates interpolated/stale position data."""
+    # return sum(1 for loc in locations
+    #            if start <= loc.now <= end and (loc - cpa_loc) <= max_dist_nm)
+    count = 0
+    for loc in locations:
+        if start <= loc.now <= end:
+            dist = loc - cpa_loc
+            if dist <= max_dist_nm:
+                count += 1
+            else:
+                logger.debug("sane_reports: skipping %s dist=%.2fnm", loc.now, dist)
+    return count
+
+TELEPORT_SPEED_KTS = 300  # max plausible speed for GA traffic
+
+def _check_teleportation(locations):
+    """Check for impossible speed jumps between consecutive reports.
+    Returns (max_speed_kts, from_time, to_time) or None if no teleportation."""
+    prev = None
+    for loc in locations:
+        if prev is not None:
+            dt = loc.now - prev.now
+            if dt > 5:  # smaller time windows can show crazy speeds under normal conditions
+                dist_nm = loc - prev
+                speed_kts = dist_nm / (dt / 3600)
+                if speed_kts > TELEPORT_SPEED_KTS:
+                    return (speed_kts, prev.now, loc.now)
+        prev = loc
+    return None
 
 CPA_WINDOW_S = 10  # seconds around CPA to check for real data
 SPARSE_DATA_THRESHOLD = 0.75  # require 75% real data during LOS
@@ -229,23 +262,25 @@ def calculate_event_quality(los, flight1, flight2):
             reasons.append(f"very close CPA ({cpa_lateral_nm:.2f}nm, {cpa_vertical_ft:.0f}ft)")
 
     # Location-level quality checks (only when event_locations populated, i.e. batch mode)
-    event_locs = getattr(los, 'event_locations', {})
+    loc_history = getattr(los, 'location_history', {})
     cpa_time = getattr(los, 'cpa_time', None)
 
-    if event_locs and cpa_time is not None:
-        # Heuristic B: no real data near CPA → low quality
+    if loc_history and cpa_time is not None:
+        # Heuristic A: no sane data near CPA → low quality
         # Check both flights for real reports within ±CPA_WINDOW_S of CPA
-        for fid, locs in event_locs.items():
-            near_cpa = _count_real_reports(locs, cpa_time - CPA_WINDOW_S,
-                                           cpa_time + CPA_WINDOW_S)
+        # that are also spatially near the CPA location
+        cpa_loc = Location.meanloc(los.first_loc_1, los.first_loc_2)
+        for fid, locs in loc_history.items():
+            near_cpa = _count_sane_reports(locs, cpa_time - CPA_WINDOW_S,
+                                           cpa_time + CPA_WINDOW_S, cpa_loc)
             if near_cpa == 0:
                 quality = 'low'
-                reasons.append(f"no real data near CPA ({fid}: 0 real in ±{CPA_WINDOW_S}s)")
+                reasons.append(f"no sane data near CPA ({fid}: 0 real in ±{CPA_WINDOW_S}s within 0.5nm)")
                 break
 
-        # Heuristic A: sparse data during LOS → cap at medium
+        # Heuristic B: sparse data during LOS → cap at medium
         if quality in ('high', 'vhigh') and event_duration > 0:
-            for fid, locs in event_locs.items():
+            for fid, locs in loc_history.items():
                 real_count = _count_real_reports(locs, los.create_time, los.last_time)
                 # Expected ~1 report/sec with typical ADS-B; compare to interval
                 real_frac = real_count / event_duration
@@ -254,6 +289,15 @@ def calculate_event_quality(los, flight1, flight2):
                     reasons.append(
                         f"sparse data during LOS ({fid}: {real_count} real of {event_duration:.0f}s)")
                     break
+
+        # Heuristic C: teleportation in track → low quality
+        for fid, locs in loc_history.items():
+            result = _check_teleportation(locs)
+            if result:
+                speed_kts, t0, t1 = result
+                quality = 'low'
+                reasons.append(f"teleportation ({fid}: {speed_kts:.0f}kts between t={t0:.0f}-{t1:.0f})")
+                break
 
     # Add secondary factors as additional context
     if quality not in ['low', 'vhigh'] and min_track_duration < 120:

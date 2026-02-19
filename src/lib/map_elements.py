@@ -336,7 +336,7 @@ def build_busyness_html(busyness_data):
         "padding: 10px; font-family: Arial, sans-serif; font-size: 12px; "
         'z-index: 9999; box-shadow: 2px 2px 6px rgba(0,0,0,0.3);">\n'
         '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">'
-        '<span style="font-weight: bold; font-size: 13px;">Typical Traffic &mdash; ' + icao + '</span>'
+        '<span style="font-weight: bold; font-size: 13px;">Typical Traffic &mdash; ' + icao + ' (Jun-Aug 2025, <4000 ft AGL)</span>'
         '<button id="busy-toggle" style="border: none; background: none; cursor: pointer; '
         'font-size: 16px; padding: 0 4px;" title="Minimize">&#x2212;</button>'
         '</div>\n'
@@ -481,7 +481,7 @@ def build_help_html(airport_name):
         "padding: 10px; font-family: Arial, sans-serif; font-size: 12px; "
         'z-index: 9999; box-shadow: 2px 2px 6px rgba(0,0,0,0.3);">\n'
         + title_string +
-        '<div style="margin-bottom: 4px;">Colored dots = two aircraft within .3nm and 400 ft. Click dot for more info. </div>\n'
+        '<div style="margin-bottom: 4px;">Colored dots = two aircraft within .3nm and 400 ft.  Click dot for more info.<br/> Events below 400 ft or above 4000 ft AGL are not shown.   </div>\n'
         '<div style="border-top: 1px solid #ccc; padding-top: 8px; margin-top: 8px;">'
         '<div style="font-size: 11px; margin-bottom: 4px;">'
         'Data courtesy <a href="http://adsb.lol">adsb.lol</a>, via the Open Database License<br/>\n'
