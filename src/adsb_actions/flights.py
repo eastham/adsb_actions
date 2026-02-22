@@ -119,7 +119,7 @@ class Flights:
         """Returns maximum of one nearby flight within the given separation, 
         None if not found"""
 
-        MIN_FRESH = 10 # seconds.  Older locations not evaluated
+        MIN_FRESH = 5 # seconds.  Older locations not evaluated
 
         for flight1 in self.flight_dict.values():
             if flight1 is flight2:

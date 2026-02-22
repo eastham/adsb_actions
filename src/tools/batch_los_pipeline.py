@@ -433,6 +433,12 @@ def run_airport_analysis(icao: str, date_compact: str,
                 event_count = sum(1 for _ in f)
             print(f"  ✅ {event_count} LOS event(s) detected for {icao} on {date_compact}")
 
+    try:
+        #analysis_out.unlink()
+        pass
+    except FileNotFoundError:
+        pass
+
     return returncode
 
 
@@ -470,7 +476,9 @@ def combine_and_downsample_traffic(icao: str, traffic_files: list[Path], output:
 
 def aggregate_airport_results(icao: str, airport_info: dict,
                               build_quality: bool,
-                              dry_run: bool = False):
+                              dry_run: bool = False,
+                              traffic_tiles: str = None,
+                              exclude_csv: str = None):
     """Cross-date aggregation: combine CSV outputs and generate visualization."""
     lat, lon, field_elev = airport_info[icao]
     airport_dir = BASE_DIR / icao
@@ -498,7 +506,10 @@ def aggregate_airport_results(icao: str, airport_info: dict,
         # Concatenate all CSV files
         for csv_file in csv_files:
             with open(csv_file, 'r') as inf:
-                outf.write(inf.read())
+                for line in inf:
+                    if exclude_csv and any(s in line for s in exclude_csv.split('|')):
+                        continue
+                    outf.write(line)
     
     busyness_json = None
     quality_json = None
@@ -514,53 +525,66 @@ def aggregate_airport_results(icao: str, airport_info: dict,
             combined_traffic = None
 
         # Read all shards once for both busyness and data-quality analysis
-        # XXX change this to load only downsampled traffic files
+        # Note: this is optional, each consumer can read shards on its own if memory is a concern.
         print(f"  Preloading shard data for {icao} for busyness and data quality analysis...")
         shard_dir = SHARD_DIR / icao
+        preloaded = {}
         try:
             from busyness import build_busyness_data, read_all_shards
-            preloaded = read_all_shards(shard_dir, field_elev=field_elev) # XXX date range?
+            # preloaded = read_all_shards(shard_dir, field_elev=field_elev) # XXX date range?
         except Exception as e:
             print(f"  Warning: shard reading failed: {e}")
             preloaded = {}
 
         # Build busyness data (traffic counts + METAR weather categories)
-        print(f"  Building busyness data for {icao}...")
-        try:
-            busyness_data = build_busyness_data(icao, shard_dir,
-                                                metar_cache_dir=airport_dir,
-                                                field_elev=field_elev,
-                                                preloaded_shards=preloaded or None)
-            if busyness_data:
-                import json
-                busyness_json = airport_dir / f"{icao}_busyness.json"
-                busyness_json.write_text(json.dumps(busyness_data))
-                print(f"  {icao} Busyness data: {busyness_data['numDates']} dates, "
-                    f"max={busyness_data['globalMax']} aircraft/hr")
-        except Exception as e:
-            print(f"  Warning: busyness data generation failed: {e}")
+        busyness_json = airport_dir / f"{icao}_busyness.json"
+        if busyness_json.exists():
+            print(f"  ✅ Busyness data already exists for {icao}, skipping.")
+        else:
+            print(f"  Building busyness data for {icao}...")
+            try:
+                busyness_data = build_busyness_data(icao, shard_dir,
+                                                    metar_cache_dir=airport_dir,
+                                                    field_elev=field_elev,
+                                                    preloaded_shards=preloaded or None)
+                if busyness_data:
+                    import json
+                    busyness_json.write_text(json.dumps(busyness_data))
+                    print(f"  {icao} Busyness data: {busyness_data['numDates']} dates, "
+                        f"max={busyness_data['globalMax']} aircraft/hr")
+                else:
+                    busyness_json = None
+            except Exception as e:
+                print(f"  Warning: busyness data generation failed: {e}")
+                busyness_json = None
 
         # Build data quality assessment
-        print(f"  Assessing data quality for {icao}...")
-        try:
-            from data_quality import build_data_quality
-            quality_data = build_data_quality(icao, shard_dir,
-                                            field_elev=field_elev,
-                                            airport_lat=lat,
-                                            airport_lon=lon,
-                                            preloaded_shards=preloaded or None)
-            if quality_data:
-                import json
-                quality_json = airport_dir / f"{icao}_quality.json"
-                quality_json.write_text(json.dumps(quality_data))
-                lost = quality_data['lostRate']
-                lost_str = f"{lost:.0%}" if lost is not None else "N/A"
-                gap = quality_data['medianGapS']
-                gap_str = f"{gap:.1f}s" if gap is not None else "N/A"
-                print(f"  Data quality: {quality_data['score']} "
-                    f"(lost={lost_str}, gap={gap_str})")
-        except Exception as e:
-            print(f"  Warning: data quality assessment failed: {e}")
+        quality_json = airport_dir / f"{icao}_quality.json"
+        if quality_json.exists():
+            print(f"  ✅ Data quality already exists for {icao}, skipping.")
+        else:
+            print(f"  Assessing data quality for {icao}...")
+            try:
+                from data_quality import build_data_quality
+                quality_data = build_data_quality(icao, shard_dir,
+                                                field_elev=field_elev,
+                                                airport_lat=lat,
+                                                airport_lon=lon,
+                                                preloaded_shards=preloaded or None)
+                if quality_data:
+                    import json
+                    quality_json.write_text(json.dumps(quality_data))
+                    lost = quality_data['lostRate']
+                    lost_str = f"{lost:.0%}" if lost is not None else "N/A"
+                    gap = quality_data['medianGapS']
+                    gap_str = f"{gap:.1f}s" if gap is not None else "N/A"
+                    print(f"  Data quality: {quality_data['score']} "
+                        f"(lost={lost_str}, gap={gap_str})")
+                else:
+                    quality_json = None
+            except Exception as e:
+                print(f"  Warning: data quality assessment failed: {e}")
+                quality_json = None
 
     sw_lat, sw_lon, ne_lat, ne_lon = compute_bounds(lat, lon, ANALYSIS_RADIUS_NM)
     vis_output = airport_dir / f"{icao}_map.html"
@@ -578,18 +602,21 @@ def aggregate_airport_results(icao: str, airport_info: dict,
     if quality_json and quality_json.exists():
         vis_cmd += f"--data-quality {quality_json} "
 
-    vis_cmd += "--traffic-tiles tiles/traffic/ "
+    if traffic_tiles:
+        vis_cmd += f"--traffic-tiles {traffic_tiles} "
     vis_cmd += f"--output {vis_output} --no-browser "
 
     vis_cmd += "--heatmap-label '6/1/25 - 6/15/25' "  # TODO dynamic label
-    vis_cmd += "--traffic-label '6/1/25 - 8/31/25 (<4000ft AGL)' "  # TODO dynamic label
+    vis_cmd += "--traffic-label '6/1/25 - 8/31/25 (< 4000ft AGL)' "  # TODO dynamic label
 
+    vis_cmd += f"--airport-name {icao} "
     run_command(vis_cmd)
 
 
 def process_single_date(date: datetime, icao_codes: list[str], airport_info: dict,
                        timer: SimpleTimer, failed_runs: list,
-                       analysis_only: bool, force_download: bool, dry_run: bool) -> bool:
+                       analysis_only: bool, force_download: bool, dry_run: bool,
+                       no_download: bool) -> bool:
     """Process download, shard, and analysis for a single date.
 
     Returns:
@@ -605,7 +632,7 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
     if not analysis_only:
         # --- Download ---
         timer.start('download')
-        if not dry_run:
+        if not dry_run and not no_download:
             if not download_tar_parts(date, force=force_download):
                 timer.end('download')
                 print(f"❌ Download failed for {date.strftime('%m/%d/%y')}, "
@@ -729,14 +756,17 @@ def _analyze_airport_worker(args):
 
 def _aggregate_airport_worker(args):
     """Worker function for parallel aggregation (must be top-level for pickling)."""
-    icao, airport_info, build_quality, dry_run = args
-    aggregate_airport_results(icao, airport_info, build_quality, dry_run=dry_run)
+    icao, airport_info, build_quality, dry_run, traffic_tiles, exclude_csv = args
+    aggregate_airport_results(icao, airport_info, build_quality, dry_run=dry_run,
+                              traffic_tiles=traffic_tiles, exclude_csv=exclude_csv)
     return icao
 
 
 def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
                           timer: SimpleTimer, dry_run: bool = False,
-                          parallel: bool = True, build_quality: bool = False) -> dict:
+                          parallel: bool = True, build_quality: bool = False,
+                          traffic_tiles: str = None,
+                          exclude_csv: str = None) -> dict:
     """Run cross-date aggregation for all airports.
 
     Args:
@@ -761,7 +791,7 @@ def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
         print(f"  Running {len(icao_codes)} aggregations in parallel...")
 
         # Prepare arguments for worker processes
-        worker_args = [(icao, airport_info, build_quality, dry_run) for icao in icao_codes]
+        worker_args = [(icao, airport_info, build_quality, dry_run, traffic_tiles, exclude_csv) for icao in icao_codes]
 
         # Use all available CPUs
         num_workers = min(multiprocessing.cpu_count(), len(icao_codes))
@@ -778,7 +808,8 @@ def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
         # Sequential execution (for dry-run or single airport)
         for icao in icao_codes:
             print(f"\n  Aggregating results for {icao}...")
-            aggregate_airport_results(icao, airport_info, build_quality, dry_run=dry_run)
+            aggregate_airport_results(icao, airport_info, build_quality, dry_run=dry_run,
+                                      traffic_tiles=traffic_tiles, exclude_csv=exclude_csv)
 
     timer.end('aggregation')
 
@@ -841,6 +872,10 @@ Examples:
                         help="Skip all processing, only run cross-date aggregation")
     parser.add_argument("--build-quality", action="store_true",
                         help="Build data quality metrics during aggregation phase")
+    parser.add_argument("--traffic-tiles", type=str, default=None,
+                        help="Path to traffic tile directory (contains {z}/{x}/{y}.png)")
+    parser.add_argument("--exclude-csv", type=str, default=None,
+                        help="Exclude lines containing this string when combining CSV files")
     parser.add_argument("--timing-output", type=str,
                         help="Path for timing report JSON file (default: timing_report.json)")
 
@@ -908,13 +943,16 @@ Examples:
                 date, icao_codes, airport_info, timer, failed_runs,
                 analysis_only=args.analysis_only,
                 force_download=args.force_download,
-                dry_run=args.dry_run
+                dry_run=args.dry_run,
+                no_download=args.no_download
             )
 
     # --- Cross-date aggregation ---
-    output_stats = run_aggregation_phase(icao_codes, airport_info, timer, 
-                                         dry_run=args.dry_run, 
-                                         build_quality=args.build_quality)
+    output_stats = run_aggregation_phase(icao_codes, airport_info, timer,
+                                         dry_run=args.dry_run,
+                                         build_quality=args.build_quality,
+                                         traffic_tiles=args.traffic_tiles,
+                                         exclude_csv=args.exclude_csv)
 
     # Summary
     timer.end('total_pipeline')

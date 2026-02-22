@@ -241,7 +241,7 @@ def calculate_event_quality(los, flight1, flight2):
 
     # Apply quality criteria with explanations
     if event_duration > 60:
-        reasons.append(f"long duration ({event_duration_min:.1f}min - may be formation flight)")
+        reasons.append(f"long duration ({event_duration_min:.1f}min - likely formation flight)")
         quality = 'low'
     elif min_track_duration < 60:
         reasons.append(f"short track ({min_track_duration_min:.1f}min - insufficient data)")

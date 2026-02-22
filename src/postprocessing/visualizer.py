@@ -111,8 +111,8 @@ class MapVisualizer:
         else:
             return "green"  # Default to blue for unknown quality
 
-    def add_traffic_tile_overlay(self, m, tile_dir, zoom=None, opacity=0.7,
-                                 radius_nm=100, traffic_label=None):
+    def add_traffic_tile_overlay(self, m, tile_dir, output_file=None, zoom=None,
+                                 opacity=0.7, radius_nm=100, traffic_label=None):
         """Add pre-rendered traffic density tiles as a TileLayer using relative URLs.
 
         Creates a TileLayer that references tiles via relative file paths, avoiding
@@ -121,6 +121,7 @@ class MapVisualizer:
         Args:
             m: Folium map object
             tile_dir: Path to tile directory containing {z}/{x}/{y}.png
+            output_file: Path to HTML output file (for computing relative tile path)
             zoom: Tile zoom level to load (auto-detected from directory if None)
             opacity: Overlay opacity (0.0-1.0)
             radius_nm: Load tiles within this radius (nm) of map center (unused with TileLayer)
@@ -143,9 +144,15 @@ class MapVisualizer:
         max_zoom = max(available_zooms)
         print(f"Available tile zoom levels: {available_zooms}")
 
-        # Create relative path from HTML output location to tile directory
-        # Tiles will be referenced as: tiles/{z}/{x}/{y}.png (matching symlink name)
-        tile_url = "tiles/{z}/{x}/{y}.png"
+        # Compute relative path from HTML output dir to tile directory
+        if output_file:
+            output_dir = Path(output_file).parent.resolve()
+            tile_abs = Path.cwd() / tile_dir if not tile_dir.is_absolute() else tile_dir
+            rel_tile_dir = os.path.relpath(tile_abs, output_dir)
+        else:
+            rel_tile_dir = "tiles"
+        tile_url = rel_tile_dir + "/{z}/{x}/{y}.png"
+        print(f"  DEBUG tile_dir={tile_dir} output_file={output_file} tile_url={tile_url}")
 
         # Add TileLayer with relative file:// URLs
         # Use minNativeZoom/maxNativeZoom so Leaflet scales tiles for ±1 zoom
@@ -404,6 +411,7 @@ class MapVisualizer:
         # Add traffic density tile overlay (pre-rendered PNG tiles)
         if traffic_tile_dir:
             self.add_traffic_tile_overlay(m, traffic_tile_dir,
+                                          output_file=output_file,
                                           traffic_label=traffic_label)
 
         # Add traffic tracks BEFORE LOS points (background layer)
@@ -629,30 +637,6 @@ class MapVisualizer:
         # Save the map to an HTML file
         m.save(output_file)
         print(f"Map saved to {output_file}")
-
-        # Create symlink to traffic tiles if specified
-        if traffic_tile_dir:
-            from pathlib import Path
-            output_path = Path(output_file).resolve()
-            output_dir = output_path.parent
-            tile_src = Path(traffic_tile_dir).resolve()
-            tile_link = output_dir / "tiles"
-
-            # Create or update symlink
-            if tile_link.exists() or tile_link.is_symlink():
-                if tile_link.is_symlink():
-                    # Check if it points to the right place
-                    if tile_link.resolve() != tile_src:
-                        tile_link.unlink()
-                        tile_link.symlink_to(tile_src)
-                        print(f"Updated symlink: {tile_link} -> {tile_src}")
-                    else:
-                        print(f"Symlink already exists: {tile_link} -> {tile_src}")
-                else:
-                    print(f"Warning: {tile_link} exists but is not a symlink, skipping")
-            else:
-                tile_link.symlink_to(tile_src)
-                print(f"Created symlink: {tile_link} -> {tile_src}")
 
         if open_in_browser:
             webbrowser.open("file://" + os.path.realpath(output_file))
