@@ -469,10 +469,10 @@ def build_help_html(airport_name):
         cmd_args: Command-line arguments string for display.
     """
     if airport_name:
-        title_string = '<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">hotspots.aero traffic report for ' + \
+        title_string = '<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">Airborne Hotspots traffic report for ' + \
             airport_name + '</div>\n'
     else:
-        title_string = '<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">hotspots.aero</div>\n'
+        title_string = '<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">Airborne Hotspots</div>\n'
 
     help_panel = (
         '<div id="help-window" style="'

@@ -59,9 +59,10 @@ from batch_helpers import (
     FT_MAX_ABOVE_AIRPORT,
     FT_MIN_BELOW_AIRPORT,
     ANALYSIS_RADIUS_NM,
-    GZ_DATA_PREFIX,
     write_empty_gz,
-    GZ_GLOBAL_DATA_PREFIX,
+    GZ_INTERMEDIATE_PREFIX,
+    GZ_FINAL_PREFIX,
+    CONUS_YAML_TEMPLATE,
 )
 
 # Approximate size of daily ADS-B data from adsb.lol (two tar parts combined)
@@ -269,8 +270,8 @@ def convert_traces_global(date_obj: datetime) -> Path:
     date_compact = date_obj.strftime('%m%d%y')
 
     # Use local temp directory for fast, reliable I/O
-    local_temp = Path("/tmp") / f"{GZ_GLOBAL_DATA_PREFIX}{date_compact}.gz"
-    network_final = DATA_DIR / f"{GZ_GLOBAL_DATA_PREFIX}{date_compact}.gz"
+    local_temp = Path("/tmp") / f"{GZ_INTERMEDIATE_PREFIX}{date_compact}.gz"
+    network_final = DATA_DIR / f"{GZ_INTERMEDIATE_PREFIX}{date_compact}.gz"
 
     print(f"⚙️ Converting traces to {local_temp} (local temp)...")
     traces_dir = BASE_DIR / "traces"
@@ -284,6 +285,39 @@ def convert_traces_global(date_obj: datetime) -> Path:
     run_command(f"mv '{local_temp}' '{network_final}'", dry_run=False)
 
     return network_final
+
+
+def convert_global_to_conus(date_obj: datetime) -> Path:
+    """Filter a global JSONL file down to CONUS-only points.
+
+    Skips if the CONUS file already exists. Writes via a temp YAML to
+    DATA_DIR/GZ_FINAL_PREFIX<date>.gz.
+
+    Returns:
+        Path to the CONUS file.
+    """
+    date_compact = date_obj.strftime('%m%d%y')
+    global_gz = DATA_DIR / f"{GZ_INTERMEDIATE_PREFIX}{date_compact}.gz"
+    conus_gz = DATA_DIR / f"{GZ_FINAL_PREFIX}{date_compact}.gz"
+
+    if conus_gz.exists():
+        print(f"✅ {conus_gz.name} already exists, skipping CONUS extraction.")
+        return conus_gz
+
+    print(f"🌎 Extracting CONUS subset from {global_gz.name}...")
+    yaml_path = DATA_DIR / f"conus_{date_compact}.yaml"
+    yaml_content = CONUS_YAML_TEMPLATE.format(output_file=str(conus_gz))
+    with open(yaml_path, 'w') as f:
+        f.write(yaml_content)
+
+    result = run_command(
+        f"python3 src/analyzers/simple_monitor.py --sorted-file {global_gz} {yaml_path}")
+    yaml_path.unlink(missing_ok=True)
+
+    if result != 0:
+        raise RuntimeError(f"CONUS extraction failed for {date_compact}")
+
+    return conus_gz
 
 
 def shard_global_to_airports(global_gz: Path, icao_codes: list[str],
@@ -606,8 +640,9 @@ def aggregate_airport_results(icao: str, airport_info: dict,
         vis_cmd += f"--traffic-tiles {traffic_tiles} "
     vis_cmd += f"--output {vis_output} --no-browser "
 
-    vis_cmd += "--heatmap-label '6/1/25 - 6/15/25' "  # TODO dynamic label
-    vis_cmd += "--traffic-label '6/1/25 - 8/31/25 (< 4000ft AGL)' "  # TODO dynamic label
+    vis_cmd += "--heatmap-label '6/1/25 - 8/31/25' "  # TODO dynamic label
+    # TODO dynamic label
+    vis_cmd += "--traffic-label '6/1/25 - 6/15/25 (< 4000ft AGL)' "
 
     vis_cmd += f"--airport-name {icao} "
     run_command(vis_cmd)
@@ -650,7 +685,7 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
         # --- Extract from tarfile --
         timer.start('extract')
         # Check network storage for cached file (authoritative source)
-        network_global_gz = DATA_DIR / f"{GZ_GLOBAL_DATA_PREFIX}{date_compact}.gz"
+        network_global_gz = DATA_DIR / f"{GZ_INTERMEDIATE_PREFIX}{date_compact}.gz"
         global_gz = network_global_gz
 
         print(f"🔍 Checking for existing JSONL file in network storage: {network_global_gz}...")
@@ -692,10 +727,26 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
             print(f"[DRY-RUN] Convert traces -> {global_gz}")
         timer.end('convert_traces')
 
+        # --- Filter global JSONL down to CONUS-only points ---
+        timer.start('conus_extract')
+        conus_gz = DATA_DIR / f"{GZ_FINAL_PREFIX}{date_compact}.gz"
+        if not dry_run:
+            try:
+                conus_gz = convert_global_to_conus(date)
+            except RuntimeError as e:
+                timer.end('conus_extract')
+                print(f"❌ {e}, skipping date.")
+                for icao in icao_codes:
+                    failed_runs.append((date.strftime('%m/%d/%y'), icao, "conus_extract"))
+                return False
+        else:
+            print(f"[DRY-RUN] Extract CONUS -> {conus_gz}")
+        timer.end('conus_extract')
+
         # --- Pass 1: Shard into per-airport JSONL gzip files ---
         timer.start('shard_pass')
         shard_result = shard_global_to_airports(
-            global_gz, icao_codes, date_compact, airport_info,
+            conus_gz, icao_codes, date_compact, airport_info,
             dry_run=dry_run)
         timer.end('shard_pass')
 

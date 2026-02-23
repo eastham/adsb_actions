@@ -361,8 +361,15 @@ class LOSAnimator:
             popup=f"CPA: {datetime.datetime.utcfromtimestamp(event_time).strftime('%H:%M:%S')} UTC"
         ).add_to(m)
 
-        # Save the map
-        m.save(output_file)
+        # Save the map, patching in <title> and lang="en" for accessibility.
+        # Folium doesn't expose these directly, so we render to string and patch.
+        event_utc = datetime.datetime.utcfromtimestamp(event_time).strftime("%Y-%m-%d %H:%M UTC")
+        page_title = f"LOS Event: {tail1} / {tail2} – {event_utc}"
+        m.get_root().header.add_child(folium.Element(f"<title>{page_title}</title>"))
+        html_str = m.get_root().render()
+        html_str = html_str.replace("<html>", '<html lang="en">', 1)
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(html_str)
         logger.info("Animation saved to %s", output_file)
 
         return output_file

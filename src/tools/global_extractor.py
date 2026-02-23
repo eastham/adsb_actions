@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 # extract data subset for faster development iteration. Usage:
-# python3 src/tools/global_extractor.py --start-date 06/01/25 --end-date 06/30/25 --day-filter weekday
+# python3 src/tools/global_extractor.py --start-date 06/01/25 --end-date 06/30/25 --airports examples/manual_request_airports.txt
+
 # starting from JSONL global.gz files, extract a smaller subset of points that
 # are near a given point, using the latlongring rule in the YAML file.
 
@@ -18,24 +19,10 @@ from batch_los_pipeline import (convert_traces_global,
                                 extract_traces, shard_global_to_airports,
                                 load_airport_info)
 from batch_helpers import (generate_date_range, validate_date, load_airport_list,
-                           faa_to_icao)
+                           faa_to_icao, CONUS_YAML_TEMPLATE)
 
 # Pool ref for cleanup on Ctrl-C (mutable container avoids global declaration issues)
 _state = {"pool": None}
-
-# Template YAML for CONUS extraction — output path is filled in per-worker
-CONUS_YAML_TEMPLATE = """\
-config:
-  kmls:
-    - examples/CONUS/conus_boundary.kml
-
-rules:
-  stripper:
-    conditions:
-      regions: [ "CONUS" ]
-    actions:
-      emit_jsonl: "{output_file}"
-"""
 
 
 def _worker_init():

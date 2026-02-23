@@ -204,12 +204,11 @@ class MapVisualizer:
                 slider.oninput = function() {
                     valueDisplay.innerHTML = this.value;
                     var opacityValue = this.value / 100.0;
-
-                    // Find the Traffic Density layer and update opacity
-                    document.querySelectorAll('.leaflet-tile-pane .leaflet-layer').forEach(function(layer) {
-                        var img = layer.querySelector('img');
-                        if (img && img.src.match(/tiles\/\d+\/\d+\/\d+\.png/)) {
-                            layer.style.opacity = opacityValue;
+                    var map = getMap();
+                    if (!map) return;
+                    map.eachLayer(function(layer) {
+                        if (layer.options && layer.options.attribution === 'Traffic Density') {
+                            layer.setOpacity(opacityValue);
                         }
                     });
                 };
@@ -312,7 +311,7 @@ class MapVisualizer:
         # Create a Folium map centered on the airport
         if map_image:
             # Use a static PNG image as the map background
-            m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles=None,
+            m = folium.Map(location=[center_lat, center_lon], zoom_start=11, tiles=None,
                            zoom_control=False)
 
             folium.raster_layers.ImageOverlay(
@@ -324,7 +323,7 @@ class MapVisualizer:
             # Use satellite imagery
             m = folium.Map(
                 location=[center_lat, center_lon],
-                zoom_start=13,
+                zoom_start=11,
                 tiles=None,
                 zoom_control=False
             )
@@ -338,7 +337,7 @@ class MapVisualizer:
             # max_native_zoom=11 tells Leaflet to upscale tiles when zooming past level 11
             m = folium.Map(
                 location=[center_lat, center_lon],
-                zoom_start=13,
+                zoom_start=11,
                 tiles=None,
                 zoom_control=False
             )
@@ -634,8 +633,21 @@ class MapVisualizer:
         # Add help window with keyboard shortcuts and generation info
         m.get_root().html.add_child(folium.Element(build_help_html(airport_name)))
 
-        # Save the map to an HTML file
-        m.save(output_file)
+        # Add <title>, lang="en", and mobile CSS for accessibility/ADA compliance.
+        # Folium doesn't expose the <html> tag directly, so we render to string and patch.
+        page_title = f"{airport_name} – Airborne Hotspots" if airport_name else "Airborne Hotspots"
+        m.get_root().header.add_child(folium.Element(
+            f"<title>{page_title}</title>\n"
+            "<style>\n"
+            "@media (max-width: 768px) {\n"
+            "  #help-window, #opacity-controls-box, #busyness-panel { display: none !important; }\n"
+            "}\n"
+            "</style>"
+        ))
+        html_str = m.get_root().render()
+        html_str = html_str.replace("<html>", '<html lang="en">', 1)
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(html_str)
         print(f"Map saved to {output_file}")
 
         if open_in_browser:

@@ -1,5 +1,6 @@
 """Helper utilities for batch LOS pipeline processing."""
 
+import argparse
 import gzip
 import io
 import json
@@ -14,9 +15,21 @@ FT_MAX_ABOVE_AIRPORT = 4000   # analysis ceiling relative to field elevation
 FT_MIN_BELOW_AIRPORT = -200   # negative AGL offset excludes ground traffic
 ANALYSIS_RADIUS_NM = 10       # radius around airport for trace filtering and sharding
 
-# GZ_DATA_PREFIX = "global_"  # Dataset being analyzed
-GZ_DATA_PREFIX = "CONUS_"    # File prefix for dataset being analyzed
-GZ_GLOBAL_DATA_PREFIX = "global_"  # File prefix for global sorted JSONL files
+GZ_FINAL_PREFIX = "CONUS_"          # CONUS-filtered files output by global_extractor.py
+GZ_INTERMEDIATE_PREFIX = "global_"  # Global sorted JSONL, intermediate product of tar extraction
+
+CONUS_YAML_TEMPLATE = """\
+config:
+  kmls:
+    - examples/CONUS/conus_boundary.kml
+
+rules:
+  stripper:
+    conditions:
+      regions: [ "CONUS" ]
+    actions:
+      emit_jsonl: "{output_file}"
+"""
 
 
 class SimpleTimer:
@@ -124,9 +137,9 @@ def validate_date(date_text):
     """Validate and parse date in mm/dd/yy format."""
     try:
         return datetime.strptime(date_text, '%m/%d/%y')
-    except ValueError:
+    except ValueError as e:
         raise argparse.ArgumentTypeError(
-            f"Incorrect date format '{date_text}', should be mm/dd/yy")
+            f"Invalid date '{date_text}' (expected mm/dd/yy): {e}")
 
 
 
@@ -166,7 +179,7 @@ def global_files_for_dates(dates: list, data_dir: Path = None) -> list[Path]:
         data_dir = Path("data")
     files = []
     for date in dates:
-        gz = data_dir / f"{GZ_DATA_PREFIX}{date.strftime('%m%d%y')}.gz"
+        gz = data_dir / f"{GZ_FINAL_PREFIX}{date.strftime('%m%d%y')}.gz"
         if gz.exists():
             files.append(gz)
         else:
