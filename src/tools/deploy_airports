@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""
+deploy_airports - push generated files for a list of airports to remote storage.
+
+Reads an airport list file (one code per line, # comments ignored) and runs
+rclone copy for each airport's subdirectory under examples/generated/.
+
+Example:
+    python src/tools/deploy_airports examples/2nd_round_airports.txt
+    python src/tools/deploy_airports examples/2nd_round_airports.txt --include "*.html"
+    python src/tools/deploy_airports examples/2nd_round_airports.txt --maps-only
+    python src/tools/deploy_airports examples/2nd_round_airports.txt --dry-run
+"""
+
+import os
+import sys
+import argparse
+import subprocess
+from batch_helpers import faa_to_icao
+
+DEFAULT_REMOTE = "hotspots-initial:hotspots"
+DEFAULT_GENERATED = "examples/generated"
+
+def load_airports(path):
+    airports = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            airports.append(line)
+    return airports
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Deploy generated airport files to remote storage via rclone.")
+    parser.add_argument("airports_file",
+                        help="Airport list file (one code per line, # comments ignored)")
+    parser.add_argument("--remote", default=DEFAULT_REMOTE,
+                        help=f"rclone remote destination (default: {DEFAULT_REMOTE})")
+    parser.add_argument("--generated-dir", default=DEFAULT_GENERATED,
+                        help=f"Local generated directory (default: {DEFAULT_GENERATED})")
+    parser.add_argument("--include", default="*.html",
+                        help="rclone --include glob pattern (default: *.html)")
+    parser.add_argument("--maps-only", action="store_true",
+                        help="Only push *_map.html files (overrides --include)")
+    parser.add_argument("--dry-run", "-n", action="store_true",
+                        help="Print rclone commands without running them")
+    args = parser.parse_args()
+
+    airports = load_airports(args.airports_file)
+    if not airports:
+        print(f"No airports found in {args.airports_file}", file=sys.stderr)
+        sys.exit(1)
+
+    include = "*map.html" if args.maps_only else args.include
+
+    print(f"Deploying {len(airports)} airports to {args.remote}", file=sys.stderr)
+    print(f"Include pattern: {include}", file=sys.stderr)
+
+    failed = []
+    for faa in airports:
+        icao = faa_to_icao(faa)
+        src = os.path.join(args.generated_dir, icao)
+        dst = f"{args.remote}/{icao}"
+
+        if not os.path.isdir(src):
+            print(f"  SKIP {faa} ({icao}): no directory at {src}", file=sys.stderr)
+            continue
+
+        cmd = ["rclone", "copy", src, dst, "--include", include, "--progress"]
+        if args.dry_run:
+            cmd.append("--dry-run")
+        print(f"  {icao}: {' '.join(cmd)}", file=sys.stderr)
+
+        result = subprocess.run(cmd)
+        if result.returncode != 0:
+            print(f"  ERROR: rclone failed for {icao} (exit {result.returncode})", file=sys.stderr)
+            failed.append(icao)
+
+    if failed:
+        print(f"\nFailed airports: {', '.join(failed)}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

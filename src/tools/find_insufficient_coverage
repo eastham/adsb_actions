@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""
+find_insufficient_coverage - find airports with fewer than N LOS events.
+
+Scans examples/generated/<AIRPORT>/<AIRPORT>_combined.csv.out files and
+outputs a list of airport codes (one per line) for airports with fewer
+than the threshold number of events. Output is suitable for use as input
+to the batch pipeline --airports flag.
+"""
+
+import os
+import sys
+import argparse
+import glob
+
+EVENT_MARKER = "CSV OUTPUT FOR POSTPROCESSING:"
+
+def count_events(csv_out_path):
+    count = 0
+    with open(csv_out_path) as f:
+        for line in f:
+            if EVENT_MARKER in line:
+                count += 1
+    return count
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Find airports with insufficient LOS event coverage.")
+    parser.add_argument("--min-events", "-n", type=int, default=100,
+                        help="Minimum number of events required (default: 100)")
+    parser.add_argument("--generated-dir", default="examples/generated",
+                        help="Path to generated airport directories (default: examples/generated)")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Print event counts for all airports to stderr")
+    args = parser.parse_args()
+
+    pattern = os.path.join(args.generated_dir, "*", "*_combined.csv.out")
+    matches = sorted(glob.glob(pattern))
+
+    if not matches:
+        print(f"No combined.csv.out files found under {args.generated_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    insufficient = []
+    for path in matches:
+        # Directory name is the airport code
+        icao = os.path.basename(os.path.dirname(path))
+        n = count_events(path)
+        if args.verbose:
+            print(f"{icao}: {n} events", file=sys.stderr)
+        if n < args.min_events:
+            insufficient.append((icao, n))
+
+    insufficient.sort(key=lambda x: x[0])
+
+    print(f"# Airports with fewer than {args.min_events} LOS events", file=sys.stderr)
+    print(f"# {len(insufficient)} of {len(matches)} airports", file=sys.stderr)
+
+    for icao, n in insufficient:
+        print(icao)
+
+if __name__ == "__main__":
+    main()
