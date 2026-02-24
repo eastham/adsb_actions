@@ -63,6 +63,7 @@ from batch_helpers import (
     GZ_INTERMEDIATE_PREFIX,
     GZ_FINAL_PREFIX,
     CONUS_YAML_TEMPLATE,
+    derive_heatmap_label,
 )
 
 # Approximate size of daily ADS-B data from adsb.lol (two tar parts combined)
@@ -640,8 +641,9 @@ def aggregate_airport_results(icao: str, airport_info: dict,
         vis_cmd += f"--traffic-tiles {traffic_tiles} "
     vis_cmd += f"--output {vis_output} --no-browser "
 
-    vis_cmd += "--heatmap-label '6/1/25 - 8/31/25' "  # TODO dynamic label
-    # TODO dynamic label
+    heatmap_label = derive_heatmap_label(csv_files)
+    if heatmap_label:
+        vis_cmd += f"--heatmap-label '{heatmap_label}' "
     vis_cmd += "--traffic-label '6/1/25 - 6/15/25 (< 4000ft AGL)' "
 
     vis_cmd += f"--airport-name {icao} "

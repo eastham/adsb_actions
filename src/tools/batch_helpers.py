@@ -7,7 +7,7 @@ import json
 import re
 import subprocess
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from pathlib import Path
 
 # Shared constants for airport traffic analysis
@@ -185,6 +185,52 @@ def global_files_for_dates(dates: list, data_dir: Path = None) -> list[Path]:
         else:
             print(f"⚠️ Missing {gz.name}, skipping")
     return files
+
+
+def _largest_contiguous_run(dates):
+    """Return (start, end) of the longest consecutive-day run in a sorted dates list."""
+    best = (dates[0], dates[0])
+    run_start = run_end = dates[0]
+    for d in dates[1:]:
+        if d == run_end + timedelta(days=1):
+            run_end = d
+        else:
+            if (run_end - run_start) >= (best[1] - best[0]):
+                best = (run_start, run_end)
+            run_start = run_end = d
+    if (run_end - run_start) >= (best[1] - best[0]):
+        best = (run_start, run_end)
+    return best
+
+
+def derive_heatmap_label(csv_files):
+    """Build a human-readable date-range label from per-date CSV filenames.
+
+    Parses MMDDYY prefix from filenames like '060125_KWVI.csv.out', finds the
+    largest contiguous date run, and appends '+ N other date(s)' for outliers.
+    Returns empty string if no parseable dates found.
+    """
+    dates = []
+    for f in csv_files:
+        m = re.match(r'^(\d{6})_', Path(f).stem)
+        if m:
+            try:
+                dates.append(datetime.strptime(m.group(1), '%m%d%y').date())
+            except ValueError:
+                pass
+    if not dates:
+        return ""
+    dates = sorted(set(dates))
+    if len(dates) == 1:
+        return dates[0].strftime('%-m/%-d/%y')
+
+    best_start, best_end = _largest_contiguous_run(dates)
+    outliers = [d for d in dates if not (best_start <= d <= best_end)]
+    label = f"{best_start.strftime('%-m/%-d/%y')} - {best_end.strftime('%-m/%-d/%y')}"
+    if outliers:
+        n = len(outliers)
+        label += f" + {n} other date{'s' if n > 1 else ''}"
+    return label
 
 
 def compute_bounds(center_lat: float, center_lon: float,
