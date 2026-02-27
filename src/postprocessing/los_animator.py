@@ -254,10 +254,10 @@ class LOSAnimator:
             {"type": "FeatureCollection", "features": features},
             period="PT1S",           # 1-second intervals
             duration="PT1S",         # Each point visible for 1 second
-            transition_time=100,     # 100ms between frames (10 fps)
-            auto_play=False,         # Start paused
+            transition_time=20,     # 100ms between frames (10 fps)
+            auto_play=True,          # Start playing on open
             add_last_point=False,    # Don't add default markers
-            loop=False,
+            loop=True,
             max_speed=10,
             loop_button=True,
             time_slider_drag_update=True,
@@ -293,6 +293,9 @@ class LOSAnimator:
                 document.querySelectorAll('.timecontrol-date, a.timecontrol-date').forEach(function(el) {
                     el.style.display = 'none';
                 });
+                // auto_play=True in folium is unreliable; click the play button directly
+                //var playBtn = document.querySelector('.timecontrol-play');
+                if (playBtn) playBtn.click();
             }, 500);
         });
         </script>

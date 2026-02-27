@@ -16,8 +16,8 @@ import time
 from pathlib import Path
 
 from batch_los_pipeline import (convert_traces_global,
-                                extract_traces, shard_global_to_airports,
-                                load_airport_info)
+                                download_tar_parts, extract_traces,
+                                shard_global_to_airports, load_airport_info)
 from batch_helpers import (generate_date_range, validate_date, load_airport_list,
                            faa_to_icao, CONUS_YAML_TEMPLATE)
 
@@ -77,6 +77,7 @@ if __name__ == "__main__":
     parser.add_argument('--dry-run', action='store_true', help='Print dates to download without actually downloading')
     parser.add_argument('--airports', help='ICAO codes or path to airport list file (e.g. KWVI,KMOD or airports.txt)')
     parser.add_argument('--force-shard', action='store_true', help='Overwrite existing per-airport shard files')
+    parser.add_argument('--no-download', action='store_true', help='Skip download step, use existing tar files')
     args = parser.parse_args()
 
     start_date = validate_date(args.start_date)
@@ -112,8 +113,15 @@ if __name__ == "__main__":
 
         if not os.path.exists(input_file):
             if args.dry_run:
-                print(f"Dry run: Would extract global data for {date_str}")
+                print(f"Dry run: Would download/extract global data for {date_str}")
             else:
+                # Download tar parts if needed (must go to data/ where extract_traces looks)
+                if not args.no_download:
+                    print(f"Downloading tar parts for {date_str}...")
+                    if not download_tar_parts(date, data_dir="data"):
+                        print(f"Failed to download tar parts for {date_str}, skipping")
+                        continue
+
                 print(f"Extracting global data for {date_str}...")
                 result = extract_traces(date)
                 if not result:

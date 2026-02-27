@@ -68,7 +68,8 @@ def main():
             print(f"  SKIP {faa} ({icao}): no directory at {src}", file=sys.stderr)
             continue
 
-        cmd = ["rclone", "copy", src, dst, "--include", include, "--progress"]
+        cmd = ["rclone", "copy", src, dst, "--include", include, "--progress",
+               "--metadata-set", "cache-control=no-cache, must-revalidate"]
         if args.dry_run:
             cmd.append("--dry-run")
         print(f"  {icao}: {' '.join(cmd)}", file=sys.stderr)
