@@ -32,7 +32,7 @@ GROUND_BUFFER_NM = 0.3  # Buffer added to ground radius to close lateral gap wit
 # Ground region radius = (runway length / 2) + buffer
 
 # Altitude offsets from field elevation (feet)
-GROUND_MIN_ALT_OFFSET = -500  # Below field elevation to handle pressure altitude variations
+GROUND_MIN_ALT_OFFSET = -500  # Positive = above field elev, neg = Below field elevation to handle pressure altitude variations
 GROUND_ALT_OFFSET = 500
 # Departure/approach floor matches ground min to avoid altitude gaps during transitions
 DEP_APP_MIN_ALT_OFFSET = GROUND_MIN_ALT_OFFSET

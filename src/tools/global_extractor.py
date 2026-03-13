@@ -99,7 +99,7 @@ if __name__ == "__main__":
     airport_codes = []
     if args.airports:
         if os.path.isfile(args.airports):
-            raw_codes = load_airport_list(args.airports)
+            raw_codes, _ = load_airport_list(args.airports)
         else:
             raw_codes = [a.strip() for a in args.airports.split(',')]
         airport_codes = [faa_to_icao(code) for code in raw_codes]

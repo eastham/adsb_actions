@@ -50,6 +50,7 @@ from batch_helpers import (
     faa_to_icao,
     generate_date_range,
     compute_bounds,
+    dist_nm,
     run_command,
     validate_date,
     estimate_download_size,
@@ -59,6 +60,7 @@ from batch_helpers import (
     FT_MAX_ABOVE_AIRPORT,
     FT_MIN_BELOW_AIRPORT,
     ANALYSIS_RADIUS_NM,
+    CSV_EVENT_MARKER,
     write_empty_gz,
     GZ_INTERMEDIATE_PREFIX,
     GZ_FINAL_PREFIX,
@@ -136,17 +138,19 @@ def load_airport_info(icao: str) -> tuple[float, float, int]:
 
 
 def generate_multi_airport_yaml(icao_codes: list[str], date_compact: str,
-                                airport_info: dict) -> str:
+                                airport_info: dict,
+                                radius_overrides: dict = None) -> str:
     """Generate a multi-airport shard YAML with latlongring + emit_jsonl rules.
 
-    Each airport gets one rule that spatially filters points within
-    ANALYSIS_RADIUS_NM and writes them to a per-airport gzipped JSONL file.
+    Each airport gets one rule that spatially filters points within its radius
+    and writes them to a per-airport gzipped JSONL file.
     No altitude filter or proximity — just spatial sharding.
 
     Args:
         icao_codes: List of ICAO airport codes
         date_compact: Date string in MMDDYY format for output filenames
         airport_info: Dict mapping ICAO -> (lat, lon, field_alt)
+        radius_overrides: Optional dict of {icao: radius_nm} for per-airport overrides
 
     Returns:
         YAML string
@@ -154,14 +158,14 @@ def generate_multi_airport_yaml(icao_codes: list[str], date_compact: str,
     lines = ["# Multi-airport shard YAML (auto-generated)", "rules:"]
 
     for icao in icao_codes:
-
         lat, lon, _ = airport_info[icao]
         output_path = f"{SHARD_DIR}/{icao}/{date_compact}_{icao}.gz"
+        radius = (radius_overrides or {}).get(icao, ANALYSIS_RADIUS_NM)
         print(f"Generating multi-airport yaml, data target dir: {output_path}")
 
         lines.append(f"  {icao}_shard:")
         lines.append(f"    conditions:")
-        lines.append(f"      latlongring: [{ANALYSIS_RADIUS_NM}, {lat}, {lon}]")
+        lines.append(f"      latlongring: [{radius}, {lat}, {lon}]")
         lines.append(f"    actions:")
         lines.append(f"      emit_jsonl: {output_path}")
 
@@ -324,7 +328,8 @@ def convert_global_to_conus(date_obj: datetime) -> Path:
 def shard_global_to_airports(global_gz: Path, icao_codes: list[str],
                              date_compact: str, airport_info: dict,
                              dry_run: bool = False,
-                             force: bool = False) -> int:
+                             force: bool = False,
+                             radius_overrides: dict = None) -> int:
     """Shard a global JSONL file into per-airport gzipped JSONL files.
 
     Checks if shards already exist; if not, generates a multi-airport YAML
@@ -350,7 +355,7 @@ def shard_global_to_airports(global_gz: Path, icao_codes: list[str],
 
     # Generate shard YAML only for airports that need it
     shard_yaml_text = generate_multi_airport_yaml(
-        needed, date_compact, airport_info)
+        needed, date_compact, airport_info, radius_overrides=radius_overrides)
     shard_yaml_path = DATA_DIR / f"shard_{date_compact}.yaml"
 
     if not dry_run:
@@ -513,12 +518,15 @@ def aggregate_airport_results(icao: str, airport_info: dict,
                               build_quality: bool,
                               dry_run: bool = False,
                               traffic_tiles: str = None,
-                              exclude_csv: str = None):
+                              exclude_csv: str = None,
+                              max_los_events: int = 500,
+                              radius_nm: float = None):
     """Cross-date aggregation: combine CSV outputs and generate visualization."""
     lat, lon, field_elev = airport_info[icao]
+    radius_nm = radius_nm or ANALYSIS_RADIUS_NM
     airport_dir = BASE_DIR / icao
     combined_csv = airport_dir / f"{icao}_combined.csv.out"
-    
+
     # Match date-prefixed files (MMDDYY_ICAO.csv.out), exclude combined file
     csv_files = sorted(f for f in airport_dir.glob("*_*.csv.out")
                        if f != combined_csv)
@@ -532,19 +540,84 @@ def aggregate_airport_results(icao: str, airport_info: dict,
         print(f"[DRY-RUN] cat {combined_csv} | python3 src/postprocessing/visualizer.py ...")
         return
 
-    # Write metadata header, then append all CSV files
+    # Collect eligible event lines (after radius and exclude_csv filters)
+    # and non-event lines in a single pass, then uniformly downsample.
+    # Also count medium/high quality events within 5nm for cross-airport comparison.
+    STATS_RADIUS_NM = 5
+    eligible_events = []
+    non_event_lines = []
+    filtered_by_radius = 0
+    near_airport_medhigh = 0
+    for csv_file in csv_files:
+        with open(csv_file, 'r') as f:
+            for line in f:
+                if CSV_EVENT_MARKER not in line:
+                    non_event_lines.append(line)
+                    continue
+                if exclude_csv and any(s in line for s in exclude_csv.split('|')):
+                    continue
+                fields = line.split(CSV_EVENT_MARKER)[-1].strip().split(',')
+                try:
+                    ev_lat, ev_lon = float(fields[3]), float(fields[4])
+                except (IndexError, ValueError):
+                    eligible_events.append(line)
+                    continue
+                ev_dist = dist_nm(lat, lon, ev_lat, ev_lon)
+                if radius_nm < ANALYSIS_RADIUS_NM and ev_dist > radius_nm:
+                    filtered_by_radius += 1
+                    continue
+                eligible_events.append(line)
+                # Comparable stat: med/high quality within 5nm
+                if ev_dist <= STATS_RADIUS_NM and len(fields) > 8:
+                    quality = fields[8].strip()
+                    if quality in ('medium', 'high'):
+                        near_airport_medhigh += 1
+
+    total_events = len(eligible_events)
+    if filtered_by_radius:
+        print(f"  {icao}: filtered {filtered_by_radius:,} events outside {radius_nm}nm radius")
+
+    # Pick evenly-spaced indices to hit exactly max_los_events
+    if total_events > max_los_events:
+        step = total_events / max_los_events
+        keep_indices = set(int(i * step) for i in range(max_los_events))
+        print(f"  {icao}: {total_events:,} LOS events → downsampling to "
+              f"{len(keep_indices):,} (max={max_los_events})")
+    else:
+        keep_indices = None  # keep all
+
+    # Write combined CSV: header, non-event lines, then selected events
+    kept_animations = []
     with open(combined_csv, 'w') as outf:
-        outf.write(f"# analysis_radius_nm = {ANALYSIS_RADIUS_NM}\n")
+        outf.write(f"# analysis_radius_nm = {radius_nm}\n")
         outf.write(f"# center_lat = {lat}\n")
         outf.write(f"# center_lon = {lon}\n")
+        outf.write(f"# total_events = {total_events}\n")
+        outf.write(f"# near_airport_medhigh = {near_airport_medhigh}\n")
+        days_analyzed = len(csv_files)
+        events_per_day = round(near_airport_medhigh / days_analyzed, 2) if days_analyzed else 0.0
+        outf.write(f"# events_per_day = {events_per_day}\n")
+        for line in non_event_lines:
+            outf.write(line)
+        written_events = 0
+        for i, line in enumerate(eligible_events):
+            if keep_indices is not None and i not in keep_indices:
+                continue
+            outf.write(line)
+            written_events += 1
+            fields = line.split(CSV_EVENT_MARKER)[-1].strip().split(',')
+            if len(fields) > 10 and fields[10].strip():
+                kept_animations.append(fields[10].strip())
 
-        # Concatenate all CSV files
-        for csv_file in csv_files:
-            with open(csv_file, 'r') as inf:
-                for line in inf:
-                    if exclude_csv and any(s in line for s in exclude_csv.split('|')):
-                        continue
-                    outf.write(line)
+    # Write rclone filter file listing only kept animation files + the map html
+    filter_file = airport_dir / f"{icao}_deploy_filter.txt"
+    with open(filter_file, 'w') as f:
+        f.write(f"+ {icao}_map.html\n")
+        for anim in kept_animations:
+            f.write(f"+ {anim}\n")
+        f.write("- *\n")  # exclude everything else
+    if keep_indices is not None:
+        print(f"  {icao}: deploy filter written ({len(kept_animations)} animations + map)")
     
     busyness_json = None
     quality_json = None
@@ -621,7 +694,7 @@ def aggregate_airport_results(icao: str, airport_info: dict,
                 print(f"  Warning: data quality assessment failed: {e}")
                 quality_json = None
 
-    sw_lat, sw_lon, ne_lat, ne_lon = compute_bounds(lat, lon, ANALYSIS_RADIUS_NM)
+    sw_lat, sw_lon, ne_lat, ne_lon = compute_bounds(lat, lon, radius_nm)
     vis_output = airport_dir / f"{icao}_map.html"
 
     # Build visualizer command with optional traffic samples
@@ -642,6 +715,8 @@ def aggregate_airport_results(icao: str, airport_info: dict,
     vis_cmd += f"--output {vis_output} --no-browser "
 
     heatmap_label = derive_heatmap_label(csv_files)
+    if written_events < total_events:
+        heatmap_label = (heatmap_label or "") + f" (showing {written_events:,} of {total_events:,} events)"
     if heatmap_label:
         vis_cmd += f"--heatmap-label '{heatmap_label}' "
     vis_cmd += "--traffic-label '6/1/25 - 6/15/25 (< 4000ft AGL)' "
@@ -653,7 +728,7 @@ def aggregate_airport_results(icao: str, airport_info: dict,
 def process_single_date(date: datetime, icao_codes: list[str], airport_info: dict,
                        timer: SimpleTimer, failed_runs: list,
                        analysis_only: bool, force_download: bool, dry_run: bool,
-                       no_download: bool) -> bool:
+                       no_download: bool, radius_overrides: dict = None) -> bool:
     """Process download, shard, and analysis for a single date.
 
     Returns:
@@ -749,7 +824,7 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
         timer.start('shard_pass')
         shard_result = shard_global_to_airports(
             conus_gz, icao_codes, date_compact, airport_info,
-            dry_run=dry_run)
+            dry_run=dry_run, radius_overrides=radius_overrides)
         timer.end('shard_pass')
 
         if shard_result != 0 and not dry_run:
@@ -809,9 +884,11 @@ def _analyze_airport_worker(args):
 
 def _aggregate_airport_worker(args):
     """Worker function for parallel aggregation (must be top-level for pickling)."""
-    icao, airport_info, build_quality, dry_run, traffic_tiles, exclude_csv = args
+    icao, airport_info, build_quality, dry_run, traffic_tiles, exclude_csv, max_los_events, radius_overrides = args
+    radius_nm = (radius_overrides or {}).get(icao)
     aggregate_airport_results(icao, airport_info, build_quality, dry_run=dry_run,
-                              traffic_tiles=traffic_tiles, exclude_csv=exclude_csv)
+                              traffic_tiles=traffic_tiles, exclude_csv=exclude_csv,
+                              max_los_events=max_los_events, radius_nm=radius_nm)
     return icao
 
 
@@ -819,7 +896,9 @@ def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
                           timer: SimpleTimer, dry_run: bool = False,
                           parallel: bool = True, build_quality: bool = False,
                           traffic_tiles: str = None,
-                          exclude_csv: str = None) -> dict:
+                          exclude_csv: str = None,
+                          max_los_events: int = 500,
+                          radius_overrides: dict = None) -> dict:
     """Run cross-date aggregation for all airports.
 
     Args:
@@ -844,7 +923,7 @@ def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
         print(f"  Running {len(icao_codes)} aggregations in parallel...")
 
         # Prepare arguments for worker processes
-        worker_args = [(icao, airport_info, build_quality, dry_run, traffic_tiles, exclude_csv) for icao in icao_codes]
+        worker_args = [(icao, airport_info, build_quality, dry_run, traffic_tiles, exclude_csv, max_los_events, radius_overrides) for icao in icao_codes]
 
         # Use all available CPUs
         num_workers = min(multiprocessing.cpu_count(), len(icao_codes))
@@ -862,7 +941,9 @@ def run_aggregation_phase(icao_codes: list[str], airport_info: dict,
         for icao in icao_codes:
             print(f"\n  Aggregating results for {icao}...")
             aggregate_airport_results(icao, airport_info, build_quality, dry_run=dry_run,
-                                      traffic_tiles=traffic_tiles, exclude_csv=exclude_csv)
+                                      traffic_tiles=traffic_tiles, exclude_csv=exclude_csv,
+                                      max_los_events=max_los_events,
+                                      radius_nm=(radius_overrides or {}).get(icao))
 
     timer.end('aggregation')
 
@@ -929,6 +1010,8 @@ Examples:
                         help="Path to traffic tile directory (contains {z}/{x}/{y}.png)")
     parser.add_argument("--exclude-csv", type=str, default=None,
                         help="Exclude lines containing this string when combining CSV files")
+    parser.add_argument("--max-los-events", type=int, default=300,
+                        help="Maximum LOS events per airport in combined output (default: 500)")
     parser.add_argument("--timing-output", type=str,
                         help="Path for timing report JSON file (default: timing_report.json)")
 
@@ -942,10 +1025,12 @@ Examples:
 
     # Load airports and convert to ICAO
     if os.path.isfile(args.airports):
-        faa_codes = load_airport_list(args.airports, args.max_airports)
+        faa_codes, radius_overrides = load_airport_list(args.airports, args.max_airports)
     else:
-        faa_codes = [args.airports]
+        faa_codes, radius_overrides = [args.airports], {}
     icao_codes = [faa_to_icao(code) for code in faa_codes]
+    # Convert FAA→ICAO keys in radius overrides
+    icao_overrides = {faa_to_icao(k): v for k, v in radius_overrides.items()}
 
     # Generate date range
     dates = generate_date_range(args.start_date, args.end_date, args.day_filter)
@@ -997,7 +1082,8 @@ Examples:
                 analysis_only=args.analysis_only,
                 force_download=args.force_download,
                 dry_run=args.dry_run,
-                no_download=args.no_download
+                no_download=args.no_download,
+                radius_overrides=icao_overrides
             )
 
     # --- Cross-date aggregation ---
@@ -1005,7 +1091,9 @@ Examples:
                                          dry_run=args.dry_run,
                                          build_quality=args.build_quality,
                                          traffic_tiles=args.traffic_tiles,
-                                         exclude_csv=args.exclude_csv)
+                                         exclude_csv=args.exclude_csv,
+                                         max_los_events=args.max_los_events,
+                                         radius_overrides=icao_overrides)
 
     # Summary
     timer.end('total_pipeline')

@@ -4,6 +4,7 @@ import argparse
 import gzip
 import io
 import json
+import math
 import re
 import subprocess
 import time
@@ -14,6 +15,16 @@ from pathlib import Path
 FT_MAX_ABOVE_AIRPORT = 4000   # analysis ceiling relative to field elevation
 FT_MIN_BELOW_AIRPORT = -200   # negative AGL offset excludes ground traffic
 ANALYSIS_RADIUS_NM = 10       # radius around airport for trace filtering and sharding
+CSV_EVENT_MARKER = "CSV OUTPUT FOR POSTPROCESSING:"
+
+NM_PER_DEG_LAT = 60.0  # nautical miles per degree of latitude
+
+
+def dist_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Equirectangular distance in nautical miles. Fast, accurate within ~10nm."""
+    dlat = lat2 - lat1
+    dlon = (lon2 - lon1) * math.cos(math.radians((lat1 + lat2) / 2.0))
+    return math.sqrt(dlat * dlat + dlon * dlon) * NM_PER_DEG_LAT
 
 GZ_FINAL_PREFIX = "CONUS_"          # CONUS-filtered files output by global_extractor.py
 GZ_INTERMEDIATE_PREFIX = "global_"  # Global sorted JSONL, intermediate product of tar extraction
@@ -375,26 +386,34 @@ def print_completion_summary(dates: list[datetime], icao_codes: list[str],
                 print(f"  - {entry}")
 
 
-def load_airport_list(filepath: str, max_airports: int = None) -> list[str]:
+def load_airport_list(filepath: str, max_airports: int = None
+                      ) -> tuple[list[str], dict[str, float]]:
     """Load airport codes from text file (one code per line).
 
-    Extracts the first 2-4 character alphanumeric token from each line,
-    skipping blank lines and comments.
+    Each line may optionally include a radius override (in nm) after the code:
+        KEIK 7       # use 7nm instead of default ANALYSIS_RADIUS_NM
+        KCCB         # use default radius
+        # comment
 
-    Returns list of FAA/ICAO codes.
+    Returns (list of FAA/ICAO codes, dict of {code: radius_nm} overrides).
     """
     airports = []
+    radius_overrides = {}
     print(f"Loading airport list from {filepath}...")
     with open(filepath, 'r') as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith('#'):
                 continue
-            match = re.match(r'[A-Za-z0-9]{2,4}', line)
+            match = re.match(r'([A-Za-z0-9]{2,4})(?:\s+(\d+(?:\.\d+)?))?', line)
             if match:
-                airports.append(match.group(0))
+                code = match.group(1)
+                airports.append(code)
+                if match.group(2):
+                    radius_overrides[code] = float(match.group(2))
 
     if max_airports:
         airports = airports[:max_airports]
+        radius_overrides = {k: v for k, v in radius_overrides.items() if k in airports}
 
-    return airports
+    return airports, radius_overrides

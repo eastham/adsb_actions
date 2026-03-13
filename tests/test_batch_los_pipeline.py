@@ -23,6 +23,7 @@ from tools.batch_helpers import (
     print_pipeline_summary,
     print_completion_summary,
     load_airport_list,
+    derive_heatmap_label,
 )
 
 
@@ -68,8 +69,9 @@ class TestLoadAirportList:
             f.write("1R8\n")
             filepath = f.name
         try:
-            airports = load_airport_list(filepath)
+            airports, overrides = load_airport_list(filepath)
             assert airports == ["DCU", "EUL", "1R8"]
+            assert overrides == {}
         finally:
             Path(filepath).unlink()
 
@@ -83,8 +85,9 @@ class TestLoadAirportList:
             f.write("1R8\n")
             filepath = f.name
         try:
-            airports = load_airport_list(filepath)
+            airports, overrides = load_airport_list(filepath)
             assert airports == ["DCU", "EUL", "1R8"]
+            assert overrides == {}
         finally:
             Path(filepath).unlink()
 
@@ -94,7 +97,7 @@ class TestLoadAirportList:
             f.write("DCU\nEUL\n1R8\nBDN\nLGU\n")
             filepath = f.name
         try:
-            airports = load_airport_list(filepath, max_airports=3)
+            airports, overrides = load_airport_list(filepath, max_airports=3)
             assert airports == ["DCU", "EUL", "1R8"]
         finally:
             Path(filepath).unlink()
@@ -103,9 +106,35 @@ class TestLoadAirportList:
         """Test parsing the actual busiest_nontowered.txt file."""
         filepath = Path(__file__).parent.parent / "examples" / "busiest_nontowered.txt"
         if filepath.exists():
-            airports = load_airport_list(str(filepath), max_airports=5)
+            airports, overrides = load_airport_list(str(filepath), max_airports=5)
             assert len(airports) == 5
             assert airports[0] == "DCU"  # First airport in the list
+
+    def test_radius_override(self):
+        """Test parsing per-airport radius overrides."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write("DCU\nKEIK 7\nEUL 5.5\n")
+            filepath = f.name
+        try:
+            airports, overrides = load_airport_list(filepath)
+            assert airports == ["DCU", "KEIK", "EUL"]
+            assert "DCU" not in overrides
+            assert overrides["KEIK"] == 7.0
+            assert overrides["EUL"] == 5.5
+        finally:
+            Path(filepath).unlink()
+
+    def test_radius_override_trimmed_by_max_airports(self):
+        """Test that radius overrides respect max_airports limit."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write("DCU\nKEIK 7\nEUL 5.5\n")
+            filepath = f.name
+        try:
+            airports, overrides = load_airport_list(filepath, max_airports=1)
+            assert airports == ["DCU"]
+            assert overrides == {}
+        finally:
+            Path(filepath).unlink()
 
 
 class TestIsWeekend:
@@ -310,7 +339,7 @@ class TestIntegration:
 
         try:
             # Load airports
-            faa_codes = load_airport_list(filepath, max_airports=2)
+            faa_codes, _ = load_airport_list(filepath, max_airports=2)
             icao_codes = [faa_to_icao(code) for code in faa_codes]
             assert icao_codes == ["KDCU", "KEUL"]
 
@@ -334,3 +363,44 @@ class TestIntegration:
 
         finally:
             Path(filepath).unlink()
+
+
+class TestDeriveHeatmapLabel:
+    """Test derive_heatmap_label date-range label generation."""
+
+    def _paths(self, *stems):
+        """Build fake Path objects from MMDDYY_ICAO stem strings."""
+        return [Path(f"{s}.csv.out") for s in stems]
+
+    def test_single_date(self):
+        files = self._paths("060125_KWVI")
+        assert derive_heatmap_label(files) == "6/1/25"
+
+    def test_contiguous_range_no_outliers(self):
+        files = self._paths("060125_KWVI", "060225_KWVI", "060325_KWVI")
+        assert derive_heatmap_label(files) == "6/1/25 - 6/3/25"
+
+    def test_contiguous_range_one_outlier(self):
+        # 6/1-6/3 is the main run; 6/10 is an outlier
+        files = self._paths("060125_KWVI", "060225_KWVI", "060325_KWVI", "061025_KWVI")
+        assert derive_heatmap_label(files) == "6/1/25 - 6/3/25 + 1 other date"
+
+    def test_contiguous_range_two_outliers(self):
+        files = self._paths(
+            "060125_KWVI", "060225_KWVI", "060325_KWVI",
+            "061025_KWVI", "062025_KWVI"
+        )
+        assert derive_heatmap_label(files) == "6/1/25 - 6/3/25 + 2 other dates"
+
+    def test_two_runs_picks_longer(self):
+        # Run A: 6/1-6/3 (3 days), Run B: 6/10 only — A wins
+        files = self._paths("060125_KWVI", "060225_KWVI", "060325_KWVI", "061025_KWVI")
+        label = derive_heatmap_label(files)
+        assert label.startswith("6/1/25 - 6/3/25")
+
+    def test_no_parseable_dates(self):
+        files = [Path("KWVI_combined.csv.out"), Path("some_other_file.csv.out")]
+        assert derive_heatmap_label(files) == ""
+
+    def test_empty_list(self):
+        assert derive_heatmap_label([]) == ""

@@ -13,7 +13,7 @@ import sys
 import argparse
 import glob
 
-EVENT_MARKER = "CSV OUTPUT FOR POSTPROCESSING:"
+from batch_helpers import CSV_EVENT_MARKER as EVENT_MARKER
 
 def count_events(csv_out_path):
     count = 0

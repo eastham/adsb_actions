@@ -6,7 +6,6 @@ grouped by the airport list file's categories.
 """
 
 import json
-import math
 import os
 import re
 import shutil
@@ -14,10 +13,7 @@ from html import escape
 from pathlib import Path
 
 import generate_airport_config
-from batch_helpers import faa_to_icao
-
-NM_PER_DEG_LAT = 60.0
-NEAR_AIRPORT_RADIUS_NM = 5
+from batch_helpers import faa_to_icao, CSV_EVENT_MARKER
 
 # html/ directory at project root (two levels up from src/tools/)
 _HTML_DIR = Path(__file__).resolve().parent.parent.parent / "html"
@@ -32,34 +28,6 @@ def _render_template(template_name, replacements):
     return template_text
 
 
-def _fast_distance_nm(lat1, lon1, lat2, lon2):
-    """Fast approximate distance in nautical miles (equirectangular)."""
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    avg_lat = (lat1 + lat2) / 2.0
-    dlon_adjusted = dlon * math.cos(math.radians(avg_lat))
-    dist_deg = math.sqrt(dlat * dlat + dlon_adjusted * dlon_adjusted)
-    return dist_deg * NM_PER_DEG_LAT
-
-
-def _parse_event_fields(line):
-    """Extract (lat, lon, quality) from a CSV event line, or None on failure.
-
-    CSV fields after marker: timestamp,datestr,altdatestr,lat,lon,alt,
-    tail1,tail2,quality,...
-    """
-    marker = "CSV OUTPUT FOR POSTPROCESSING: "
-    idx = line.find(marker)
-    if idx < 0:
-        return None
-    csv_part = line[idx + len(marker):]
-    fields = csv_part.split(',')
-    if len(fields) < 9:
-        return None
-    try:
-        return float(fields[3]), float(fields[4]), fields[8]
-    except (ValueError, IndexError):
-        return None
 
 
 def _get_airport_name_region(icao):
@@ -126,16 +94,8 @@ def parse_airport_sections(filepath):
     return sections
 
 
-def collect_output_stats(icao_codes, base_dir, airport_info=None):
-    """Collect output statistics from generated per-airport files.
-
-    When airport_info is provided, only counts events within
-    NEAR_AIRPORT_RADIUS_NM of the airport. airport_info maps
-    ICAO -> (lat, lon, field_elev).
-
-    Returns dict mapping ICAO to {html_path, num_events, quality_data,
-    airport_name, airport_state}.
-    """
+def collect_output_stats(icao_codes, base_dir, airport_info=None):  # airport_info unused, kept for compat
+    """Collect output statistics from generated per-airport files."""
     output_stats = {}
     for icao in icao_codes:
         airport_dir = base_dir / icao
@@ -144,29 +104,25 @@ def collect_output_stats(icao_codes, base_dir, airport_info=None):
         quality_json = airport_dir / f"{icao}_quality.json"
 
         if html_path.exists():
-            num_events = 0
+            num_events = None   # events/day for table display (None = header absent)
+            raw_event_count = 0  # total events for summary totals
             if combined_csv.exists():
-                apt_lat, apt_lon = None, None
-                if airport_info and icao in airport_info:
-                    apt_lat, apt_lon, _ = airport_info[icao]
-
                 with open(combined_csv, 'r') as f:
                     for line in f:
-                        if line.startswith('#'):
-                            continue
-                        result = _parse_event_fields(line)
-                        if result is None:
-                            continue
-                        evt_lat, evt_lon, evt_quality = result
-                        # Skip low-quality events
-                        if evt_quality == 'low':
-                            continue
-                        # Filter by distance if airport location known
-                        if apt_lat is not None:
-                            if _fast_distance_nm(apt_lat, apt_lon,
-                                                 evt_lat, evt_lon) > NEAR_AIRPORT_RADIUS_NM:
-                                continue
-                        num_events += 1
+                        if not line.startswith('#'):
+                            break
+                        if line.startswith('# events_per_day = '):
+                            num_events = float(line.split('=')[1].strip())
+                        elif line.startswith('# total_events = '):
+                            raw_event_count = int(line.split('=')[1].strip())
+                if num_events is None:
+                    # Fallback for older files without header: count written events
+                    raw_event_count = 0
+                    with open(combined_csv, 'r') as f:
+                        for line in f:
+                            if CSV_EVENT_MARKER in line:
+                                raw_event_count += 1
+                    num_events = 0.0  # can't compute per-day without days_analyzed
 
             quality_data = None
             if quality_json.exists():
@@ -180,6 +136,7 @@ def collect_output_stats(icao_codes, base_dir, airport_info=None):
             output_stats[icao] = {
                 'html_path': html_path,
                 'num_events': num_events,
+                'raw_event_count': raw_event_count,
                 'quality_data': quality_data,
                 'airport_name': name,
                 'airport_state': state,
@@ -208,7 +165,7 @@ def print_visualization_summary(output_stats: dict):
         location_str = f" ({name}, {state})" if state else f" ({name})"
 
         print(f"\n{icao}{location_str}: {html_path}")
-        print(f"  LOS Events (within {NEAR_AIRPORT_RADIUS_NM}nm): {num_events}",
+        print(f"  LOS Events/day (med/high, 5nm): {num_events}",
               end="")
 
         if quality_data:
@@ -269,7 +226,7 @@ def _airport_row(icao, stats):
             f'<td>{escape(state)}</td>'
             f'<td data-sort="{num_events}"'
             f' style="text-align:right;font-variant-numeric:tabular-nums">'
-            f'{num_events}</td>'
+            f'{num_events:.1f}</td>'
             f'<td data-sort="{quality_sort}"'
             f' style="text-align:center">{quality_html}</td>'
             f'</tr>')
@@ -315,7 +272,7 @@ def generate_index_html(sections, output_stats, output_path):
               <th>Airport</th>
               <th>Name</th>
               <th>State</th>
-              <th style="text-align:right" title="Aircraft within .3nm and 400ft vertically, within 5nm of the airport, &#39;medium&#39; event quality or better">LOS Events</th>
+              <th style="text-align:right" title="Average LOS events per analyzed day: aircraft within .3nm and 400ft vertically, within 5nm of the airport, &#39;medium&#39; quality or better">Events/Day</th>
               <th style="text-align:center">Data Quality</th>
             </tr>
           </thead>
@@ -329,12 +286,12 @@ def generate_index_html(sections, output_stats, output_path):
 
     # Count totals
     total_airports = sum(len(codes) for _, codes in sections)
-    total_events = sum(s['num_events'] for s in output_stats.values())
+    total_events = sum(s['raw_event_count'] for s in output_stats.values())
     airports_with_data = len(output_stats)
 
     html = _render_template("index_template.html", {
         "airports_with_data": airports_with_data,
-        "total_events": total_events,
+        "total_events": f"{total_events:,}",
         "section_blocks": "\n".join(section_blocks),
     })
 
