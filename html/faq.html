@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FAQ - hotspots.aero</title>
+<title>FAQ</title>
+<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "b4e63e29656945479c5050399013db3f"}'></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -32,31 +33,65 @@
     margin-bottom: 16px;
   }
   p { color: #475569; margin: 16px 0; }
+  ul { color: #475569; margin: 12px 0 16px 24px; }
   a { color: #2563eb; text-decoration: none; font-weight: 500; }
   a:hover { text-decoration: underline; }
   .footer {
     margin-top: 48px; padding-top: 20px; border-top: 1px solid #e2e8f0;
-    font-size: 0.85rem; color: #94a3b8;
+    font-size: 0.85rem; color: #64748b;
   }
 </style>
 </head>
 <body>
 <nav class="navbar">
-  <a class="navbar-brand" href="index.html">hotspots.aero</a>
+  <a class="navbar-brand" href="index.html">Airborne Hotspots</a>
   <a href="methodology.html">Methodology</a>
   <a href="faq.html">FAQ</a>
   <a href="contact.html">Contact</a>
 </nav>
 <div class="container">
   <h1>Frequently Asked Questions</h1>
-  <h2>What interesting patterns have you found so far?</h2>
+  <h2>How is this data collected?</h2>
+  <p>This data is provided by <a href="http://adsb.lol">adsb.lol</a>, who collect it from volunteers who receive and share this data.
+  If you're interested in improving coverage near you, you can learn how to feed data to them <a href="https://www.adsb.lol/docs/get-started/introduction/">here.</a></p>
+  <h2>What is this data good for?</h2>
+  <p>Our hope is that this data is useful for two groups of people:</p>
   <ul>
-    <li><a href="examples/generated/KTCY/KTCY_map.html">Tracy, CA</a>: many events from aircraft attempting straight-in approaches for rwy 30 and 12, including against prevailing traffic. </li>
-    <li><a href="examples/generated/KDED/KDED_map.html">Deland, FL</a>: hotspot off the end of rwy 30 from users of a crossing runway</li>
+    <li><b>Pilots</b>: so that they can be aware of the locations and types of loss-of-separation events at airports they frequent</li>
+    <li><b>Also pilots</b>: seeing the (typically non-standard) procedures that lead to events is often eye-opening.
+    <li><b>Airport owners/managers/officials</b>: so that they can help educate pilots and design procedures that seek to avoid these events when possible</li>
+    <li><b>Special event operators:</b> ditto!</li>
   </ul>
-  <p>Content coming soon.</p>
+  <h2>Has this data ever been used successfully?</h2>
+  <p>Yes! Based on hotspots observed at 88NV in <a href="88NV-2022/88NV_map.html">2022</a>, recommended VFR procedures were adjusted, leading to a 
+    ~70% reduction in LOS events in the affected areas <a href="88NV-2023/88NV_map.html">2023</a>, <a href="88NV-2024/88NV_map.html">2024</a>, and <a href="88NV/88NV_map.html">2025</a>.
+  </p>
+  <h2>Why isn't my favorite airport available?</h2>
+  <p>Analyzing all this data is a big job, so initially only the busiest airports in the US are covered.
+  If you want to see an automated analysis for another airport, search for it, then you will be prompted to submit it for analysis.
+  If you are interested in a longer time-range and more detailed report, contact us.</p>
+  <h2>Is this useful for towered airports?</h2>
+  <p>This hasn't been the focus so far.  Plenty of operations that are common at
+    towered airports will show up in this analysis. 
+    If you have thoughts on this, get in touch.</p>
+  <h2>I see an event that is categorized incorrectly.</h2>
+  <p>This is almost certain to happen given the incomplete nature of the data. 
+    But if you see something that you think could be improved algorithmically, by all means get in touch.
+  </p>
+  <h2>The data is noisy.</h2>
+  <p>The data is collected by volunteers and they may not have good reception of the area 
+    that you're interested in.  See "How is this data collected?" above for how to improve it.
+  <h2>What interesting hotspots have you found so far?</h2>
+  <ul>
+    <li><a href="KTCY/KTCY_map.html">Tracy, CA</a>: many events from aircraft attempting straight-in approaches for rwy 30 and 12, including against prevailing traffic. </li>
+    <li><a href="E16/E16_map.html">San Martin, CA</a>: Nearby class C airspace creates a high-traffic corridor to the north</li>
+    <li><a href="KDED/KDED_map.html">Deland, FL</a>: hotspot off the end of rwy 30 from users of a crossing runway</li>
+    <li><a href="KHWV/KHWV_map.html">Shirley, NY</a>: shoreline sightseeing brings a lot of airplanes together</li> 
+    <li><a href="KDWA/KDWA_map.html">Davis, CA</a>: apparently-uncharted ag strip northwest of airport</li>
+  </ul>
   <div class="footer">
-    A service of forty-two ventures LLC
+    A service of forty-two ventures LLC &middot;
+    <a href="accessibility.html">Accessibility</a>
   </div>
 </div>
 </body>

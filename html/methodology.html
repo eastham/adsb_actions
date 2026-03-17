@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Methodology - hotspots.aero</title>
+<title>Methodology</title>
+<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "b4e63e29656945479c5050399013db3f"}'></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -32,26 +33,49 @@
     margin-bottom: 16px;
   }
   p { color: #475569; margin: 16px 0; }
+  ul { color: #475569; margin: 12px 0 16px 24px; }
   a { color: #2563eb; text-decoration: none; font-weight: 500; }
   a:hover { text-decoration: underline; }
   .footer {
     margin-top: 48px; padding-top: 20px; border-top: 1px solid #e2e8f0;
-    font-size: 0.85rem; color: #94a3b8;
+    font-size: 0.85rem; color: #64748b;
   }
 </style>
 </head>
 <body>
 <nav class="navbar">
-  <a class="navbar-brand" href="index.html">hotspots.aero</a>
+  <a class="navbar-brand" href="index.html">Airborne Hotspots</a>
   <a href="methodology.html">Methodology</a>
   <a href="faq.html">FAQ</a>
   <a href="contact.html">Contact</a>
 </nav>
 <div class="container">
   <h1>Methodology</h1>
-  <p>Content coming soon.</p>
+  <ul>
+    <li>Data is downloaded from <a href="http://adsb.lol">adsb.lol</a>'s <a href="https://github.com/adsblol">archive of historical location reports on github</a></li>
+
+    <li>Data is fed through <a href="https://github.com/eastham/adsb_actions">adsb-actions</a>, resampled at 1Hz, then nearby aircraft are identified with the following criteria:
+      <ul>
+        <li>Aircraft are within .3 nm and 400 ft vertically</li>
+        <li>Both aircraft are above 400 feet AGL and below 4000 feet AGL (using the airport elevation as a reference)</li>
+        <li>Data received from both aircraft in the past 5 seconds</li>
+        <li>Search is done within 10nm of the airport (shown by the blue ring)</li>
+      </ul>
+    </li>
+    <li>Each event is assigned a (very approximate) quality rating to help filter out likely false positives:
+      <ul>
+        <li><span style="color:#ff00ff;font-size:1.2em;">●</span> <b>Very High</b> – brief event (&le;30s) with good tracks, CPA closer than 0.2&nbsp;nm and 200&nbsp;ft vertically</li>
+        <li><span style="color:orange;font-size:1.2em;">●</span> <b>High</b> – brief event (&le;30s) with good tracks and sufficient real data</li>
+        <li><span style="color:#c8a800;font-size:1.2em;">●</span> <b>Medium</b> – event lasted 30–60s (possible formation flight), a helicopter was involved, or data was sparse (&lt;75% real reports) during the event</li>
+        <li><span style="color:green;font-size:1.2em;">●</span> <b>Low</b> – event lasted over 60s (probable formation flight or parallel ops), OR one aircraft had less than 60s of track data, no valid data exists near the closest point of approach, OR implausibly large position jumps were detected in the track</li>
+      </ul>
+      Only Medium quality and above events, within 5nm of the airport, are included in the event counts on the home page.
+    </li>  </ul>
+
+    <p>Source code is available at <a href="https://github.com/eastham/adsb_actions">github</a>.</p>
   <div class="footer">
-    A service of forty-two ventures LLC
+    A service of forty-two ventures LLC &middot;
+    <a href="accessibility.html">Accessibility</a>
   </div>
 </div>
 </body>

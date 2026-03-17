@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Airport Not Available</title>
+<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "b4e63e29656945479c5050399013db3f"}'></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -43,9 +44,7 @@
   <div class="icao" id="airport-id"></div>
   <p>Analysis data for this airport is not currently available.</p>
 
-  <!-- Netlify detects this form at deploy time (data-netlify="true") -->
-  <form name="airport-request" method="POST" data-netlify="true"
-        style="display:inline" id="request-form">
+  <form style="display:inline" id="request-form">
     <input type="hidden" name="airport" id="airport-field">
     <button type="submit" class="btn" id="request-btn">
       Request Analysis
@@ -69,15 +68,15 @@ document.getElementById('request-form').addEventListener('submit', function(e) {
   btn.disabled = true;
   btn.textContent = 'Submitting...';
 
-  var body = 'form-name=airport-request&airport=' + encodeURIComponent(airportId);
-  fetch('/', {
+  var body = 'airport=' + encodeURIComponent(airportId);
+  fetch('https://request-api.hotspotsaero.workers.dev/request', {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
     body: body
   }).then(function(resp) {
     if (resp.ok) {
       msg.className = 'msg success';
-      msg.textContent = 'Analysis requested for ' + airportId + '.';
+      msg.textContent = 'Analysis requested for ' + airportId + '.  It should be available within 24 hours.  Please note that we are only processing airports in the continental US right now.';
       btn.textContent = 'Requested';
     } else {
       throw new Error('Server returned ' + resp.status);

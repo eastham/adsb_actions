@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ADS-B Loss of Separation Analysis</title>
+<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "b4e63e29656945479c5050399013db3f"}'></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -53,7 +54,7 @@
     font-size: 1.6rem; font-weight: 700; color: #0f172a;
     font-variant-numeric: tabular-nums;
   }
-  .stat-label { font-size: 0.8rem; color: #94a3b8; text-transform: uppercase;
+  .stat-label { font-size: 0.8rem; color: #64748b; text-transform: uppercase;
                 letter-spacing: 0.05em; }
   .section { margin-bottom: 12px; }
   .section-toggle {
@@ -66,13 +67,13 @@
   .section-toggle:hover { background: #f1f5f9;
     box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
   .toggle-icon {
-    font-size: 0.75rem; color: #94a3b8; transition: transform 0.2s;
+    font-size: 0.75rem; color: #64748b; transition: transform 0.2s;
     display: inline-block; width: 16px;
   }
   .toggle-icon.open { transform: rotate(90deg); }
   .section-title { font-weight: 600; color: #1e293b; flex: 1; }
   .section-count {
-    font-size: 0.85rem; color: #94a3b8; white-space: nowrap;
+    font-size: 0.85rem; color: #64748b; white-space: nowrap;
   }
   .section-content {
     margin-top: 4px; padding: 0 4px;
@@ -110,7 +111,7 @@
   a:hover { text-decoration: underline; }
   .footer {
     margin-top: 48px; padding-top: 20px; border-top: 1px solid #e2e8f0;
-    font-size: 0.85rem; color: #94a3b8;
+    font-size: 0.85rem; color: #64748b;
   }
   /* Search box */
   .search-bar {
@@ -139,7 +140,7 @@
     cursor: pointer; user-select: none;
   }
   table.sortable thead th:after {
-    content: " \25B4\25BE"; font-size: 2em; color: #c0c8d0;
+    content: " \25B4\25BE"; font-size: 2em; color: #64748b;
     margin-left: 4px;
   }
   table.sortable thead th[aria-sort="ascending"]:after {
@@ -150,25 +151,61 @@
   }
   /* Tooltip for th[title] */
   thead th[title] {
-    text-decoration: underline dotted #94a3b8;
+    text-decoration: underline dotted #64748b;
     text-underline-offset: 3px;
   }
+  /* Disclaimer modal */
+  #disclaimer-overlay {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,0.5); align-items: center; justify-content: center;
+  }
+  #disclaimer-overlay.active { display: flex; }
+  #disclaimer-box {
+    background: #fff; border-radius: 12px; padding: 32px 36px;
+    max-width: 520px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  }
+  #disclaimer-box h2 {
+    font-size: 1.2rem; font-weight: 700; color: #0f172a; margin-bottom: 16px;
+  }
+  #disclaimer-box p {
+    font-size: 0.95rem; color: #475569; margin-bottom: 12px; line-height: 1.6;
+  }
+  #disclaimer-box button {
+    margin-top: 8px; padding: 10px 28px; font-size: 0.95rem; font-weight: 600;
+    color: #fff; background: #2563eb; border: none; border-radius: 6px;
+    cursor: pointer; display: block; margin-left: auto;
+  }
+  #disclaimer-box button:hover { background: #1d4ed8; }
 </style>
 <script src="https://cdn.jsdelivr.net/gh/tofsjonas/sortable@3.2.3/sortable.min.js"></script>
 </head>
 <body>
 <nav class="navbar">
-  <a class="navbar-brand" href="index.html">hotspots.aero</a>
+  <a class="navbar-brand" href="index.html">Airborne Hotspots</a>
   <a href="methodology.html">Methodology</a>
   <a href="faq.html">FAQ</a>
   <a href="contact.html">Contact</a>
 </nav>
+<div id="disclaimer-overlay">
+  <div id="disclaimer-box">
+    <h2>Disclaimer</h2>
+    <p><strong>This information is experimental and incomplete.  Not for operational use.</strong> </p>
+    <p>
+This site is a work in progress and may contain errors, omissions, or misclassified events. 
+All information is provided for educational and situational awareness purposes only, and is not approved for operational use. 
+False positive and false negative events are certainly present, and no judgement is made against the pilots of any aircraft found here.
+Official aeronautical publications and NOTAMs remain your authoritative sources for flight planning and operations. 
+Use of this site is entirely at your own risk, and the authors make no warranties, express or implied, regarding the accuracy or completeness of the data presented.</p>
+    <button onclick="acceptDisclaimer()">I understand and agree</button>
+  </div>
+</div>
 <div class="container">
-  <h1>hotspots.aero: Crowdsourced ADS-B Hazard Analysis for Untowered Airports</h1>
+  <h1 align="center">ADS-B Hazard Analysis for Untowered Airports</h1>
   <!--<p class="tagline">Two airplanes near each other = bad!  Sometimes!</p>-->
 
-
-
+   <p align="center"><b>For pilots:</b> be aware of airborne hotspots -- <b>For airport managers:</b> inform your procedures & outreach</p>
+  <br/>
+  <img src="hotspot.png" style="width: 100%" alt="Heatmap showing airborne near-collision hotspots at untowered airports across the US">
   <div class="stats-bar">
     <div class="stat-item">
       <div class="stat-value"><!--BEGIN:airports_with_data-->127<!--END:airports_with_data--></div>
@@ -179,23 +216,11 @@
       <div class="stat-label">Loss-of-Separation Events</div>
     </div>
     <div class="stat-item">
-      <div class="stat-value">7.2 Billion</div>
+      <div class="stat-value">14.4 billion</div>
       <div class="stat-label">Crowdsourced data points analyzed</div>
     </div>
   </div>
 
-
-  <div class="description">
-    <p>Thanks to the fine folks at <a href="https://adsb.lol">adsb.lol</a>, high-resolution historical ADS-B data is
-    now available for research and analysis.  Here I have analyzed US data for
-    June-August 2025 to find places where airplanes tend to come close to each other.
-    My hope is that this can increase pilot awareness, and give airport managers more data when designing their recommended procedures.</p>
-
-    <p>Of course, not every event like this represents a safety issue.  Common benign scenarios:</p>
-    <p align="center"><b>Formation flights -- Parallel runways -- Helicopters operating opposite a fixed-wing pattern -- Noisy ADS-B data</b></p>
-
-    <p><a href="methodology.html">More about my methodology here</a></p>
-  </div>
 
 
   <div class="search-bar">
@@ -218,7 +243,7 @@
               <th>Airport</th>
               <th>Name</th>
               <th>State</th>
-              <th style="text-align:right" title="Aircraft within .3nm and 400ft vertically, within 5nm of the airport, &#39;medium&#39; event quality or better">LOS Events</th>
+              <th style="text-align:right" title="Aircraft within .3nm and 400ft vertically, within 5nm of the airport, &#39;medium&#39; event quality or better">Nearby Events</th>
               <th style="text-align:center">Data Quality</th>
             </tr>
           </thead>
@@ -232,8 +257,22 @@
     </div>
 <!--END:section_blocks-->
 
+<br/><br/>
+
+  <div class="description">
+    <p>Thanks to the fine folks at <a href="https://adsb.lol">adsb.lol</a>, global, high-resolution, historical ADS-B data is
+    now available for research and analysis.  This site provides an analysis of where airplanes are getting close together at your 
+    favorite airports, in the hopes that it will be useful to improve awareness and safety.
+
+    <p>Of course, not every event like this represents a safety issue.  Common benign scenarios:</p>
+    <p align="center"><b>Formation flights -- Parallel runways -- Helicopters operating opposite a fixed-wing pattern -- Noisy ADS-B data</b></p>
+    Analysis by local pilots will also be helpful to fully understand the data.
+    <p>More airports and regions outside the US will be added upon request. <a href="faq.html">FAQ</a> --  <a href="methodology.html">More about our methodology here</a></p>
+  </div>
+
   <div class="footer">
-    A service of forty-two ventures LLC
+    A service of forty-two ventures LLC &middot;
+    <a href="accessibility.html">Accessibility</a>
   </div>
 </div>
 <script>
@@ -249,18 +288,39 @@ function toggleSection(id) {
   }
 }
 
+// Pending URL to navigate to after disclaimer is accepted
+var _pendingUrl = null;
+
+function maybeNavigate(url) {
+  if (sessionStorage.getItem('disclaimerShown')) {
+    window.open(url, '_blank');
+  } else {
+    _pendingUrl = url;
+    document.getElementById('disclaimer-overlay').classList.add('active');
+  }
+}
+
+function acceptDisclaimer() {
+  sessionStorage.setItem('disclaimerShown', '1');
+  document.getElementById('disclaimer-overlay').classList.remove('active');
+  if (_pendingUrl) {
+    window.open(_pendingUrl, '_blank');
+    _pendingUrl = null;
+  }
+}
+
 function searchAirport() {
   var raw = document.getElementById('airport-search').value.trim().toUpperCase();
   if (!raw) return;
   // Normalize to ICAO: prepend K for 3-letter US identifiers
   var icao = raw;
-  if (/^[A-Z]{3}$/.test(raw) || /^[A-Z][0-9][A-Z0-9]$/.test(raw)) {
+  if (/^[A-Z]{3}$/.test(raw)) {
     icao = 'K' + raw;
   }
   var url = icao + '/' + icao + '_map.html';
   fetch(url, {method: 'HEAD'}).then(function(resp) {
     if (resp.ok) {
-      window.open(url, '_blank');
+      maybeNavigate(url);
     } else {
       window.location.href = 'unavailable.html?id=' + encodeURIComponent(icao);
     }
@@ -272,6 +332,14 @@ function searchAirport() {
 // Allow Enter key in search box
 document.getElementById('airport-search').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') searchAirport();
+});
+
+// Intercept airport table links to go through disclaimer check
+document.addEventListener('click', function(e) {
+  var a = e.target.closest('tbody a[href]');
+  if (!a) return;
+  e.preventDefault();
+  maybeNavigate(a.href);
 });
 </script>
 </body>
