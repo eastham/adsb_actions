@@ -315,6 +315,16 @@ def _generate_unavailable_html(output_path):
     shutil.copy2(_HTML_DIR / "unavailable_template.html", output_path)
 
 
+def discover_airports(base_dir):
+    """Return list of ICAO codes for airport subdirs that have a map HTML file."""
+    base = Path(base_dir)
+    found = []
+    for d in sorted(base.iterdir()):
+        if d.is_dir() and (d / f"{d.name}_map.html").exists():
+            found.append(d.name)
+    return found
+
+
 def generate_batch_outputs(output_stats, base_dir, airport_list_file):
     """Main entry point: print console summary and generate HTML index.
 
@@ -330,3 +340,49 @@ def generate_batch_outputs(output_stats, base_dir, airport_list_file):
         sections = [("Airports", list(output_stats.keys()))]
 
     generate_index_html(sections, output_stats, Path(base_dir) / "index.html")
+
+
+def main():
+    import argparse
+    import sys
+
+    # Allow running directly from project root or src/tools/
+    script_dir = Path(__file__).resolve().parent
+    if str(script_dir) not in sys.path:
+        sys.path.insert(0, str(script_dir))
+
+    project_root = script_dir.parent.parent
+    default_generated = project_root / "examples" / "generated"
+
+    parser = argparse.ArgumentParser(
+        description="Generate HTML index from on-disk LOS results in examples/generated/")
+    parser.add_argument("--output-dir", default=str(default_generated),
+                        help="Directory containing per-airport subdirs (default: examples/generated)")
+    parser.add_argument("--airport-list", default=None,
+                        help="Optional airport list file with section headers for grouping")
+    args = parser.parse_args()
+
+    base_dir = Path(args.output_dir)
+    icao_codes = discover_airports(base_dir)
+    if not icao_codes:
+        print(f"No airport data found in {base_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Found {len(icao_codes)} airports with data in {base_dir}")
+    output_stats = collect_output_stats(icao_codes, base_dir)
+
+    airport_list = args.airport_list or ""
+    if os.path.isfile(airport_list):
+        sections = parse_airport_sections(airport_list)
+        # Add any on-disk airports not covered by the list
+        listed = {icao for _, codes in sections for icao in codes}
+        unlisted = [icao for icao in icao_codes if icao not in listed]
+        if unlisted:
+            sections.append(("Other", unlisted))
+        generate_index_html(sections, output_stats, base_dir / "index.html")
+    else:
+        generate_batch_outputs(output_stats, base_dir, airport_list)
+
+
+if __name__ == "__main__":
+    main()
