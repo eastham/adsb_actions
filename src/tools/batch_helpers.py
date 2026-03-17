@@ -300,12 +300,14 @@ def estimate_download_size(dates: list[datetime], data_dir: Path,
     uncached = []
 
     for date in dates:
+        date_compact = date.strftime('%m%d%y')
+        conus_gz = data_dir / f"{GZ_FINAL_PREFIX}{date_compact}.gz"
         date_iso = date.strftime('%Y.%m.%d')
         file_prefix = f"v{date_iso}-planes-readsb-prod-0"
         tar_aa = data_dir / f"{file_prefix}.tar.aa"
         tar_ab = data_dir / f"{file_prefix}.tar.ab"
 
-        if tar_aa.exists() and tar_ab.exists():
+        if conus_gz.exists() or (tar_aa.exists() and tar_ab.exists()):
             cached.append(date)
         else:
             uncached.append(date)
