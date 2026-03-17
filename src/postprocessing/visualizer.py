@@ -621,6 +621,32 @@ class MapVisualizer:
             high_quality_count = sum(1 for q in self.qualities if q in ['high', 'vhigh'])
             print(f"Native heatmap enabled with {high_quality_count} high+vhigh quality points (of {len(self.points)} total, updates on hide)")
 
+        # If no LOS events, add a notice to the upper-right box
+        if not self.points:
+            label_js = '<br><span style="font-size:10px;">Dates evaluated: ' + heatmap_label + '</span>' if heatmap_label else ''
+            no_events_html = """
+            <script>
+                setTimeout(function() {
+                    var box = document.getElementById('opacity-controls-box');
+                    if (!box) {
+                        box = document.createElement('div');
+                        box.id = 'opacity-controls-box';
+                        box.style.cssText = 'position: fixed; top: 10px; right: 10px; width: 250px; background-color: white; border: 2px solid grey; z-index: 9999; padding: 10px; border-radius: 5px; box-shadow: 2px 2px 6px rgba(0,0,0,0.3);';
+                        document.body.appendChild(box);
+                    }
+                    if (box.children.length > 0) {
+                        var hr = document.createElement('hr');
+                        hr.style.cssText = 'margin: 8px 0; border: none; border-top: 1px solid #ccc;';
+                        box.appendChild(hr);
+                    }
+                    var msg = document.createElement('div');
+                    msg.innerHTML = '<span style="font-weight:bold;font-size:12px;">No LOS events detected</span>""" + label_js + """';
+                    box.appendChild(msg);
+                }, 1000);
+            </script>
+            """
+            m.get_root().html.add_child(folium.Element(no_events_html))
+
         # Add busyness chart panel if data is available
         if busyness_data:
             m.get_root().html.add_child(folium.Element(build_busyness_html(busyness_data)))
