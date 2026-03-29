@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-qa_cdn.py - QA check for the live airbornehotspots.com CDN.
+qa_cdn.py - QA check for the live airbornehotspots.org CDN.
 
 Two-pass check:
   Source A: Every airport listed in the live index.html is fully validated.
@@ -27,7 +27,7 @@ import yaml
 sys.path.insert(0, "src/tools")
 from batch_helpers import faa_to_icao
 
-BASE_URL = "https://airbornehotspots.com"
+BASE_URL = "https://airbornehotspots.org"
 DEFAULT_MANIFEST = "airport_lists/site_manifest.yaml"
 DEFAULT_SAMPLE_PCT = 20
 DEFAULT_SAMPLE_EVENTS = 20
@@ -174,7 +174,7 @@ def check_airport(icao, sample_events, verbose):
 def main():
     global BASE_URL
     parser = argparse.ArgumentParser(
-        description="QA check for the live airbornehotspots.com CDN.")
+        description="QA check for the live airbornehotspots.org CDN.")
     parser.add_argument("--base-url", default=BASE_URL,
                         help=f"CDN base URL (default: {BASE_URL})")
     parser.add_argument("--manifest", default=DEFAULT_MANIFEST,

@@ -103,8 +103,14 @@ if __name__ == "__main__":
         else:
             raw_codes = [a.strip() for a in args.airports.split(',')]
         airport_codes = [faa_to_icao(code) for code in raw_codes]
+        failed = []
         for icao in airport_codes:
-            airport_info[icao] = load_airport_info(icao)
+            try:
+                airport_info[icao] = load_airport_info(icao)
+            except Exception as e:
+                print(f"WARNING: Failed to load info for {icao}, skipping: {e}")
+                failed.append(icao)
+        airport_codes = [c for c in airport_codes if c not in failed]
 
     # Phase 1: Ensure global files exist (sequential — involves downloading)
     for date in dates:
@@ -147,7 +153,7 @@ if __name__ == "__main__":
                              airport_codes, airport_info, args.force_shard))
 
     if extract_args:
-        num_workers = min(multiprocessing.cpu_count(), len(extract_args))
+        num_workers = min(5, multiprocessing.cpu_count(), len(extract_args))
         print(f"Extracting CONUS data for {len(extract_args)} dates "
               f"using {num_workers} workers...")
 
