@@ -42,7 +42,7 @@
 <div class="container">
   <h1>Airport Not Available</h1>
   <div class="icao" id="airport-id"></div>
-  <p>Analysis data for this airport is not currently available.</p>
+  <p>Analysis data for this airport is not currently available.  Please note: we currently cover airports in the continental US. International coverage is planned for the future.</p>
 
   <form style="display:inline" id="request-form">
     <input type="hidden" name="airport" id="airport-field">
@@ -76,7 +76,7 @@ document.getElementById('request-form').addEventListener('submit', function(e) {
   }).then(function(resp) {
     if (resp.ok) {
       msg.className = 'msg success';
-      msg.textContent = 'Analysis requested for ' + airportId + '.  It should be available within 24 hours.  Please note that we are only processing airports in the continental US right now.';
+      msg.textContent = 'Analysis requested for ' + airportId + '.  It should be available within 24-48 hours.  Please note: we currently cover airports in the continental US. International coverage is planned for the future.';
       btn.textContent = 'Requested';
     } else {
       throw new Error('Server returned ' + resp.status);

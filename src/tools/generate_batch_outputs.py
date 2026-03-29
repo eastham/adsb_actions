@@ -220,13 +220,15 @@ def _airport_row(icao, stats):
         quality_html = _quality_badge(score)
         quality_sort = {'green': 3, 'yellow': 2, 'red': 1}.get(score, 0)
 
+    events_display = f'{num_events:.1f}' if num_events is not None else '—'
+    events_sort = num_events if num_events is not None else -1
     return (f'<tr>'
             f'<td><a href="{escape(link)}" target="_blank">{escape(icao)}</a></td>'
             f'<td>{escape(name)}</td>'
             f'<td>{escape(state)}</td>'
-            f'<td data-sort="{num_events}"'
+            f'<td data-sort="{events_sort}"'
             f' style="text-align:right;font-variant-numeric:tabular-nums">'
-            f'{num_events:.1f}</td>'
+            f'{events_display}</td>'
             f'<td data-sort="{quality_sort}"'
             f' style="text-align:center">{quality_html}</td>'
             f'</tr>')
@@ -246,7 +248,7 @@ def generate_index_html(sections, output_stats, output_path):
             s = output_stats.get(icao)
             if s is None:
                 return (-1, icao)
-            return (s['num_events'], icao)
+            return (s['num_events'] or -1, icao)
 
         sorted_codes = sorted(icao_codes, key=sort_key, reverse=True)
 
@@ -263,7 +265,7 @@ def generate_index_html(sections, output_stats, output_path):
       <button class="section-toggle" onclick="toggleSection('section-{idx}')">
         <span class="toggle-icon" id="icon-section-{idx}">&#9654;</span>
         <span class="section-title">{escape(title)}</span>
-        <span class="section-count">{with_data} of {len(icao_codes)} airports</span>
+        <span class="section-count">{with_data} airports</span>
       </button>
       <div class="section-content" id="section-{idx}" style="display:none">
         <table class="sortable">
@@ -374,11 +376,6 @@ def main():
     airport_list = args.airport_list or ""
     if os.path.isfile(airport_list):
         sections = parse_airport_sections(airport_list)
-        # Add any on-disk airports not covered by the list
-        listed = {icao for _, codes in sections for icao in codes}
-        unlisted = [icao for icao in icao_codes if icao not in listed]
-        if unlisted:
-            sections.append(("Other", unlisted))
         generate_index_html(sections, output_stats, base_dir / "index.html")
     else:
         generate_batch_outputs(output_stats, base_dir, airport_list)

@@ -661,7 +661,7 @@ class MapVisualizer:
 
         # Add <title>, lang="en", and mobile CSS for accessibility/ADA compliance.
         # Folium doesn't expose the <html> tag directly, so we render to string and patch.
-        page_title = f"{airport_name} – Airborne Hotspots" if airport_name else "Airborne Hotspots"
+        page_title = f"{airport_name} – airbornehotspots.org" if airport_name else "airbornehotspots.org"
         m.get_root().header.add_child(folium.Element(
             f"<title>{page_title}</title>\n"
             "<style>\n"

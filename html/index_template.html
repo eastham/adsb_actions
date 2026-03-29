@@ -181,10 +181,10 @@
 </head>
 <body>
 <nav class="navbar">
-  <a class="navbar-brand" href="index.html">Airborne Hotspots</a>
-  <a href="methodology.html">Methodology</a>
+  <a class="navbar-brand" href="index.html">airbornehotspots.org</a>
   <a href="faq.html">FAQ</a>
-  <a href="contact.html">Contact</a>
+  <a href="methodology.html">Methodology</a>
+  <a href="contact.html">About / Contact</a>
 </nav>
 <div id="disclaimer-overlay">
   <div id="disclaimer-box">
@@ -196,14 +196,14 @@ All information is provided for educational and situational awareness purposes o
 False positive and false negative events are certainly present, and no judgement is made against the pilots of any aircraft found here.
 Official aeronautical publications and NOTAMs remain your authoritative sources for flight planning and operations. 
 Use of this site is entirely at your own risk, and the authors make no warranties, express or implied, regarding the accuracy or completeness of the data presented.</p>
-    <button onclick="acceptDisclaimer()">I understand and agree</button>
+    <button onclick="acceptDisclaimer()" autofocus>I understand and agree</button>
   </div>
 </div>
 <div class="container">
-  <h1 align="center">ADS-B Hazard Analysis for Untowered Airports</h1>
+  <h1 align="center">ADS-B Safety Analysis for Untowered Airports</h1>
   <!--<p class="tagline">Two airplanes near each other = bad!  Sometimes!</p>-->
 
-   <p align="center"><b>For pilots:</b> be aware of airborne hotspots -- <b>For airport managers:</b> inform your procedures & outreach</p>
+   <p align="center"><b>For pilots:</b> be aware of airborne hotspots — <b>For airport managers:</b> inform your procedures & outreach</p>
   <br/>
   <img src="hotspot.png" style="width: 100%" alt="Heatmap showing airborne near-collision hotspots at untowered airports across the US">
   <div class="stats-bar">
@@ -217,7 +217,7 @@ Use of this site is entirely at your own risk, and the authors make no warrantie
     </div>
     <div class="stat-item">
       <div class="stat-value">14.4 billion</div>
-      <div class="stat-label">Crowdsourced data points analyzed</div>
+      <div class="stat-label">crowdsourced data points analyzed</div>
     </div>
   </div>
 
@@ -265,13 +265,13 @@ Use of this site is entirely at your own risk, and the authors make no warrantie
     favorite airports, in the hopes that it will be useful to improve awareness and safety.
 
     <p>Of course, not every event like this represents a safety issue.  Common benign scenarios:</p>
-    <p align="center"><b>Formation flights -- Parallel runways -- Helicopters operating opposite a fixed-wing pattern -- Noisy ADS-B data</b></p>
+    <p align="center"><b>Formation flights — Parallel runways — Helicopters operating opposite a fixed-wing pattern — Noisy ADS-B data</b></p>
     Analysis by local pilots will also be helpful to fully understand the data.
     <p>More airports and regions outside the US will be added upon request. <a href="faq.html">FAQ</a> --  <a href="methodology.html">More about our methodology here</a></p>
   </div>
 
   <div class="footer">
-    A service of forty-two ventures LLC &middot;
+    A service of 6061 Ventures LLC &middot;
     <a href="accessibility.html">Accessibility</a>
   </div>
 </div>
@@ -297,6 +297,7 @@ function maybeNavigate(url) {
   } else {
     _pendingUrl = url;
     document.getElementById('disclaimer-overlay').classList.add('active');
+    document.querySelector('#disclaimer-box button').focus();
   }
 }
 

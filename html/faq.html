@@ -44,54 +44,97 @@
 </head>
 <body>
 <nav class="navbar">
-  <a class="navbar-brand" href="index.html">Airborne Hotspots</a>
-  <a href="methodology.html">Methodology</a>
+  <a class="navbar-brand" href="index.html">airbornehotspots.org</a>
   <a href="faq.html">FAQ</a>
-  <a href="contact.html">Contact</a>
+  <a href="methodology.html">Methodology</a>
+  <a href="contact.html">About / Contact</a>
 </nav>
 <div class="container">
   <h1>Frequently Asked Questions</h1>
-  <h2>Where is this data coming from?</h2>
-  <p>This data is provided by <a href="http://adsb.lol">adsb.lol</a>, who collect it from volunteers who receive ADS-B data and share it back.
-  If you're interested in improving coverage near you, you can learn how to feed data to them <a href="https://www.adsb.lol/docs/get-started/introduction/">here.</a></p>
   <h2>What is this data good for?</h2>
-  <p>While ADS-B is not yet 100% installed, and not every ADS-B track will be in our database, it may still be useful to highlight higher-risk areas. Our hope is that this data is useful for four groups of people:</p>
+  <p>While ADS-B is not yet installed in every airplane, and not every ADS-B track will be in our database, higher-risk areas may still be detectable with enough data. Our hope is that the results are useful for three groups of people:</p>
   <ul>
-    <li><b>Pilots</b>: so that they can be aware of the locations and types of loss-of-separation events at airports they frequent</li>
-    <li><b>Also pilots</b>: seeing the (typically non-standard) procedures that lead to events is often eye-opening.
+    <li><b>Pilots</b>:
+      <ul style="margin: 0; padding-left: 1.5em;">
+        <li>So that they can be aware of the locations of loss-of-separation (LOS) hotspots, and busy areas in general, at airports they frequent</li>
+        <li>Seeing the (typically non-standard) procedures that lead to LOS events is often educational.</li>
+      </ul>
     <li><b>Airport owners/managers/officials</b>: so that they can help educate pilots and design procedures that seek to avoid these events when possible</li>
     <li><b>Special event operators:</b> ditto!</li>
   </ul>
-  <h2>Has this data ever been used successfully?</h2>
-  <p>Yes! Based on hotspots observed at 88NV in <a href="88NV-2022/88NV_map.html">2022</a>, recommended VFR procedures were adjusted, leading to a 
-    ~70% reduction in LOS events in the affected areas <a href="88NV-2023/88NV_map.html">2023</a>, <a href="88NV-2024/88NV_map.html">2024</a>, and <a href="88NV/88NV_map.html">2025</a>.
-  </p>
-  <h2>Why isn't my favorite airport available?</h2>
-  <p>Analyzing all this data is a big job, so initially only the busiest airports in the US are covered.
-  If you want to see an automated analysis for another airport, search for it, then you will be prompted to submit it for analysis.
-  If you are interested in a longer time-range and more detailed report, <a href="https://airbornehotspots.com/contact.html">contact us</a>.</p>
-  <h2>Is this useful for towered airports?</h2>
-  <p>This hasn't been the focus so far.  Plenty of operations that are common at
-    towered airports will show up in this analysis. 
-    If you have thoughts on this, <a href="https://airbornehotspots.com/contact.html">get in touch</a>.</p>
-  <h2>I see an event that is categorized incorrectly.</h2>
-  <p>This is almost certain to happen given the incomplete nature of the data. 
-    But if you see something that you think could be improved algorithmically, by all means <a href="https://airbornehotspots.com/contact.html">get in touch</a>.
-  </p>
-  <h2>The data is noisy.</h2>
-  <p>The data is collected by volunteers and they may not have good reception of the area 
-    that you're interested in.  See "How is this data collected?" above for how to improve it.
+
   <h2>What interesting hotspots have you found so far?</h2>
   <ul>
-    <li><a href="KTCY/KTCY_map.html">Tracy, CA</a>: many events from aircraft attempting straight-in approaches for rwy 30 and 12, including against prevailing traffic. </li>
-    <li><a href="E16/E16_map.html">San Martin, CA</a>: Nearby class C airspace creates a high-traffic corridor to the north</li>
-    <li><a href="KDED/KDED_map.html">Deland, FL</a>: hotspot off the end of rwy 30 from users of a crossing runway</li>
-    <li><a href="KHWV/KHWV_map.html">Shirley, NY</a>: shoreline sightseeing brings a lot of airplanes together</li> 
-    <li><a href="KDWA/KDWA_map.html">Davis, CA</a>: apparently-uncharted ag strip northwest of airport</li>
-    If you see something interesting, please <a href="https://airbornehotspots.com/contact.html">contact us</a> to have it added to the list!
+    <li><a href="26N/26N_map.html" target="hotspot">Ocean City, NJ</a>: Lots of shoreline sightseeing in this area, and lots of head-on events</li>
+    <li><a href="E16/E16_map.html" target="hotspot">San Martin, CA</a>: Nearby class C airspace creates a high-traffic hotspot corridor to the north</li>
+    <li><a href="KWVI/KWVI_map.html" target="hotspot">Watsonville, CA</a>: Helicopter power-line work just to the east of the airport.  Would it have been prudent for pilots to know about this?</li>
+    <li><a href="KCCB/KCCB_map.html" target="hotspot">Upland, CA</a>: Very compressed pattern due to airspace seems to cause many events here </li>
+    <li><a href="KTCY/KTCY_map.html" target="hotspot">Tracy, CA</a>: Numerous events northwest of the airport from aircraft attempting opposite-direction straight-in approaches. </li>
+    <li><a href="KEUL/KEUL_map.html" target="hotspot">Caldwell, ID</a>: Helicopter training using the opposite pattern trigger a ton of events (not necessarily unsafe) </li>
+    <li><a href="KDED/KDED_map.html" target="hotspot">Deland, FL</a>: Hotspot off the end of rwy 30 from users of a crossing runway</li>
+    <li><a href="KHWV/KHWV_map.html" target="hotspot">Shirley, NY</a>: Beach traffic strikes again</li>
+    <li><a href="KLGA/KLGA_map.html" target="hotspot">New York, NY</a>: Lots of helicopter excitement over the Hudson river</li>
+    <li><a href="KDWA/KDWA_map.html" target="hotspot">Davis, CA</a>: Apparently-uncharted ag strip northwest of airport</li>
+    <li><b>If you see something interesting,</b> please <a href="https://airbornehotspots.org/contact.html">contact us</a> to have it added to the list!</li>
   </ul>
+  <h2>Has this data ever been used successfully?</h2>
+  <p>Yes! Based on hotspots observed at the temporary airport 88NV in <a href="88NV-2022/88NV_map.html">2022</a>, and after consultation with ATC, the recommended VFR procedures were adjusted, leading to a 
+    ~70% reduction in LOS events in the affected areas in <a href="88NV-2023/88NV_map.html">2023</a>, <a href="88NV-2024/88NV_map.html">2024</a>, and <a href="88NV/88NV_map.html">2025</a>.
+  </p>
+  <h2>How are you classifying events as Loss Of Separation (LOS)?</h2>
+  <p>It is an arbitrary choice, balancing having too many events to process (and that won't crash people's web browsers) versus too few to see geographic patterns.  See the <a href="methodology.html">Methodology</a> page.</p>
+
+  <h2>Are LOS events necessarily unsafe?</h2>
+  <p>Absolutely not.  Some are normal (e.g. simultaneous operations to parallel runways.) The connection with safety is not established, and may be hard to establish given the rarity of midair collisions.  The idea here is to find areas and types of operation where pilots and airport operators may want to exercise more caution.</p>
+
+  <h2>Is an airport with a high LOS/day count unsafe?</h2>
+  <p>Not necessarily.  See the previous question.</p>
+
+  <h2>I see a certain tail number showing up frequently.  Is that airplane being operated unsafely?</h2>
+  <p>Not necessarily.  Some aircraft fly a lot more than others, so they may naturally be over-represented.  Also, some types of operation (especially training in the landing pattern) will expose the aircraft to more LOS events. </p>
+
+  <h2>Where is the raw data coming from?</h2>
+  <p>The raw data is provided by <a href="http://adsb.lol">adsb.lol</a>, who collect it from volunteers who receive ADS-B data and share it with them.
+  If you're interested in improving coverage near you, you can learn how to feed data to them <a href="https://www.adsb.lol/docs/get-started/introduction/">here.</a></p>
+
+  <h2>Why isn't my favorite airport available?</h2>
+  <p>Analyzing all this data is a big job, so initially only the 1000 or so busiest airports in the US are covered.
+  If you want to see an automated analysis for another airport, search for it, then you will be prompted to submit it for analysis.
+  If you are interested in a longer time-range and more detailed report, <a href="https://airbornehotspots.org/contact.html">contact us</a>.</p>
+
+  <h2>Is this useful for towered airports?</h2>
+  <p>That hasn't been the focus so far.  Plenty of operations that are common at
+    towered airports will show up in this analysis.  Also, towered airports frequently have parallel runways, which generate a lot of false positives in the current algorithm.
+    If you have thoughts on this, <a href="https://airbornehotspots.org/contact.html">get in touch</a>.</p>
+
+    <h2>I see an event that is categorized incorrectly.</h2>
+  <p>This is almost certain to happen given the incomplete nature of the data, and simple rules (see <a href="methodology.html">Methodology</a>) being applied to the categories. 
+    But if you see something that you think could be improved algorithmically, by all means <a href="https://airbornehotspots.org/contact.html">get in touch</a>.
+  </p>
+
+  <h2>The data is noisy.</h2>
+  <p>It sure is.  There are many sources of false positives and other problems.  Clicking on a number of events is likely necessary to understand the full context.
+  Common sources of false positives:
+    <ul>
+      <li>Formation flights      </li>
+      <li>Parallel runways</li>
+      <li>Helicopters using an opposite pattern alongside fixed-wing aircraft</li></li>
+    </ul>
+
+  <h2>There are very few or zero events at my favorite airport -- I can't see any pattern.</h2>
+  <p>Most airports are showing a 3-6 months of data.  More can be added in the longer term, but data before
+    2024 may have lower coverage and lower ADS-B-out adoption.  Low events might also be due to poor crowdsourcing coverage
+    of your airport -- if so, you can help contribute data to <a href="http://adsb.lol">adsb.lol</a>'s data to fix this problem in the future!
+  </p>
+
+  <h2>What's the business model here?</h2>
+  <p>This is a free service to the aviation community.  
+    The site and the data on it is free for non-commercial use and adaptation, and is licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a>.
+    The site contains information from <a href="https://adsb.lol">adsb.lol</a>, which is made available here under the <a href="https://opendatacommons.org/licenses/odbl/">Open Database License (ODbL)</a>.</p>
+
+  </p>
   <div class="footer">
-    A service of forty-two ventures LLC &middot;
+    A service of 6061 Ventures LLC &middot;
     <a href="accessibility.html">Accessibility</a>
   </div>
 </div>

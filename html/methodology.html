@@ -44,37 +44,39 @@
 </head>
 <body>
 <nav class="navbar">
-  <a class="navbar-brand" href="index.html">Airborne Hotspots</a>
-  <a href="methodology.html">Methodology</a>
+  <a class="navbar-brand" href="index.html">airbornehotspots.org</a>
   <a href="faq.html">FAQ</a>
-  <a href="contact.html">Contact</a>
+  <a href="methodology.html">Methodology</a>
+  <a href="contact.html">About / Contact</a>
 </nav>
 <div class="container">
   <h1>Methodology</h1>
   <ul>
-    <li>Data is downloaded from <a href="http://adsb.lol">adsb.lol</a>'s <a href="https://github.com/adsblol">archive of historical location reports on github</a></li>
+    <b>Please note</b> here are many potential sources of error in this dataset, from non-ADS-B-equipped aircraft, to GPS inaccuracy, to data dropouts due to reception issues.  Any event may be misleading, but the hope is that with enough events, interesting patterns may emerge.  <p>Here are the arbitrary criteria being used -- trying to balance too many events with not enough to show a pattern:<p>
+    <li>Data is downloaded from <a href="http://adsb.lol">adsb.lol</a>'s <a href="https://github.com/adsblol">archive of historical location reports on github</a>.
+    They have crowdsourced ADS-B data from thousands of volunteers worldwide.</li>
 
-    <li>Data is fed through <a href="https://github.com/eastham/adsb_actions">adsb-actions</a>, resampled at 1Hz, then nearby aircraft are identified with the following criteria:
+    <li>The downloaded data is fed through <a href="https://github.com/eastham/adsb_actions">adsb_actions</a> to isolate airports of interest and resample at 1Hz, then identify events where aircraft pairs:
       <ul>
-        <li>Aircraft are within .3 nm and 400 ft vertically</li>
+        <li>Are within 0.3 nm and 400 ft vertically</li>
         <li>Both aircraft are above 400 feet AGL and below 4000 feet AGL (using the airport elevation as a reference)</li>
-        <li>Data received from both aircraft in the past 5 seconds</li>
-        <li>Search is done within 10nm of the airport (shown by the blue ring)</li>
+        <li>Data was received from both aircraft in the past 5 seconds (i.e. not fully resampled)</li>
+        <li>Within 10nm of the target airport (shown by the blue ring)</li>
       </ul>
     </li>
     <li>Each event is assigned a (very approximate) quality rating to help filter out likely false positives:
       <ul>
-        <li><span style="color:#ff00ff;font-size:1.2em;">●</span> <b>Very High</b> – brief event (&le;30s) with good tracks, CPA closer than 0.2&nbsp;nm and 200&nbsp;ft vertically</li>
-        <li><span style="color:orange;font-size:1.2em;">●</span> <b>High</b> – brief event (&le;30s) with good tracks and sufficient real data</li>
-        <li><span style="color:#c8a800;font-size:1.2em;">●</span> <b>Medium</b> – event lasted 30–60s (possible formation flight), a helicopter was involved, or data was sparse (&lt;75% real reports) during the event</li>
-        <li><span style="color:green;font-size:1.2em;">●</span> <b>Low</b> – event lasted over 60s (probable formation flight or parallel ops), OR one aircraft had less than 60s of track data, no valid data exists near the closest point of approach, OR implausibly large position jumps were detected in the track</li>
+        <li><span style="color:#ff00ff;font-size:1.2em;">●</span> <b>Very High</b> – brief event (&le;30s), CPA closer than 0.2&nbsp;nm and 200&nbsp;ft vertically, no data quality issues</li>
+        <li><span style="color:orange;font-size:1.2em;">●</span> <b>High</b> – brief event (&le;30s), no data quality issues</li>
+        <li><span style="color:#c8a800;font-size:1.2em;">●</span> <b>Medium</b> – event lasted 30–60s (possible formation flight), a helicopter was involved, or had data quality issues (sparse reports during event)</li>
+        <li><span style="color:green;font-size:1.2em;">●</span> <b>Low</b> – event lasted over 60s (probable formation flight or parallel runway ops), one aircraft had less than 60s of track data, or had data quality issues (no valid data near closest point of approach, or implausibly large position jumps)</li>
       </ul>
       Only Medium quality and above events, within 5nm of the airport, are included in the event counts on the home page.
     </li>  </ul>
 
-    <p>Source code is available at <a href="https://github.com/eastham/adsb_actions">github</a>.</p>
+    <p>Source code is available at <a href="https://github.com/eastham/adsb_actions">GitHub</a>.</p>
   <div class="footer">
-    A service of forty-two ventures LLC &middot;
+    A service of 6061 Ventures LLC &middot;
     <a href="accessibility.html">Accessibility</a>
   </div>
 </div>

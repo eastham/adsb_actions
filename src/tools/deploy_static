@@ -20,10 +20,11 @@ HTML_DIR = "html"
 GENERATED_DIR = "examples/generated"
 
 # Files in HTML_DIR to skip (templates not meant for direct deployment)
-HTML_EXCLUDE = ["index_template.html"]
+HTML_EXCLUDE = ["index_template.html", "unavailable_template.html"]
 
 # Extra individual files to deploy (relative to project root)
-EXTRA_FILES = ["examples/generated/index.html"]
+EXTRA_FILES = ["examples/generated/index.html", 
+               "examples/generated/unavailable.html"]
 
 def main():
     parser = argparse.ArgumentParser(
