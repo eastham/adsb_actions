@@ -410,14 +410,21 @@ def run_airport_analysis(icao: str, date_compact: str,
     lat, lon, field_alt = airport_info[icao]
     airport_dir = BASE_DIR / icao
     trace_gz = SHARD_DIR / icao / f"{date_compact}_{icao}.gz"
+    csv_out = airport_dir / f"{date_compact}_{icao}.csv.out"
 
     if not trace_gz.exists():
         print(f"⚠️ No sharded data for {icao} on {date_compact}, skipping.")
+        if not dry_run:
+            airport_dir.mkdir(parents=True, exist_ok=True)
+            open(csv_out, 'w').close()
         return 0
 
     # Check if file is empty (gzip with no content)
     if trace_gz.stat().st_size < 30:
         print(f"⚠️ Sharded file for {icao} on {date_compact} is empty, skipping.")
+        if not dry_run:
+            airport_dir.mkdir(parents=True, exist_ok=True)
+            open(csv_out, 'w').close()
         return 0
 
     # Generate per-airport prox YAML if needed
@@ -430,13 +437,10 @@ def run_airport_analysis(icao: str, date_compact: str,
         with open(airport_yaml, 'w') as f:
             f.write(yaml_text)
 
-    analysis_out = airport_dir / f"{date_compact}_{icao}.out"
-    csv_out = airport_dir / f"{date_compact}_{icao}.csv.out"
     traffic_samples = airport_dir / f"{date_compact}_{icao}_traffic.csv"
 
     # Track output files as incomplete (for cleanup on Ctrl-C)
     if not dry_run:
-        _incomplete_files.add(analysis_out)
         _incomplete_files.add(csv_out)
         _incomplete_files.add(traffic_samples)
 
@@ -445,39 +449,33 @@ def run_airport_analysis(icao: str, date_compact: str,
            f"--yaml {airport_yaml} "
            f"--resample --sorted-file {trace_gz} --animate-los "
            f"--animation-dir {airport_dir} "
-           f"--export-traffic-samples {traffic_samples} "
-           f"> {analysis_out} 2>&1")
-    returncode = run_command(cmd, dry_run=dry_run)
+           f"--export-traffic-samples {traffic_samples}")
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    returncode = result.returncode
 
     # Mark output files as complete
     if not dry_run:
-        _incomplete_files.discard(analysis_out)
         _incomplete_files.discard(csv_out)
         _incomplete_files.discard(traffic_samples)
 
     if not dry_run and returncode == 0:
+        combined_output = result.stdout + result.stderr
+
         # Extract point count from "Finished streaming X points" line
-        result = subprocess.run(
-            f"tail -10 {analysis_out} | grep 'Finished streaming'",
-            shell=True, capture_output=True, text=True)
-        if result.stdout:
-            print(f"  {result.stdout.strip()}")
+        for line in combined_output.splitlines():
+            if 'Finished streaming' in line:
+                print(f"  {line.strip()}")
+                break
 
-        # grep returns 1 when no matches - no LOS events is normal
-        ret = run_command(f"grep CSV {analysis_out} > {csv_out}", quiet_fail=True)
-        if ret != 0:
+        # Extract CSV lines directly from captured output
+        csv_lines = [l for l in combined_output.splitlines(keepends=True) if 'CSV' in l]
+        if not csv_lines:
             print(f"  ⚠️ No LOS events detected for {icao} on {date_compact}")
+            open(csv_out, 'w').close()  # empty file so date appears in heatmap label range
         else:
-            # Count LOS events
-            with open(csv_out, 'r') as f:
-                event_count = sum(1 for _ in f)
-            print(f"  ✅ {event_count} LOS event(s) detected for {icao} on {date_compact}")
-
-    try:
-        #analysis_out.unlink()
-        pass
-    except FileNotFoundError:
-        pass
+            with open(csv_out, 'w') as f:
+                f.writelines(csv_lines)
+            print(f"  ✅ {len(csv_lines)} LOS event(s) detected for {icao} on {date_compact}")
 
     return returncode
 
@@ -742,72 +740,18 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
     print(f"{'=' * 60}")
 
     if not analysis_only:
-        # --- Download ---
-        timer.start('download')
-        if not dry_run and not no_download:
-            if not download_tar_parts(date, force=force_download):
-                timer.end('download')
-                print(f"❌ Download failed for {date.strftime('%m/%d/%y')}, "
-                      f"skipping date.")
-                for icao in icao_codes:
-                    failed_runs.append((date.strftime('%m/%d/%y'), icao,
-                                        "download"))
-                return False
-        else:
-            file_prefix = f"v{date_iso}-planes-readsb-prod-0"
-            for ext in ['aa', 'ab']:
-                print(f"[DRY-RUN] Download {file_prefix}.tar.{ext}")
-        timer.end('download')
-
-        # --- Extract from tarfile --
-        timer.start('extract')
-        # Check network storage for cached file (authoritative source)
-        network_global_gz = DATA_DIR / f"{GZ_INTERMEDIATE_PREFIX}{date_compact}.gz"
-        global_gz = network_global_gz
-
-        print(f"🔍 Checking for existing JSONL file in network storage: {network_global_gz}...")
-        if not dry_run:
-            if not network_global_gz.exists():
-                print(f" extracting to {network_global_gz}...")
-                if not extract_traces(date):
-                    timer.end('extract')
-                    print(f"❌ Extraction failed for "
-                          f"{date.strftime('%m/%d/%y')}, skipping date.")
-                    for icao in icao_codes:
-                        failed_runs.append((date.strftime('%m/%d/%y'),
-                                            icao, "extract"))
-                    return False
-            else:
-                print(f"✅ {network_global_gz.name} exists in network storage. "
-                      f"Skipping extraction and conversion.")
-        else:
-            print(f"[DRY-RUN] Extract traces")
-        timer.end('extract')
-
-        # --- Convert traces to global time-ordered JSONL ---
-        timer.start('convert_traces')
-        if not dry_run:
-            if not network_global_gz.exists():
-                try:
-                    global_gz = convert_traces_global(date)
-                except RuntimeError as e:
-                    timer.end('convert_traces')
-                    print(f"❌ {e}, skipping date.")
-                    for icao in icao_codes:
-                        failed_runs.append((date.strftime('%m/%d/%y'),
-                                            icao, "convert"))
-                    return False
-
-                # Clean traces after conversion
-                cleanup_traces()
-        else:
-            print(f"[DRY-RUN] Convert traces -> {global_gz}")
-        timer.end('convert_traces')
-
-        # --- Filter global JSONL down to CONUS-only points ---
-        timer.start('conus_extract')
         conus_gz = DATA_DIR / f"{GZ_FINAL_PREFIX}{date_compact}.gz"
-        if not dry_run:
+        network_global_gz = DATA_DIR / f"{GZ_INTERMEDIATE_PREFIX}{date_compact}.gz"
+
+        if not dry_run and conus_gz.exists():
+            # CONUS file already present — skip download, extract, and convert entirely
+            print(f"✅ {conus_gz.name} already exists, skipping download/extract/convert.")
+        elif not dry_run and network_global_gz.exists():
+            # Global JSONL present but no CONUS file — skip download/extract, run convert only
+            print(f"✅ {network_global_gz.name} already exists, skipping download/extract.")
+
+            # --- Filter global JSONL down to CONUS-only points ---
+            timer.start('conus_extract')
             try:
                 conus_gz = convert_global_to_conus(date)
             except RuntimeError as e:
@@ -816,9 +760,82 @@ def process_single_date(date: datetime, icao_codes: list[str], airport_info: dic
                 for icao in icao_codes:
                     failed_runs.append((date.strftime('%m/%d/%y'), icao, "conus_extract"))
                 return False
+            timer.end('conus_extract')
         else:
-            print(f"[DRY-RUN] Extract CONUS -> {conus_gz}")
-        timer.end('conus_extract')
+            # Full pipeline: download → extract → convert → CONUS filter
+
+            # --- Download ---
+            timer.start('download')
+            if not dry_run and not no_download:
+                if not download_tar_parts(date, force=force_download):
+                    timer.end('download')
+                    print(f"❌ Download failed for {date.strftime('%m/%d/%y')}, "
+                          f"skipping date.")
+                    for icao in icao_codes:
+                        failed_runs.append((date.strftime('%m/%d/%y'), icao,
+                                            "download"))
+                    return False
+            else:
+                file_prefix = f"v{date_iso}-planes-readsb-prod-0"
+                for ext in ['aa', 'ab']:
+                    print(f"[DRY-RUN] Download {file_prefix}.tar.{ext}")
+            timer.end('download')
+
+            # --- Extract from tarfile ---
+            timer.start('extract')
+            print(f"🔍 Checking for existing JSONL file in network storage: {network_global_gz}...")
+            if not dry_run:
+                if not network_global_gz.exists():
+                    print(f" extracting to {network_global_gz}...")
+                    if not extract_traces(date):
+                        timer.end('extract')
+                        print(f"❌ Extraction failed for "
+                              f"{date.strftime('%m/%d/%y')}, skipping date.")
+                        for icao in icao_codes:
+                            failed_runs.append((date.strftime('%m/%d/%y'),
+                                                icao, "extract"))
+                        return False
+                else:
+                    print(f"✅ {network_global_gz.name} exists in network storage. "
+                          f"Skipping extraction and conversion.")
+            else:
+                print(f"[DRY-RUN] Extract traces")
+            timer.end('extract')
+
+            # --- Convert traces to global time-ordered JSONL ---
+            timer.start('convert_traces')
+            if not dry_run:
+                if not network_global_gz.exists():
+                    try:
+                        network_global_gz = convert_traces_global(date)
+                    except RuntimeError as e:
+                        timer.end('convert_traces')
+                        print(f"❌ {e}, skipping date.")
+                        for icao in icao_codes:
+                            failed_runs.append((date.strftime('%m/%d/%y'),
+                                                icao, "convert"))
+                        return False
+
+                    # Clean traces after conversion
+                    cleanup_traces()
+            else:
+                print(f"[DRY-RUN] Convert traces -> {network_global_gz}")
+            timer.end('convert_traces')
+
+            # --- Filter global JSONL down to CONUS-only points ---
+            timer.start('conus_extract')
+            if not dry_run:
+                try:
+                    conus_gz = convert_global_to_conus(date)
+                except RuntimeError as e:
+                    timer.end('conus_extract')
+                    print(f"❌ {e}, skipping date.")
+                    for icao in icao_codes:
+                        failed_runs.append((date.strftime('%m/%d/%y'), icao, "conus_extract"))
+                    return False
+            else:
+                print(f"[DRY-RUN] Extract CONUS -> {conus_gz}")
+            timer.end('conus_extract')
 
         # --- Pass 1: Shard into per-airport JSONL gzip files ---
         timer.start('shard_pass')
