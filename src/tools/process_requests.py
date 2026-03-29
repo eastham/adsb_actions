@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Process newly-requested airports from airbornehotspots.com/requests.jsonl.
+Process newly-requested airports from airbornehotspots.org/requests.jsonl.
 
 Fetches the append-only JSONL request log, identifies airports not yet processed,
 filters out unknown airport codes, and runs the batch LOS pipeline on them.
@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import generate_airport_config
 from batch_helpers import faa_to_icao, validate_date
 
-REQUESTS_URL = "https://airbornehotspots.com/requests.jsonl"
+REQUESTS_URL = "https://airbornehotspots.org/requests.jsonl"
 DEFAULT_STATE_FILE = Path("airport_lists/processed_requests.json")
 DEFAULT_DAYS = 30  # How many days back to analyze when no explicit date range given
 
@@ -105,26 +105,39 @@ def get_new_airports(entries: list[dict], processed: set) -> list[str]:
 
 def run_pipeline(airports: list[str], start_date: str, end_date: str,
                  dry_run: bool) -> int:
-    """Run batch_los_pipeline.py for the given airports and date range.
+    """Run the two-step pipeline for the given airports and date range.
 
-    Writes a temporary airport list file and passes it to the pipeline.
+    Step 1: global_extractor.py — parallelizes sharding across all dates.
+    Step 2: batch_los_pipeline.py --analysis-only — analysis + aggregation.
+
+    Writes a temporary airport list file and passes it to both tools.
     """
     tmp_list = Path("/tmp/process_requests_airports.txt")
     tmp_list.write_text("\n".join(airports) + "\n")
     print(f"  Airport list written to {tmp_list}")
 
-    cmd = (
-        f"source .venv/bin/activate && "
-        f"python src/tools/batch_los_pipeline.py "
-        f"--start-date {start_date} --end-date {end_date} "
-        f"--airports {tmp_list}"
-    )
-    if dry_run:
-        cmd += " --dry-run"
+    date_args = f"--start-date {start_date} --end-date {end_date} --airports {tmp_list}"
+    dry_flag = " --dry-run" if dry_run else ""
 
-    print(f"Running pipeline: {cmd}")
+    # Step 1: shard (parallelized across dates)
+    cmd1 = (
+        f"source .venv/bin/activate && "
+        f"python src/tools/global_extractor.py {date_args}{dry_flag}"
+    )
+    print(f"Step 1 (shard): {cmd1}")
     sys.stdout.flush()
-    result = subprocess.run(cmd, shell=True, executable="/bin/bash")
+    result = subprocess.run(cmd1, shell=True, executable="/bin/bash")
+    if result.returncode != 0:
+        return result.returncode
+
+    # Step 2: analysis + aggregation
+    cmd2 = (
+        f"source .venv/bin/activate && "
+        f"python src/tools/batch_los_pipeline.py {date_args} --analysis-only{dry_flag}"
+    )
+    print(f"Step 2 (analyze): {cmd2}")
+    sys.stdout.flush()
+    result = subprocess.run(cmd2, shell=True, executable="/bin/bash")
     return result.returncode
 
 
