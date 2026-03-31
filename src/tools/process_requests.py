@@ -11,6 +11,7 @@ Designed to be called from a nightly cron job.
 
 Usage:
     python src/tools/process_requests.py [--dry-run] [--days N] [--state-file PATH]
+    python src/tools/process_requests.py --check   # exits 1 if work pending, 0 if none
 """
 
 import argparse
@@ -156,6 +157,8 @@ def main():
                         help=f"JSON file tracking processed airports (default: {DEFAULT_STATE_FILE})")
     parser.add_argument("--url", default=REQUESTS_URL,
                         help="URL of the requests JSONL file")
+    parser.add_argument("--check", action="store_true",
+                        help="Check if work is pending; exits 1 if so, 0 if nothing to do")
     args = parser.parse_args()
 
     # Load persisted state
@@ -177,6 +180,8 @@ def main():
 
     if not candidate_codes:
         print("Nothing to do.")
+        if args.check:
+            sys.exit(0)
         return
 
     # Filter out unknown codes (non-CONUS airports pass through; the pipeline handles them)
@@ -194,11 +199,17 @@ def main():
         valid_codes = [c for c in valid_codes if c not in already_done]
     if not valid_codes:
         print("No valid airports to process.")
+        if args.check:
+            sys.exit(0)
         # Still save state so we don't re-check these on next run
         state["processed"] = sorted(processed | set(candidate_codes))
         if not args.dry_run:
             save_state(args.state_file, state)
         return
+
+    if args.check:
+        print(f"Work pending: {', '.join(valid_codes)}")
+        sys.exit(1)
 
     print(f"Airports to process: {', '.join(valid_codes)}")
 
