@@ -165,6 +165,8 @@ def main():
                         help="URL of the requests JSONL file")
     parser.add_argument("--check", action="store_true",
                         help="Check if work is pending; exits 1 if so, 0 if nothing to do")
+    parser.add_argument("--update-state", action="store_true",
+                        help="Update state file even when --check is used")
     args = parser.parse_args()
 
     # Load persisted state
@@ -205,16 +207,19 @@ def main():
         valid_codes = [c for c in valid_codes if c not in already_done]
     if not valid_codes:
         print("No valid airports to process.")
-        if args.check:
-            sys.exit(0)
         # Still save state so we don't re-check these on next run
         state["processed"] = sorted(processed | set(candidate_codes))
         if not args.dry_run:
             save_state(args.state_file, state)
+        if args.check:
+            sys.exit(0)
         return
 
     if args.check:
         print(f"Work pending: {', '.join(valid_codes)}")
+        if args.update_state:
+            state["processed"] = sorted(processed | set(candidate_codes))
+            save_state(args.state_file, state)
         sys.exit(1)
 
     print(f"Airports to process: {', '.join(valid_codes)}")
