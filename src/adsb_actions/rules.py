@@ -113,7 +113,7 @@ class Rules:
     def conditions_valid(self, conditions: dict):
         """Check for invalid or unknown conditions, return True if valid."""
         VALID_CONDITIONS = ['proximity', 'aircraft_list', 'exclude_aircraft_list',
-                            'exclude_aircraft_substrs',
+                            'one_in_aircraft_list', 'exclude_aircraft_substrs',
                             'min_alt', 'max_alt',
                             'transition_regions', 'changed_regions',
                             'regions', 'latlongring',
@@ -135,7 +135,7 @@ class Rules:
         return True
 
     def conditions_match(self, flight: Flight, conditions: dict,
-                         rule_name: str) -> bool:
+                         rule_name: str, other_flight: Flight = None) -> bool:
         """Determine if the given rule conditions match for the given
         flight.  Returns true on match for the specific rule given, false
         otherwise.
@@ -188,6 +188,23 @@ class Rules:
             result = flight.flight_id not in ac_list
             if not result:
                 return False
+
+        if 'one_in_aircraft_list' in conditions:
+            # Match only when exactly one of the two paired aircraft is in the list.
+            # other_flight is None on the pre-check pass (before flight2 is known);
+            # in that case we defer evaluation to the flight2 pass where other_flight
+            # is always provided.
+            condition_value = conditions['one_in_aircraft_list']
+            try:
+                ac_list = self.yaml_data['aircraft_lists'][condition_value]
+            except KeyError:
+                logger.critical("Aircraft list not found: %s", condition_value)
+                return False
+            if other_flight is not None:
+                f_in = flight.flight_id in ac_list
+                o_in = other_flight.flight_id in ac_list
+                if not (f_in ^ o_in):  # XOR: exactly one must be in the list
+                    return False
 
         if 'exclude_aircraft_substrs' in conditions:
             condition_value = conditions['exclude_aircraft_substrs']
@@ -672,7 +689,8 @@ class Rules:
                         # Also check if flight2 matches the rule conditions
                         # This ensures excluded aircraft in flight2 won't
                         # trigger the rule.
-                        if self.conditions_match(flight2, rule_conditions, rule_name):
+                        if self.conditions_match(flight2, rule_conditions, rule_name,
+                                                 other_flight=flight1):
                             logger.debug("Proximity match: %s %s", flight1.flight_id,
                                         flight2.flight_id)
                             self.do_actions(flight1, rule_body['actions'], rule_name,
