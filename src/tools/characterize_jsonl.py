@@ -16,7 +16,7 @@ import math
 import statistics
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 # Add src/tools to path so we can import siblings
@@ -51,14 +51,17 @@ CATEGORY_DESC = {
 }
 
 
-def read_all_records(shard_gz: Path):
-    """Yield all parseable records from a gzipped JSONL file (no altitude filter)."""
-    with gzip.open(shard_gz, "rt") as f:
-        for line in f:
-            try:
-                yield json.loads(line)
-            except (json.JSONDecodeError, ValueError):
-                continue
+def read_all_records(shards):
+    """Yield all parseable records from one or more gzipped JSONL files."""
+    if isinstance(shards, Path):
+        shards = [shards]
+    for shard_gz in shards:
+        with gzip.open(shard_gz, "rt") as f:
+            for line in f:
+                try:
+                    yield json.loads(line)
+                except (json.JSONDecodeError, ValueError):
+                    continue
 
 
 class RunningStats:
@@ -91,7 +94,10 @@ class RunningStats:
         return None
 
 
-def characterize(shard_gz: Path, field_elev: int = 0):
+def characterize(shard_gz, field_elev: int = 0,
+                 tail_histogram: bool = False, min_days: int = 2):
+    """shard_gz may be a single Path or a list of Paths."""
+    shards = [shard_gz] if isinstance(shard_gz, Path) else list(shard_gz)
     # Stream through records once, accumulating only stats (not raw records)
     lat_stats = RunningStats()
     lon_stats = RunningStats()
@@ -103,13 +109,15 @@ def characterize(shard_gz: Path, field_elev: int = 0):
     ac_time_min: dict[str, float] = {}
     ac_time_max: dict[str, float] = {}
     flights_seen: dict[str, set[str]] = defaultdict(set)
+    ac_days: dict[str, set] = defaultdict(set)  # hex_id -> set of ISO date strings
+    ac_cat: dict[str, dict] = defaultdict(lambda: defaultdict(int))  # hex_id -> category counts
     categories = defaultdict(int)
     total_points = 0
     ground_count = 0
     no_position_count = 0
     no_alt_count = 0
 
-    for r in read_all_records(shard_gz):
+    for r in read_all_records(shards):
         total_points += 1
         ts = r.get("now")
         hex_id = r.get("hex")
@@ -129,8 +137,11 @@ def characterize(shard_gz: Path, field_elev: int = 0):
                     ac_time_min[hex_id] = ts
                 if hex_id not in ac_time_max or ts > ac_time_max[hex_id]:
                     ac_time_max[hex_id] = ts
+                ac_days[hex_id].add(date.fromtimestamp(ts).isoformat())
             if flight:
                 flights_seen[hex_id].add(flight)
+            if cat:
+                ac_cat[hex_id][cat] += 1
 
         if lat is not None and lon is not None:
             lat_stats.add(lat)
@@ -170,7 +181,10 @@ def characterize(shard_gz: Path, field_elev: int = 0):
                 durations.append(dur)
 
     # --- Print report ---
-    print(f"=== File: {shard_gz.name} ===\n")
+    if len(shards) == 1:
+        print(f"=== File: {shards[0].name} ===\n")
+    else:
+        print(f"=== {len(shards)} files: {shards[0].name} .. {shards[-1].name} ===\n")
 
     # Time info
     print("--- Time ---")
@@ -242,13 +256,45 @@ def characterize(shard_gz: Path, field_elev: int = 0):
             print(f"  {cat} {desc}: {cnt:,} ({100*cnt/total_points:.1f}%)")
         print()
 
-    # Data quality (from analyze_shard_quality)
+    # Tail number histogram (optional)
+    if tail_histogram:
+        # Sort by days seen descending, then by points as tiebreaker
+        sorted_ac = sorted(ac_pts.keys(),
+                           key=lambda h: (len(ac_days[h]), ac_pts[h]), reverse=True)
+        above_threshold = [(h, len(ac_days[h])) for h in sorted_ac
+                           if len(ac_days[h]) >= min_days]
+
+        print(f"--- Tail Number Histogram (>= {min_days} days) ---")
+        for hex_id, days in above_threshold:
+            tails = sorted(flights_seen[hex_id])
+            tail_str = tails[0] if tails else "(no callsign)"
+            top_cat = max(ac_cat[hex_id], key=ac_cat[hex_id].get) if ac_cat[hex_id] else "?"
+            cat_desc = CATEGORY_DESC.get(top_cat, top_cat)
+            print(f"  {tail_str:<10} ({hex_id}): {days} days  [{top_cat} {cat_desc}]")
+        print()
+
+        print(f"--- YAML aircraft_lists block (>= {min_days} days) ---")
+        print("aircraft_lists:")
+        print("  participating:")
+        for hex_id, days in above_threshold:
+            tails = sorted(flights_seen[hex_id])
+            tail_str = tails[0] if tails else None
+            if tail_str:
+                top_cat = max(ac_cat[hex_id], key=ac_cat[hex_id].get) if ac_cat[hex_id] else "?"
+                print(f"    - {tail_str:<10}  # {days} days  {top_cat} {CATEGORY_DESC.get(top_cat, '')}")
+        print()
+
+    # Data quality (from analyze_shard_quality) — single file only
     print(f"--- Data Quality (analyze_shard_quality) NOTE using field_elev {field_elev} ---")
+    if len(shards) > 1:
+        print("  Skipped for multi-file analysis")
+        print()
+        return
     if lat_stats.count:
         cent_lat = lat_stats.mean
         cent_lon = lon_stats.mean
         quality = analyze_shard_quality(
-            shard_gz, field_elev=field_elev,
+            shards[0], field_elev=field_elev,
             airport_lat=cent_lat, airport_lon=cent_lon
         )
         if quality:
@@ -275,16 +321,22 @@ def main():
     parser = argparse.ArgumentParser(
         description="Characterize a gzipped JSONL ADS-B shard file"
     )
-    parser.add_argument("shard", type=Path, help="Path to .gz JSONL shard")
+    parser.add_argument("shards", type=Path, nargs="+", help="Path(s) to .gz JSONL shard(s)")
     parser.add_argument("--field-elev", type=int, default=0,
                         help="Airport field elevation in feet (for AGL and quality metrics)")
+    parser.add_argument("--tail-histogram", action="store_true",
+                        help="Print tail number histogram and YAML aircraft_lists block")
+    parser.add_argument("--min-days", type=int, default=2,
+                        help="Minimum days seen to include in histogram/YAML (default: 2)")
     args = parser.parse_args()
 
-    if not args.shard.exists():
-        print(f"Error: {args.shard} not found", file=sys.stderr)
+    missing = [str(p) for p in args.shards if not p.exists()]
+    if missing:
+        print(f"Error: not found: {', '.join(missing)}", file=sys.stderr)
         sys.exit(1)
 
-    characterize(args.shard, field_elev=args.field_elev)
+    characterize(args.shards, field_elev=args.field_elev,
+                 tail_histogram=args.tail_histogram, min_days=args.min_days)
 
 
 if __name__ == "__main__":
