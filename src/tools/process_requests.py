@@ -19,6 +19,7 @@ import json
 import os
 import sys
 import subprocess
+import socket
 import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -34,6 +35,11 @@ REQUESTS_URL = "https://airbornehotspots.org/requests.jsonl"
 DEFAULT_STATE_FILE = Path("airport_lists/processed_requests.json")
 DEFAULT_DAYS = 30  # How many days back to analyze when no explicit date range given
 
+# Force IPv4 to avoid 30-second IPv6 timeout on Linux/Raspberry Pi
+_orig_getaddrinfo = socket.getaddrinfo
+def _ipv4_getaddrinfo(host, port, family=0, *args, **kwargs):
+    return _orig_getaddrinfo(host, port, socket.AF_INET, *args, **kwargs)
+socket.getaddrinfo = _ipv4_getaddrinfo
 
 def fetch_requests(url: str) -> list[dict]:
     """Download and parse the requests JSONL file."""
