@@ -285,9 +285,12 @@ def convert_traces_global(date_obj: datetime) -> Path:
     if result != 0:
         raise RuntimeError(f"convert_traces.py failed for {date_compact}")
 
-    # Move to network storage (must complete before shard pass reads it)
+    # Move to network storage (must complete before shard pass reads it).
+    # Use cp+rm instead of mv: SMB mounts reject the chmod/utimes that mv
+    # attempts after a cross-filesystem copy, even though the data transfers fine.
     print(f"📦 Moving {local_temp.name} to network storage...")
-    run_command(f"mv '{local_temp}' '{network_final}'", dry_run=False)
+    run_command(f"cp '{local_temp}' '{network_final}'", dry_run=False)
+    local_temp.unlink()
 
     return network_final
 

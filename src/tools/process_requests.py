@@ -10,8 +10,9 @@ naturally produce empty output for them.
 Designed to be called from a nightly cron job.
 
 Usage:
-    python src/tools/process_requests.py [--dry-run] [--days N] [--state-file PATH]
+    python src/tools/process_requests.py   --start-date 06/01/25 --end-date 08/31/25 [--dry-run] [--days N] [--state-file PATH]
     python src/tools/process_requests.py --check   # exits 1 if work pending, 0 if none
+    
 """
 
 import argparse
@@ -33,6 +34,7 @@ from batch_helpers import faa_to_icao, validate_date
 
 REQUESTS_URL = "https://airbornehotspots.org/requests.jsonl"
 DEFAULT_STATE_FILE = Path("airport_lists/processed_requests.json")
+OUTPUT_LIST_FILE = Path("airport_lists/processed_requests.txt")
 DEFAULT_DAYS = 30  # How many days back to analyze when no explicit date range given
 
 # Force IPv4 to avoid 30-second IPv6 timeout on Linux/Raspberry Pi
@@ -140,7 +142,7 @@ def run_pipeline(airports: list[str], start_date: str, end_date: str,
     # Step 2: analysis + aggregation
     cmd2 = (
         f"source .venv/bin/activate && "
-        f"python src/tools/batch_los_pipeline.py {date_args} --analysis-only{dry_flag}"
+        f"python src/tools/batch_los_pipeline.py {date_args} --analysis-only{dry_flag} --no-download --traffic-tiles examples/generated/tiles --build-quality"
     )
     print(f"Step 2 (analyze): {cmd2}")
     sys.stdout.flush()
@@ -242,8 +244,22 @@ def main():
 
     # On success, mark all candidates (including non-CONUS) as processed so we
     # don't re-check them next run.
-    state["processed"] = sorted(processed | set(candidate_codes))
+    all_processed = sorted(processed | set(candidate_codes))
+    state["processed"] = all_processed
     save_state(args.state_file, state)
+
+    # Write plaintext list of all processed airports (one per line) and deploy
+    OUTPUT_LIST_FILE.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT_LIST_FILE.write_text("\n".join(all_processed) + "\n")
+    print(f"Plaintext list written to {OUTPUT_LIST_FILE}")
+    deploy_cmd = (
+        f"source .venv/bin/activate && "
+        f"python src/tools/deploy_airports {OUTPUT_LIST_FILE}"
+    )
+    print(f"Deploying: {deploy_cmd}")
+    sys.stdout.flush()
+    subprocess.run(deploy_cmd, shell=True, executable="/bin/bash")
+
     print(f"✅ Done. {len(valid_codes)} airport(s) processed.")
 
 
