@@ -67,6 +67,27 @@ def main():
             continue
 
         filter_file = os.path.join(src, f"{icao}_deploy_filter.txt")
+
+        # Skip airports with no meaningful data: deploy filter exists but has no animations,
+        # no LOS events, and no quality data (i.e. zero traffic — airport is out of coverage).
+        # Airports with traffic data but no events still get a map with busyness/quality info.
+        if os.path.exists(filter_file):
+            with open(filter_file) as ff:
+                filter_lines = [l.strip() for l in ff if l.strip().startswith("+")]
+            has_animations = any(l != f"+ {icao}_map.html" for l in filter_lines)
+            if not has_animations:
+                combined_csv = os.path.join(src, f"{icao}_combined.csv.out")
+                has_events = False
+                if os.path.exists(combined_csv):
+                    with open(combined_csv) as cf:
+                        has_events = any("CSV OUTPUT" in line for line in cf)
+                quality_json = os.path.join(src, f"{icao}_quality.json")
+                has_traffic = os.path.exists(quality_json)
+                if not has_events and not has_traffic:
+                    print(f"  SKIP {icao}: no traffic data (out of coverage), nothing useful to deploy",
+                          file=sys.stderr)
+                    continue
+
         cmd = ["rclone", "copy", src, dst, "--progress",
                "--metadata-set", "cache-control=no-cache, must-revalidate"]
         if os.path.exists(filter_file):

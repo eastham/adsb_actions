@@ -720,7 +720,7 @@ def aggregate_airport_results(icao: str, airport_info: dict,
         heatmap_label = (heatmap_label or "") + f" (showing {written_events:,} of {total_events:,} events)"
     if heatmap_label:
         vis_cmd += f"--heatmap-label '{heatmap_label}' "
-    vis_cmd += "--traffic-label '6/1/25 - 6/15/25 (< 4000ft AGL)' "
+    vis_cmd += '--traffic-label "6/1/25 - 6/15/25 (< 4000ft AGL)" '
 
     vis_cmd += f"--airport-name {icao} "
     run_command(vis_cmd)
