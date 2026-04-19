@@ -50,10 +50,10 @@ class LOS:
             self.flight1 = flight1
             self.flight2 = flight2
 
-        # Make a deep copy of the current location to remember the location
-        # of the event.  sometimes updated at closest approach.
-        self.first_loc_1 = copy.deepcopy(flight1.lastloc)
-        self.first_loc_2 = copy.deepcopy(flight2.lastloc)
+        # Shallow copy is sufficient: Location fields are all primitives except
+        # flightdict, which is the raw ADS-B JSON dict and is never mutated.
+        self.first_loc_1 = copy.copy(flight1.lastloc)
+        self.first_loc_2 = copy.copy(flight2.lastloc)
 
         # Closest-approach distances.  Perhaps this is better represented
         # with an absolute distance?
@@ -74,15 +74,15 @@ class LOS:
         self.last_time = last_time
 
         if latdist < self.min_latdist or altdist < self.min_altdist:
-            logger.info("LOS update: new minimum for %s vs %s: %.2f nm, %d MSL at %s",
+            logger.debug("LOS update: new minimum for %s vs %s: %.2f nm, %d MSL at %s",
                          flight1.flight_id, flight2.flight_id, latdist, altdist,
                          datetime.datetime.utcfromtimestamp(last_time)) 
             self.min_latdist = latdist
             self.min_altdist = altdist
             self.cpa_time = last_time
             if update_loc_at_closest_approach:
-                self.first_loc_1 = copy.deepcopy(flight1.lastloc)
-                self.first_loc_2 = copy.deepcopy(flight2.lastloc)
+                self.first_loc_1 = copy.copy(flight1.lastloc)
+                self.first_loc_2 = copy.copy(flight2.lastloc)
 
     def get_key(self):
         key = "%s %s" % (self.flight1.flight_id.strip(),
@@ -140,7 +140,7 @@ def process_los(flight1, flight2):
 
     lateral_distance = flight1.lastloc - flight2.lastloc
     alt_distance = abs(flight1.lastloc.alt_baro - flight2.lastloc.alt_baro)
-    logger.info("process_los %s %s lateral dist %.2fnm %d MSL",
+    logger.debug("process_los %s %s lateral dist %.2fnm %d MSL",
                 flight1.flight_id, flight2.flight_id, lateral_distance, alt_distance)
 
     # Use the more recent timestamp as "now" for the LOS event
@@ -341,8 +341,8 @@ def log_csv_record(flight1, flight2, los, datestring, altdatestring,
         f"{link},{animation_field},interp,audio,type,phase,{quality_explanation},{los.min_latdist},{los.min_altdist},"
     )
 
-    logger.info(csv_line)
-    logger.info("LOS visualization: %s", animation_field if animation_field else link)
+    logger.debug(csv_line)
+    logger.debug("LOS visualization: %s", animation_field if animation_field else link)
 
 
 def gc_loop():
@@ -408,7 +408,7 @@ def los_gc(ts):
             datestring = datetime.datetime.utcfromtimestamp(los.cpa_time)
             altdatestring = datestring.strftime("%Y-%m-%d-%H:%M")
 
-            logger.info("LOS final update: %s %s - minimum separation: %f nm %d MSL. Last seen: %s",
+            logger.debug("LOS final update: %s %s - minimum separation: %f nm %d MSL. Last seen: %s",
                         flight1.flight_id, flight2.flight_id,
                         los.min_latdist, los.min_altdist,
                         datestring)

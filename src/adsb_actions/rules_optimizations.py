@@ -13,6 +13,11 @@ from .geo_helpers import nm_to_lat_lon_offsets
 
 logger = logging.getLogger(__name__)
 
+# Spatial grid bucket size for proximity pre-filtering in do_prox_checks().
+# Must be larger than the maximum proximity latsep threshold (~0.3nm ≈ 0.005°).
+# 0.1° ≈ 6nm gives a comfortable margin while keeping buckets small.
+PROX_SPATIAL_BUCKET_DEG = 0.1
+
 
 def build_rule_list_with_bboxes(rules_dict: dict) -> List[Tuple[Optional[Tuple], str, dict]]:
     """Build optimized flat list of rules with pre-computed bounding boxes.
@@ -182,6 +187,6 @@ def initialize_rule_optimizations(
                    f"for {latlongring_count} latlongring rules "
                    f"(grid_size={grid_size_deg}°)")
     else:
-        logger.warning("Spatial grid enabled but no latlongring rules found")
+        logger.debug("Spatial grid enabled but no latlongring rules found")
 
     return rule_list, spatial_grid

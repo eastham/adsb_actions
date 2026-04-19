@@ -123,5 +123,4 @@ class Location:
             lon=(loc1.lon + loc2.lon) / 2,
             alt_baro=alt
         )
-        print(f"meanloc {loc1.alt_baro} {loc2.alt_baro} -> {newloc.alt_baro}")
         return newloc

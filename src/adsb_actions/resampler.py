@@ -5,13 +5,15 @@ at a fixed interval.
 
 import logging
 import datetime
+import time
 from typing import Dict, List, Optional, Tuple
 from .location import Location
 from .adsb_logger import Logger
 from .flights import Flights
+from .rules_optimizations import PROX_SPATIAL_BUCKET_DEG
 
 logger = logging.getLogger(__name__)
-logger.level = logging.INFO
+logger.level = logging.WARNING
 LOGGER = Logger()
 
 MAX_INTERPOLATE_SECS = 60 # max seconds that we'll interpolate over.
@@ -156,8 +158,8 @@ class Resampler:
                         location.lat, location.lon) / (time_gap / 3600))
                     if implied_speed_kts > MAX_IMPLIED_SPEED_KTS:
                         location.suspicious = True
-                        logger.warning("Suspicious track: %s implied %.0f kts",
-                                       flight_id, implied_speed_kts)
+                        logger.debug("Suspicious track: %s implied %.0f kts",
+                                     flight_id, implied_speed_kts)
 
                     # Check for sudden speed change vs previous segment
                     if not location.suspicious and len(prev_locations) >= 2:
@@ -169,7 +171,7 @@ class Resampler:
                                 / (prev_gap / 3600))
                             if abs(implied_speed_kts - prev_implied) > MAX_SPEED_CHANGE_KTS:
                                 location.suspicious = True
-                                logger.warning(
+                                logger.debug(
                                     "Suspicious track: %s speed change "
                                     "%.0f→%.0f kts", flight_id,
                                     prev_implied, implied_speed_kts)
@@ -225,7 +227,7 @@ class Resampler:
             logger.error("No proximity rules found for resampling")
             return
         if not self.locations_by_time:
-            logger.error("No time history available for resampling")
+            logger.debug("No time history available for resampling")
             return
 
         sorted_times = sorted(self.locations_by_time.keys())
@@ -251,6 +253,8 @@ class Resampler:
         found_prox_events = []
         location_ctr = 0
         prox_check_ctr = 0
+        _progress_t = time.monotonic()
+        _total_times = len(all_times)
 
         # Iterate through time range using only existing timestamps
         for current_time in all_times:
@@ -271,8 +275,20 @@ class Resampler:
                 #            loc.to_str(), utc_time)
                 location_ctr += 1
 
+            # Build spatial grid: bucket active flights by lat/lon so
+            # find_nearby_flight only searches a small neighborhood.
+            spatial_grid = {}
+            for f in flights.flight_dict.values():
+                loc = f.lastloc
+                key = (int(loc.lat / PROX_SPATIAL_BUCKET_DEG),
+                       int(loc.lon / PROX_SPATIAL_BUCKET_DEG))
+                if key not in spatial_grid:
+                    spatial_grid[key] = []
+                spatial_grid[key].append(f)
+
             # Process proximity rules
-            found = rules.handle_proximity_conditions(flights, current_time)
+            found = rules.handle_proximity_conditions(flights, current_time,
+                                                      spatial_grid=spatial_grid)
             prox_check_ctr += 1
             if found:
                 found_prox_events.append(found)
@@ -292,14 +308,24 @@ class Resampler:
             if gc_callback:
                 gc_callback(current_time)
 
+            # Print progress every 30s of wall time
+            _now = time.monotonic()
+            if _now - _progress_t >= 30.0:
+                pct = 100.0 * prox_check_ctr / _total_times if _total_times else 0
+                utc_str = datetime.datetime.fromtimestamp(
+                    current_time, datetime.UTC).strftime("%m/%d/%y %H:%M")
+                print(f"  ... resampling {pct:.0f}% ({prox_check_ctr:,}/{_total_times:,} steps, "
+                      f"data time {utc_str}, {len(found_prox_events)} prox events so far)")
+                _progress_t = _now
+
         logger.info("=== Proximity Check Summary ===")
         logger.info("  Locations processed: %d", location_ctr)
         logger.info("  Proximity checks performed: %d", prox_check_ctr)
         logger.info("  Proximity events found: %d", len(found_prox_events))
         logger.info("  Flight expires during processing: %d", self.expire_ctr)
         logger.info("  Final active flights: %d", len(flights.flight_dict))
-        print(f"Processed {location_ctr} resampled events, {len(found_prox_events)} proximity events found.")
-        print(f"  Flights expired during processing: {self.expire_ctr}")
+        print(f"  Resampling done: {location_ctr:,} events, {len(found_prox_events)} proximity events, "
+              f"{self.expire_ctr} flights expired")
         return found_prox_events
 
     def report_resampling_stats(self):

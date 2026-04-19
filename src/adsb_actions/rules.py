@@ -16,10 +16,12 @@ from .ruleexecutionlog import RuleExecutionLog, ExecutionCounter
 from .adsb_logger import Logger
 from .webhooks import send_webhook
 from .geo_helpers import nm_to_lat_lon_offsets
-from .rules_optimizations import initialize_rule_optimizations, get_candidate_rule_indices
+from .rules_optimizations import (initialize_rule_optimizations,
+                                   get_candidate_rule_indices,
+                                   PROX_SPATIAL_BUCKET_DEG)
 
 logger = logging.getLogger(__name__)
-logger.level = logging.INFO
+logger.level = logging.WARNING
 LOGGER = Logger()
 
 class Rules:
@@ -651,14 +653,19 @@ class Rules:
                 ret.append((rule_name, rule_body))
         return ret
 
-    def handle_proximity_conditions(self, flights, last_read_time) -> list:
+    def handle_proximity_conditions(self, flights, last_read_time,
+                                     spatial_grid=None) -> list:
         """
         This is run periodically to check distance between all aircraft --
-        to check for any matching proximity conditions.  
+        to check for any matching proximity conditions.
         It's O(n^2), can be expensive, but altitude and bbox limits can help...
 
         NOTE: currently flights not in any bbox are not checked, to improve
         execution time.
+
+        spatial_grid: optional dict mapping (lat_bucket, lon_bucket) -> list of
+        Flight objects, used to pre-filter candidates for find_nearby_flight.
+        Bucket size must be larger than the proximity latsep threshold.
         """
 
         prox_rules_list = self.get_rules_with_condition("proximity")
@@ -683,8 +690,21 @@ class Rules:
                     # Satisfied prox rule found, now see if there are nearby aircraft.
                     # NOTE that this only returns one flight, so we won't always have
                     # two actions fired for every pair of close-proximity aircraft.
+                    candidates = None
+                    if spatial_grid is not None:
+                        # Gather flights from the 3x3 neighborhood of buckets around flight1
+                        loc1 = flight1.lastloc
+                        bk_lat = int(loc1.lat / PROX_SPATIAL_BUCKET_DEG)
+                        bk_lon = int(loc1.lon / PROX_SPATIAL_BUCKET_DEG)
+                        candidates = []
+                        for dlat in (-1, 0, 1):
+                            for dlon in (-1, 0, 1):
+                                candidates.extend(
+                                    spatial_grid.get((bk_lat + dlat, bk_lon + dlon), []))
+
                     flight2 = flights.find_nearby_flight(flight1, altsep, latsep,
-                                                         last_read_time)
+                                                         last_read_time,
+                                                         candidates=candidates)
                     if flight2:
                         # Also check if flight2 matches the rule conditions
                         # This ensures excluded aircraft in flight2 won't

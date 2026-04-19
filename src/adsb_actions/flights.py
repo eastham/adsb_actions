@@ -115,13 +115,18 @@ class Flights:
 
         return count
 
-    def find_nearby_flight(self, flight2, altsep, latsep, last_read_time) -> Flight:
-        """Returns maximum of one nearby flight within the given separation, 
-        None if not found"""
+    def find_nearby_flight(self, flight2, altsep, latsep, last_read_time,
+                           candidates=None) -> Flight:
+        """Returns maximum of one nearby flight within the given separation,
+        None if not found.
+
+        candidates: optional iterable of Flight objects to check instead of
+        all flights (e.g. from a spatial grid pre-filter).
+        """
 
         MIN_FRESH = 5 # seconds.  Older locations not evaluated
 
-        for flight1 in self.flight_dict.values():
+        for flight1 in (candidates if candidates is not None else self.flight_dict.values()):
             if flight1 is flight2:
                 continue
             if self.ignore_unboxed_flights and not flight2.in_any_bbox():

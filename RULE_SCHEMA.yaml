@@ -19,6 +19,7 @@
         max_alt: 10000       # feet MSL, must be <= to match
         aircraft_list: alert_aircraft  # match aircraft_list above
         exclude_aircraft_list: alert_aircraft # exclude aircraft_list above
+        one_in_aircraft_list: alert_aircraft # proximity only: match when exactly one of the two aircraft is in the list (XOR)
         exclude_aircraft_substrs: ["N10C", "N10D"]  # exclude aircraft matching any of these strings
         regions: [ "23 upwind", "Pattern" ]  # will match if inside any of these KML polygons
         regions: []          # not in any KML-defined region
