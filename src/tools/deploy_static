@@ -33,6 +33,8 @@ def main():
                         help=f"rclone remote destination (default: {DEFAULT_REMOTE})")
     parser.add_argument("--dry-run", "-n", action="store_true",
                         help="Print rclone commands without running them")
+    parser.add_argument("--skip-extra", action="store_true",
+                        help="Skip deploying EXTRA_FILES (e.g. generated index/unavailable)")
     args = parser.parse_args()
 
     files = []
@@ -43,7 +45,9 @@ def main():
             files.append(path)
 
     # Extra individual files
-    for path in EXTRA_FILES:
+    if args.skip_extra:
+        print("Skipping EXTRA_FILES (--skip-extra)")
+    for path in ([] if args.skip_extra else EXTRA_FILES):
         if os.path.isfile(path):
             files.append(path)
         else:

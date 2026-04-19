@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+"""
+deploy_v2 - push v2 generated map files to remote storage under /v2.
+
+Uploads data/v2/maps/ (HTML, PMTiles, and per-event track JSON sidecars)
+to {remote}/v2/, preserving the flat layout that the HTML files expect.
+
+Example:
+    python src/tools/deploy_v2
+    python src/tools/deploy_v2 --remote hotspots-initial:hotspots --dry-run
+    python src/tools/deploy_v2 --maps-dir data/v2/maps --dry-run
+"""
+
+import os
+import sys
+import argparse
+import subprocess
+
+DEFAULT_REMOTE = "hotspots-initial:hotspots"
+DEFAULT_MAPS_DIR = "data/v2/maps"
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Deploy v2 map files (HTML, PMTiles, track sidecars) to remote storage.")
+    parser.add_argument("--remote", default=DEFAULT_REMOTE,
+                        help=f"rclone remote destination (default: {DEFAULT_REMOTE})")
+    parser.add_argument("--maps-dir", default=DEFAULT_MAPS_DIR,
+                        help=f"Local v2 maps directory (default: {DEFAULT_MAPS_DIR})")
+    parser.add_argument("--dry-run", "-n", action="store_true",
+                        help="Print rclone commands without running them")
+    args = parser.parse_args()
+
+    if not os.path.isdir(args.maps_dir):
+        print(f"ERROR: maps directory not found: {args.maps_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    dst = f"{args.remote}/v2"
+    print(f"Deploying {args.maps_dir}/ → {dst}/", file=sys.stderr)
+
+    cmd = [
+        "rclone", "copy", args.maps_dir, dst,
+        "--progress",
+        "--metadata-set", "cache-control=no-cache, must-revalidate",
+    ]
+    if args.dry_run:
+        cmd.append("--dry-run")
+
+    print(f"  {' '.join(cmd)}", file=sys.stderr)
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        print(f"ERROR: rclone failed (exit {result.returncode})", file=sys.stderr)
+        sys.exit(1)
+
+    print("Done.", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
