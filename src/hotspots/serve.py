@@ -13,6 +13,20 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         if not os.path.isfile(path):
             return super().send_head()
 
+        # Serve pre-compressed .gz files with Content-Encoding so the browser
+        # decompresses transparently (no client-side changes needed).
+        if path.endswith(".gz"):
+            inner = path[:-3]  # e.g. tracks.json.gz -> tracks.json
+            ctype = self.guess_type(inner)
+            file_size = os.path.getsize(path)
+            f = open(path, "rb")
+            self.send_response(200)
+            self.send_header("Content-type", ctype)
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Content-Length", str(file_size))
+            self.end_headers()
+            return f
+
         range_header = self.headers.get("Range")
         if not range_header:
             return super().send_head()

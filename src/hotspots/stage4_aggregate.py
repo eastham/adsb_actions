@@ -70,19 +70,24 @@ def parquet_stem_to_date_cell(stem: str):
 def find_parquet_files(events_dir: Path, dates: list, lat_min=None, lat_max=None,
                        lon_min=None, lon_max=None) -> list:
     """Return Parquet files matching date list and optional lat/lon filter."""
+    dates_set = set(dates) if dates else None
     matches = []
-    for p in sorted(events_dir.glob("**/*.parquet")):
-        parsed = parquet_stem_to_date_cell(p.stem)
-        if parsed is None:
+    date_dirs = sorted(d for d in events_dir.iterdir() if d.is_dir())
+    print(f"  Scanning {len(date_dirs)} date directories...", flush=True)
+    for date_dir in date_dirs:
+        date = date_dir.name
+        if dates_set and date not in dates_set:
             continue
-        date, lat, lon = parsed
-        if dates and date not in dates:
-            continue
-        if lat_min is not None and not (lat_min <= lat < lat_max):
-            continue
-        if lon_min is not None and not (lon_min <= lon < lon_max):
-            continue
-        matches.append(p)
+        for p in sorted(date_dir.glob("*.parquet")):
+            parsed = parquet_stem_to_date_cell(p.stem)
+            if parsed is None:
+                continue
+            _, lat, lon = parsed
+            if lat_min is not None and not (lat_min <= lat < lat_max):
+                continue
+            if lon_min is not None and not (lon_min <= lon < lon_max):
+                continue
+            matches.append(p)
     return matches
 
 
@@ -104,18 +109,60 @@ def aggregate(parquet_files: list) -> pd.DataFrame:
     if not parquet_files:
         return pd.DataFrame()
 
-    dfs = []
-    for p in parquet_files:
-        try:
-            df = pd.read_parquet(p)
-            dfs.append(df)
-        except Exception as e:
-            print(f"  [warn] Could not read {p.name}: {e}", file=sys.stderr)
+    import pyarrow.parquet as pq
 
-    if not dfs:
+    n = len(parquet_files)
+
+    # Filter to non-empty files (empty cells write a 636-byte parquet with no schema)
+    non_empty = [p for p in parquet_files if p.stat().st_size > 1000]
+    skipped = n - len(non_empty)
+    print(f"  Reading {len(non_empty):,} parquet files ({skipped:,} empty skipped)...", flush=True)
+
+    if not non_empty:
         return pd.DataFrame()
 
-    combined = pd.concat(dfs, ignore_index=True)
+    t_read = time.time()
+    # Batch read via PyArrow — much faster than a Python loop of pd.read_parquet.
+    # Chunk the file list so we can print progress; a single read_table() call over
+    # tens of thousands of files is silent for many minutes.
+    CHUNK = 1000
+    try:
+        tables = []
+        events_so_far = 0
+        for i in range(0, len(non_empty), CHUNK):
+            chunk = non_empty[i:i + CHUNK]
+            t_chunk = time.time()
+            tbl = pq.read_table([str(p) for p in chunk])
+            tables.append(tbl)
+            events_so_far += tbl.num_rows
+            done = min(i + CHUNK, len(non_empty))
+            print(f"  {done:,}/{len(non_empty):,} ({done/len(non_empty)*100:.0f}%) — "
+                  f"{events_so_far:,} events, chunk {time.time()-t_chunk:.1f}s, "
+                  f"elapsed {time.time()-t_read:.1f}s", flush=True)
+        import pyarrow as pa
+        table = pa.concat_tables(tables) if len(tables) > 1 else tables[0]
+        combined = table.to_pandas()
+    except Exception as e:
+        # Fall back to per-file loop on schema mismatch or other error
+        print(f"  [warn] Batch read failed ({e}), falling back to per-file loop", file=sys.stderr)
+        dfs = []
+        events_so_far = 0
+        report_every = max(1, len(non_empty) // 20)
+        for i, p in enumerate(non_empty):
+            try:
+                df = pd.read_parquet(p)
+                dfs.append(df)
+                events_so_far += len(df)
+            except Exception as e2:
+                print(f"  [warn] Could not read {p.name}: {e2}", file=sys.stderr)
+            if (i + 1) % report_every == 0 or (i + 1) == len(non_empty):
+                print(f"  {i+1}/{len(non_empty)} ({(i+1)/len(non_empty)*100:.0f}%) — {events_so_far:,} events",
+                      flush=True)
+        if not dfs:
+            return pd.DataFrame()
+        combined = pd.concat(dfs, ignore_index=True)
+
+    print(f"  Read {len(combined):,} events in {time.time()-t_read:.1f}s", flush=True)
 
     # Safety dedup — should be rare with non-overlapping 1° tiles
     before = len(combined)

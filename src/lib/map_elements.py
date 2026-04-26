@@ -469,7 +469,7 @@ def build_help_html(airport_name):
         cmd_args: Command-line arguments string for display.
     """
     if airport_name:
-        title_string = '<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">airbornehotspots.org traffic report for' + \
+        title_string = '<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">airbornehotspots.org traffic report for ' + \
             airport_name + '</div>\n'
     else:
         title_string = '<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">airbornehotspots.org</div>\n'

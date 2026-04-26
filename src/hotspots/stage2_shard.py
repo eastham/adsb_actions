@@ -102,13 +102,16 @@ def shard(input_gz: str, lat_min: int, lat_max: int, lon_min: int, lon_max: int,
     print(f"  Region: lat [{lat_min},{lat_max}) × lon [{lon_min},{lon_max})")
     print(f"  Output: {GRID_DIR}/")
 
-    # Open output file handles
+    # Open output file handles, writing to .tmp paths for atomic rename on close.
     handles = {}
+    tmp_paths = {}  # (lat,lon) -> Path of in-progress .tmp file
     for lat, lon in cells:
         out_path = output_path(date_tag, lat, lon)
         if skip_existing and out_path.exists():
             continue
-        handles[(lat, lon)] = gzip.open(str(out_path), "wt")
+        tmp_path = out_path.with_suffix(".gz.tmp")
+        handles[(lat, lon)] = gzip.open(str(tmp_path), "wt")
+        tmp_paths[(lat, lon)] = tmp_path
 
     if not handles:
         print("All cells already exist, nothing to do.")
@@ -120,50 +123,64 @@ def shard(input_gz: str, lat_min: int, lat_max: int, lon_min: int, lon_max: int,
     records_in = 0
     records_out = 0
 
-    with gzip.open(input_gz, "rt") as fin:
-        for line in fin:
-            line = line.strip()
-            if not line:
-                continue
-            records_in += 1
+    try:
+        with gzip.open(input_gz, "rt") as fin:
+            for line in fin:
+                line = line.strip()
+                if not line:
+                    continue
+                records_in += 1
 
+                try:
+                    rec = _json_loads(line)
+                except Exception:
+                    continue
+
+                lat = rec.get("lat")
+                lon = rec.get("lon")
+                if lat is None or lon is None:
+                    continue
+
+                # Altitude ceiling
+                alt = rec.get("alt_baro", 0)
+                if isinstance(alt, (int, float)) and alt > ALT_CEILING_FT:
+                    continue
+
+                # math.floor handles negative lons correctly (e.g. -122.3 → -123)
+                cell_lat = math.floor(lat)
+                cell_lon = math.floor(lon)
+
+                key = (cell_lat, cell_lon)
+                if key not in handles:
+                    continue
+
+                handles[key].write(line + "\n")
+                stats[key]["records"] += 1
+                records_out += 1
+
+                if records_in % 2_000_000 == 0:
+                    elapsed = time.time() - t0
+                    print(f"  {records_in/1e6:.0f}M scanned, {records_out:,} kept "
+                          f"({elapsed:.0f}s)", flush=True)
+
+        # Close handles, atomically rename .tmp → final, record file sizes
+        for key, fh in handles.items():
+            fh.close()
+            tmp = tmp_paths[key]
+            final = output_path(date_tag, key[0], key[1])
+            tmp.rename(final)
+            stats[key]["size_bytes"] = final.stat().st_size
+
+    except BaseException:
+        # Ctrl-C or network error — close and delete all .tmp files so a
+        # subsequent run with --skip-existing won't treat them as complete.
+        for key, fh in handles.items():
             try:
-                rec = _json_loads(line)
+                fh.close()
             except Exception:
-                continue
-
-            lat = rec.get("lat")
-            lon = rec.get("lon")
-            if lat is None or lon is None:
-                continue
-
-            # Altitude ceiling
-            alt = rec.get("alt_baro", 0)
-            if isinstance(alt, (int, float)) and alt > ALT_CEILING_FT:
-                continue
-
-            # math.floor handles negative lons correctly (e.g. -122.3 → -123)
-            cell_lat = math.floor(lat)
-            cell_lon = math.floor(lon)
-
-            key = (cell_lat, cell_lon)
-            if key not in handles:
-                continue
-
-            handles[key].write(line + "\n")
-            stats[key]["records"] += 1
-            records_out += 1
-
-            if records_in % 2_000_000 == 0:
-                elapsed = time.time() - t0
-                print(f"  {records_in/1e6:.0f}M scanned, {records_out:,} kept "
-                      f"({elapsed:.0f}s)", flush=True)
-
-    # Close all handles and record file sizes
-    for key, fh in handles.items():
-        fh.close()
-        path = output_path(date_tag, key[0], key[1])
-        stats[key]["size_bytes"] = path.stat().st_size
+                pass
+            tmp_paths[key].unlink(missing_ok=True)
+        raise
 
     elapsed = time.time() - t0
     print(f"\nDone in {elapsed:.1f}s. Scanned {records_in:,} records, "

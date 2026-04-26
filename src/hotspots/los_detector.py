@@ -241,7 +241,7 @@ class LOSDetector:
 
         event = {
             "timestamp": los.cpa_time,
-            "datetime_utc": cpa_dt.isoformat(),
+            "datetime_utc": cpa_dt.strftime("%Y-%m-%d %H:%M:%S") + " GMT",
             "lat": meanloc.lat,
             "lon": meanloc.lon,
             "alt_ft": alt_ft,
@@ -376,7 +376,8 @@ class LOSDetector:
 
             # Resampling pass (primary LOS detection)
             self._resampling_started = True
-            adsb_actions.do_resampled_prox_checks(self._los_gc_interceptor)
+            adsb_actions.do_resampled_prox_checks(self._los_gc_interceptor,
+                                                   label=os.path.basename(shard_gz))
 
             # Final GC pass to catch any remaining open events
             # Use the latest timestamp + LOS_GC_TIME to force finalization
@@ -403,14 +404,38 @@ class LOSDetector:
         return len(self.events)
 
     def write_parquet(self, path: str) -> None:
-        """Write collected events to a Parquet file."""
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        df = pd.DataFrame(self.events)
-        df.to_parquet(path, index=False)
+        """Write collected events to a Parquet file. Skips write if no events;
+        caller should use write_empty_sentinel() for skip_existing support."""
+        if not self.events:
+            return
+        p = Path(path)
+        os.makedirs(p.parent, exist_ok=True)
+        tmp = p.with_suffix(".parquet.tmp")
+        try:
+            pd.DataFrame(self.events).to_parquet(str(tmp), index=False)
+            tmp.rename(p)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
 
     def write_csv(self, path: str) -> None:
         """Write collected events to a clean CSV file (no postprocessing prefix).
-        Track data is omitted — it's large JSON and only needed in the parquet."""
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        df = pd.DataFrame(self.events).drop(columns=["track1", "track2"], errors="ignore")
-        df.to_csv(path, index=False)
+        Track data is omitted — it's large JSON and only needed in the parquet.
+        Skips write if no events."""
+        if not self.events:
+            return
+        p = Path(path)
+        os.makedirs(p.parent, exist_ok=True)
+        tmp = p.with_suffix(".csv.tmp")
+        try:
+            pd.DataFrame(self.events).drop(columns=["track1", "track2"], errors="ignore").to_csv(str(tmp), index=False)
+            tmp.rename(p)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+
+    def write_empty_sentinel(self, parquet_path: str) -> None:
+        """Write a zero-byte sentinel so skip_existing can identify processed empty cells."""
+        p = Path(parquet_path).with_suffix(".empty")
+        os.makedirs(p.parent, exist_ok=True)
+        p.touch()

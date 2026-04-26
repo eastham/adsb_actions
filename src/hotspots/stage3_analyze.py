@@ -65,7 +65,8 @@ def analyze_cell(args_tuple):
     csv_path = str(EVENTS_DIR / date_tag / f"{stem}.csv")
     animation_dir = str(ANIMATIONS_DIR / stem)
 
-    if skip_existing and os.path.exists(parquet_path):
+    sentinel_path = parquet_path.replace(".parquet", ".empty")
+    if skip_existing and (os.path.exists(parquet_path) or os.path.exists(sentinel_path)):
         return (stem, None, 0, "skipped")
 
     t0 = time.time()
@@ -87,6 +88,8 @@ def analyze_cell(args_tuple):
                                 lon_min=lon_min, lon_max=lon_max)
         detector.write_parquet(parquet_path)
         detector.write_csv(csv_path)
+        if n_events == 0:
+            detector.write_empty_sentinel(parquet_path)
         elapsed = time.time() - t0
         return (stem, n_events, elapsed, None)
     except Exception as e:
@@ -110,7 +113,9 @@ def analyze_shards(shards: list, workers: int = 1, animate: bool = False,
     # Date subdirs are created per-cell in analyze_cell() via write_parquet/write_csv
     EVENTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    args_list = [(str(s), animate, skip_existing) for s in shards]
+    # Sort largest shards first (LPT heuristic) so big cells don't become tail blockers.
+    args_list = [(str(s), animate, skip_existing)
+                 for s in sorted(shards, key=lambda p: p.stat().st_size, reverse=True)]
     results = {}
 
     if workers > 1:

@@ -134,7 +134,7 @@ def yield_from_sorted_file(filepath: str, insert_dummy_entries: bool = True):
     counter = 0
     point_count = 0
 
-    print(f"Streaming from sorted file: {filepath}")
+    # "Streaming from" printed after first point so we can show record count inline
 
     # Auto-detect gzip vs plain text based on file extension, or stdin
     # For .gz files, use pigz (parallel) or gzip subprocess for better performance
@@ -176,11 +176,14 @@ def yield_from_sorted_file(filepath: str, insert_dummy_entries: bool = True):
             point_count += 1
             if point_count == 1:
                 first_time = datetime.datetime.fromtimestamp(ts).strftime("%m/%d/%y %H:%M")
-                print(f"First point at {ts} / {first_time}")
-            if point_count % 500000 == 0:
+                fname = os.path.basename(filepath) if filepath != '-' else 'stdin'
+                print(f"  Streaming {fname} (first point {first_time})")
+            if point_count % 100000 == 0:
                 current_time = datetime.datetime.fromtimestamp(ts).strftime("%m/%d/%y %H:%M")
                 pts_since_last = point_count - last_diag_count
-                print(f"Processed {point_count/1e6:.1f}M points, current time: {current_time}, "
+                wall_time = datetime.datetime.now().strftime("%H:%M")
+                print(f"[{wall_time}] Processed {point_count/1e6:.1f}M points, current timestamp: {current_time}, "
+                      f"file={fname} "
                       f"io={io_time_accum*1e6/pts_since_last:.1f}us/pt, "
                       f"parse={parse_time_accum*1e6/pts_since_last:.1f}us/pt")
                 io_time_accum = 0.0
@@ -200,7 +203,8 @@ def yield_from_sorted_file(filepath: str, insert_dummy_entries: bool = True):
     except Exception as e:  # lint: disable=broad-except
         print(f"Error while streaming from sorted file: {e}")
 
-    print(f"Finished streaming {point_count:,} points")
+    if point_count >= 500000:
+        print(f"  Finished streaming {point_count/1e6:.2f}M points from {os.path.basename(filepath)}")
 
 def main(directory : str, port: int,
          utc_convert : int, speed_x : int):

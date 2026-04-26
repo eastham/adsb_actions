@@ -4,9 +4,17 @@ v2 LOS Pipeline Orchestrator
 
 Runs stages 2–5 over a date range and geographic region:
   Stage 2: Shard CONUS JSONL into 1°×1° grid cells
+            source: data/  (CONUS_DDMMYY.gz files, override with --conus-dir)
+            dest:   data/v2/grid/<date_tag>/<date_tag>_<lat>_<lon>.gz
   Stage 3: Run LOS analysis on each cell shard (parallelizable)
+            source: data/v2/grid/
+            dest:   data/v2/events/<date_tag>/<date_tag>_<lat>_<lon>.{csv,parquet}
   Stage 4: Aggregate per-cell Parquets into a regional Parquet
+            source: data/v2/events/
+            dest:   data/v2/regional/<region>_<start>_<end>.parquet
   Stage 5: Generate map HTML (self-contained or PMTiles)
+            source: data/v2/regional/
+            dest:   data/v2/maps/<region>_<start>_<end>.html
 
 Usage:
     # Bay Area → Nevada band, 21 cells, 8 workers, PMTiles output:
@@ -64,6 +72,28 @@ _NAMED_REGIONS = {
     name: (bb["lat_min"], bb["lat_max"], bb["lon_min"], bb["lon_max"])
     for name, bb in REGIONS.items()
 }
+
+
+# Cells to skip for known high-density events that flood the prox detector with false positives.
+# Each entry: (lat, lon, start_date_YYYYMMDD, end_date_YYYYMMDD, reason)
+CELL_EXCLUSIONS = [
+    (43, -89, "20250719", "20250727", "EAA AirVenture Oshkosh"),
+]
+
+
+def _is_excluded(path: Path, date_tag: str) -> bool:
+    parts = path.stem.split("_")
+    if len(parts) < 3:
+        return False
+    try:
+        lat, lon = int(parts[1]), int(parts[2])
+    except ValueError:
+        return False
+    for ex_lat, ex_lon, start, end, reason in CELL_EXCLUSIONS:
+        if lat == ex_lat and lon == ex_lon and start <= date_tag <= end:
+            print(f"  [excluded] {path.stem} — {reason}")
+            return True
+    return False
 
 
 def _cell_in_box(path: Path, lat_min, lat_max, lon_min, lon_max) -> bool:
@@ -133,7 +163,8 @@ def run_stages_23(
 
     # Stage 3
     day_shards = [s for s in find_shards(GRID_DIR, date_tag)
-                  if _cell_in_box(s, lat_min, lat_max, lon_min, lon_max)]
+                  if _cell_in_box(s, lat_min, lat_max, lon_min, lon_max)
+                  and not _is_excluded(s, date_tag)]
     if day_shards:
         t0 = time.time()
         results = analyze_shards(day_shards, workers=workers, animate=animate,
@@ -370,7 +401,8 @@ def main():
         dates = list(_date_range(start_date, end_date))
         for i, d in enumerate(dates, 1):
             date_str = d.strftime("%Y%m%d")
-            print(f"\n[{i}/{n_days}] {date_str}")
+            stage2_label = "Stage 2: shard CONUS→grid" if not args.skip_stage2 else "Stage 2: skipped"
+            print(f"\n[day {i}/{n_days}] {date_str}  |  {stage2_label}  →  Stage 3: LOS analysis")
             stats = run_stages_23(
                 date=d,
                 lat_min=lat_min, lat_max=lat_max,
@@ -387,20 +419,24 @@ def main():
 
     # Stage 4: aggregate
     df = pd.DataFrame()
-    if not args.skip_stage4:
+    if args.skip_stage4 and Path(regional_parquet).exists():
+        df = load_events(regional_parquet)
+        print(f"\nStage 4 skipped — loaded {len(df):,} events from {regional_parquet}")
+    else:
+        if args.skip_stage4:
+            print(f"\nStage 4: regional Parquet not found, aggregating from per-cell files...")
+        else:
+            print(f"\nStage 4: aggregate per-cell Parquets → regional Parquet ({(end_date - start_date).days + 1} day(s))...")
         date_tags = [d.strftime("%Y%m%d") for d in _date_range(start_date, end_date)]
-        print(f"\nStage 4: aggregating {len(date_tags)} day(s)...")
         t4 = time.time()
         df = run_stage4(date_tags, lat_min, lat_max, lon_min, lon_max,
                         region_label, regional_parquet)
         print(f"  Stage 4 done in {time.time()-t4:.0f}s")
-    elif Path(regional_parquet).exists():
-        df = load_events(regional_parquet)
-        print(f"\nStage 4 skipped — loaded {len(df):,} events from {regional_parquet}")
 
     # Stage 5: visualize
     if not args.skip_stage5:
-        print(f"\nStage 5: visualizing...")
+        mode = "PMTiles" if args.pmtiles else "self-contained HTML"
+        print(f"\nStage 5: generate map ({mode})...")
         t5 = time.time()
         run_stage5(df, output_html, pmtiles=args.pmtiles, zoom=args.zoom,
                    traffic_tile_dir=args.traffic_tiles)

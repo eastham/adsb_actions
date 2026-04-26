@@ -66,6 +66,14 @@ def load_events(parquet_path: str) -> pd.DataFrame:
     return df
 
 
+def _fmt_dt(val: str) -> str:
+    """Normalize ISO datetime string: replace T separator with space, append GMT."""
+    s = str(val).replace("T", " ")
+    if s and not s.endswith(" GMT"):
+        s += " GMT"
+    return s
+
+
 def build_tooltip_html(row: pd.Series) -> str:
     """Build an HTML tooltip string for an event row."""
     lat_nm = row.get("lateral_nm", 0)
@@ -77,10 +85,11 @@ def build_tooltip_html(row: pd.Series) -> str:
         lat_nm = alt_sep = "?"
 
     return (
-        f"{row.get('datetime_utc','')}<br>"
+        f"{_fmt_dt(row.get('datetime_utc',''))}<br>"
         f"<b>{row.get('flight1','?')} / {row.get('flight2','?')}</b><br>"
-        f"Quality: {row.get('quality','?')}<br>"
-        f"Lateral: {lat_nm} nm | Alt sep: {alt_sep} ft"
+        f"Quality: {row.get('quality','?')}"
+        + (f" ({row.get('quality_explanation','')})" if row.get('quality_explanation') else "") + "<br>"
+        f"Min lateral sep: {lat_nm} nm | Min alt sep: {alt_sep} ft"
     )
 
 
@@ -96,7 +105,7 @@ def _build_geojson(df: pd.DataFrame) -> dict:
             "alt_sep_ft": float(row.get("alt_sep_ft", 0)),
             "alt_ft": float(row.get("alt_ft", 0)),
             "alt_band": str(row.get("alt_band", "")),
-            "datetime_utc": str(row.get("datetime_utc", "")),
+            "datetime_utc": _fmt_dt(row.get("datetime_utc", "")),
             "html": build_tooltip_html(row),
             "track1": row.get("track1", "") if isinstance(row.get("track1"), str) else "",
             "track2": row.get("track2", "") if isinstance(row.get("track2"), str) else "",
@@ -124,7 +133,7 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
     geojson_json = json.dumps(geojson)
 
     alt_bands = set(df["alt_band"].dropna().unique().tolist()) if "alt_band" in df.columns else set()
-    all_bands_ordered = ["0k-3k", "3k-6k", "6k-9k", "9k-12k", "12k-15k", "15k-18k", "18k+"]
+    all_bands_ordered = ["0k-3k", "3k-6k", "6k-9k", "9k-12k", "12k-15k", "15k-18k"]
     # Extra bands not in canonical list (shouldn't normally occur)
     extra_bands = sorted(b for b in alt_bands if b not in all_bands_ordered)
 
@@ -152,7 +161,10 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
             "maxzoom": 19,
         },
     }
-    layers = [{"id": "osm-layer", "type": "raster", "source": "osm"}]
+    # OSM stays full opacity until z6, then fades out by z7. The long overlap with FAA
+    # gives sectional tiles time to load over the network so there's no visible gap.
+    layers = [{"id": "osm-layer", "type": "raster", "source": "osm",
+               "paint": {"raster-opacity": ["interpolate", ["linear"], ["zoom"], 6.0, 1.0, 7.0, 0.0]}}]
 
     if faa_basemap:
         sources["faa-sectional"] = {
@@ -164,7 +176,9 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
             "maxzoom": 12,
         }
         layers.append({"id": "faa-layer", "type": "raster", "source": "faa-sectional",
-                        "paint": {"raster-opacity": 0.85}})
+                        "minzoom": 4,
+                        "paint": {"raster-opacity": ["interpolate", ["linear"], ["zoom"], 4.0, 0.0, 5.0, 0.6, 6.0, 1.0],
+                                  "raster-resampling": "linear"}})
 
     if traffic_tile_dir:
         # Tile URL relative to the HTML output (tiles live next to the HTML or at a known path)
@@ -244,8 +258,8 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '  if (props.html) showTooltip(props.html);\n'
         '\n'
         '  var tracks = [\n'
-        '    {pts: t1, color: "#1e90ff", id: "track1", name: props.flight1 || "?"},\n'
-        '    {pts: t2, color: "#ff5050", id: "track2", name: props.flight2 || "?"}\n'
+        '    {pts: t1, color: "rgba(30,144,255,0.6)", id: "track1", name: props.flight1 || "?"},\n'
+        '    {pts: t2, color: "rgba(255,80,80,0.6)", id: "track2", name: props.flight2 || "?"}\n'
         '  ].filter(function(t) { return t.pts.length > 0; });\n'
         '\n'
         '  var allTs = [];\n'
@@ -262,13 +276,13 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '    var lineId = "anim-" + track.id;\n'
         '    var dotId = "anim-" + track.id + "-dot";\n'
         '    var labelId = "anim-" + track.id + "-label";\n'
-        '    map.addSource(lineId, {type:"geojson", data:{type:"Feature",geometry:{type:"LineString",coordinates:[]}}});\n'
+        '    map.addSource(lineId, {type:"geojson", data:{type:"FeatureCollection",features:[]}});\n'
         '    map.addLayer({id:lineId, type:"line", source:lineId,\n'
-        '      paint:{"line-color":track.color, "line-width":3, "line-opacity":0.9}});\n'
+        '      paint:{"line-color":["get","color"], "line-width":["get","width"], "line-opacity":0.9}});\n'
         '    map.addSource(dotId, {type:"geojson", data:{type:"FeatureCollection",features:[]}});\n'
         '    map.addLayer({id:dotId, type:"circle", source:dotId,\n'
         '      paint:{"circle-radius":6, "circle-color":track.color,\n'
-        '             "circle-stroke-color":"#fff", "circle-stroke-width":2}});\n'
+        '             "circle-stroke-color":"#000", "circle-stroke-width":2}});\n'
         '    map.addSource(labelId, {type:"geojson", data:{type:"FeatureCollection",features:[]}});\n'
         '    map.addLayer({id:labelId, type:"symbol", source:labelId,\n'
         '      layout:{"text-field":["get","label"], "text-size":13,\n'
@@ -283,10 +297,43 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '    track._labelId = labelId;\n'
         '  });\n'
         '\n'
+        '  var GAP_THRESHOLD = 15;\n'
+        '  function buildSegments(track, upToT) {\n'
+        '    // Returns a FeatureCollection of LineString segments, gray+dashed for data gaps\n'
+        '    var features = [], seg = [], prevT = null;\n'
+        '    for (var i = 0; i < track.pts.length; i++) {\n'
+        '      var p = track.pts[i];\n'
+        '      if (p[0] > upToT) break;\n'
+        '      var isGap = prevT !== null && (p[0] - prevT) > GAP_THRESHOLD;\n'
+        '      if (isGap && seg.length >= 2) {\n'
+        '        features.push({type:"Feature",\n'
+        '          properties:{color:"rgba(160,160,160,0.6)",width:2,gap:false},\n'
+        '          geometry:{type:"LineString",coordinates:seg}});\n'
+        '        seg = [seg[seg.length-1]];\n'
+        '      }\n'
+        '      if (isGap) {\n'
+        '        // Bridge gap with gray dashed segment\n'
+        '        var bridge = [seg[0], [p[2], p[1]]];\n'
+        '        features.push({type:"Feature",\n'
+        '          properties:{color:"rgba(160,160,160,0.6)",width:2,gap:true},\n'
+        '          geometry:{type:"LineString",coordinates:bridge}});\n'
+        '        seg = [[p[2], p[1]]];\n'
+        '      } else {\n'
+        '        seg.push([p[2], p[1]]);\n'
+        '      }\n'
+        '      prevT = p[0];\n'
+        '    }\n'
+        '    if (seg.length >= 2)\n'
+        '      features.push({type:"Feature",\n'
+        '        properties:{color:track.color,width:3,gap:false},\n'
+        '        geometry:{type:"LineString",coordinates:seg}});\n'
+        '    return {type:"FeatureCollection",features:features};\n'
+        '  }\n'
+        '\n'
         '  function resetTracks() {\n'
         '    // Clear all tracks back to empty so both restart together on loop\n'
         '    tracks.forEach(function(track) {\n'
-        '      map.getSource(track._lineId).setData({type:"Feature",geometry:{type:"LineString",coordinates:[]}});\n'
+        '      map.getSource(track._lineId).setData({type:"FeatureCollection",features:[]});\n'
         '      map.getSource(track._dotId).setData({type:"FeatureCollection",features:[]});\n'
         '      map.getSource(track._labelId).setData({type:"FeatureCollection",features:[]});\n'
         '    });\n'
@@ -299,18 +346,14 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '      resetTracks();\n'
         '    }\n'
         '    tracks.forEach(function(track) {\n'
-        '      // Full track from start up to current time (no disappearing tail)\n'
-        '      var coords = [], lastCoord = null, lastAlt = 0;\n'
+        '      var lastCoord = null, lastAlt = 0;\n'
         '      for (var i = 0; i < track.pts.length; i++) {\n'
         '        var p = track.pts[i];\n'
-        '        if (p[0] > _animT) continue;\n'
-        '        coords.push([p[2], p[1]]);\n'
+        '        if (p[0] > _animT) break;\n'
         '        lastCoord = [p[2], p[1]];\n'
         '        lastAlt = p[3] || 0;\n'
         '      }\n'
-        '      if (coords.length >= 2) {\n'
-        '        map.getSource(track._lineId).setData({type:"Feature",geometry:{type:"LineString",coordinates:coords}});\n'
-        '      }\n'
+        '      map.getSource(track._lineId).setData(buildSegments(track, _animT));\n'
         '      if (lastCoord) {\n'
         '        map.getSource(track._dotId).setData({type:"Feature",properties:{},geometry:{type:"Point",coordinates:lastCoord}});\n'
         '        var label = track.name + "\\n" + Math.round(lastAlt) + "ft";\n'
@@ -351,8 +394,12 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
     if alt_band_checkboxes:
         html += (
             '<div id="alt-band-info">\n'
-            '<b>Altitude Filter</b><br>\n'
+            '<b>Event Altitude Filter</b><br>\n'
             + alt_band_checkboxes +
+            '<div style="margin-top:8px;border-top:1px solid #555;padding-top:6px">\n'
+            '<label style="display:block;font-size:11px;margin-bottom:2px">Heatmap Opacity: <span id="heatmap-opacity-val">30</span>%</label>\n'
+            '<input type="range" id="heatmap-opacity-slider" min="0" max="75" value="30" style="width:100%">\n'
+            '</div>\n'
             '</div>\n'
         )
 
@@ -364,9 +411,21 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '  container: "map",\n'
         '  style: ' + style_json + ',\n'
         '  center: [' + str(center_lon) + ', ' + str(center_lat) + '],\n'
-        '  zoom: ' + str(zoom) + '\n'
+        '  zoom: ' + str(zoom) + ',\n'
+        '  dragRotate: false,\n'
+        '  pitchWithRotate: false,\n'
+        '  touchPitch: false\n'
         '});\n'
-        'map.addControl(new maplibregl.NavigationControl());\n'
+        'map.touchZoomRotate.disableRotation();\n'
+        'map.addControl(new maplibregl.NavigationControl({visualizePitch: false}));\n'
+        '\n'
+        '// Zoom-level readout (debug) — uncomment to enable\n'
+        '// var zoomBox = document.createElement("div");\n'
+        '// zoomBox.style.cssText = "position:absolute;bottom:8px;left:8px;z-index:1000;'
+        'background:rgba(0,0,0,0.7);color:#fff;padding:4px 8px;font:12px monospace;border-radius:3px;";\n'
+        '// document.body.appendChild(zoomBox);\n'
+        '// function updateZoom() { zoomBox.textContent = "zoom: " + map.getZoom().toFixed(2); }\n'
+        '// map.on("zoom", updateZoom); map.on("load", updateZoom);\n'
         '\n'
         + animation_js +
         '\n'
@@ -384,7 +443,7 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '      "heatmap-weight": 1,\n'
         '      "heatmap-intensity": 1,\n'
         '      "heatmap-radius": ["interpolate", ["exponential", 2], ["zoom"], 8, 20, 9, 40, 10, 80, 11, 160, 12, 320],\n'
-        '      "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0, 10, 0.4, 14, 0.4]\n'
+        '      "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0, 9, 0.3, 14, 0.3]\n'
         '    }\n'
         '  });\n'
         '\n'
@@ -397,7 +456,7 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '    paint: {\n'
         '      "circle-color": ["get", "color"],\n'
         '      "circle-radius": ["get", "radius"],\n'
-        '      "circle-stroke-color": "#fff",\n'
+        '      "circle-stroke-color": "#000",\n'
         '      "circle-stroke-width": 1\n'
         '    }\n'
         '  });\n'
@@ -451,6 +510,16 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '  document.querySelectorAll(".band-cb").forEach(function(cb) {\n'
         '    cb.addEventListener("change", updateBandFilter);\n'
         '  });\n'
+        '\n'
+        '  // Heatmap opacity slider\n'
+        '  var heatSlider = document.getElementById("heatmap-opacity-slider");\n'
+        '  if (heatSlider) {\n'
+        '    heatSlider.addEventListener("input", function() {\n'
+        '      var v = parseInt(this.value) / 100;\n'
+        '      map.setPaintProperty("events-heat", "heatmap-opacity", v);\n'
+        '      document.getElementById("heatmap-opacity-val").textContent = this.value;\n'
+        '    });\n'
+        '  }\n'
         '});\n'
         '</script>\n'
         '</body>\n'
@@ -476,7 +545,7 @@ def _build_geojson_for_tiles(df: pd.DataFrame) -> dict:
             "alt_sep_ft": float(row.get("alt_sep_ft", 0)),
             "alt_ft": float(row.get("alt_ft", 0)),
             "alt_band": str(row.get("alt_band", "")),
-            "datetime_utc": str(row.get("datetime_utc", "")),
+            "datetime_utc": _fmt_dt(row.get("datetime_utc", "")),
             "html": build_tooltip_html(row),
             "color": QUALITY_COLORS.get(str(row.get("quality", "")).lower(), DEFAULT_COLOR),
             "radius": QUALITY_RADIUS.get(str(row.get("quality", "")).lower(), DEFAULT_RADIUS),
@@ -492,22 +561,35 @@ def _build_geojson_for_tiles(df: pd.DataFrame) -> dict:
 
 def write_event_sidecars(df: pd.DataFrame, sidecar_dir: str) -> None:
     """
-    Write one JSON file per event containing track data + tooltip HTML.
-    Filename: {sidecar_dir}/{event_id}.json
-    On click the shell HTML fetches this to get track data for animation.
+    Write tracks.ndjson (one JSON object per line) and tracks.index.json.gz
+    (event_id -> [byte_offset, length]). JS fetches the index once, then does
+    a Range request for just the clicked event's line.
     """
+    import gzip
     os.makedirs(sidecar_dir, exist_ok=True)
-    for idx, row in df.iterrows():
-        sidecar = {
-            "event_id": str(idx),
-            "flight1": str(row.get("flight1", "")),
-            "flight2": str(row.get("flight2", "")),
-            "html": build_tooltip_html(row),
-            "track1": row.get("track1", "") if isinstance(row.get("track1"), str) else "",
-            "track2": row.get("track2", "") if isinstance(row.get("track2"), str) else "",
-        }
-        with open(os.path.join(sidecar_dir, f"{idx}.json"), "w") as f:
-            json.dump(sidecar, f)
+    print(f"  Writing track blob for {len(df):,} events...", flush=True)
+
+    ndjson_path = os.path.join(sidecar_dir, "tracks.ndjson")
+    index = {}
+    offset = 0
+    with open(ndjson_path, "w", encoding="utf-8") as f:
+        for idx, row in df.iterrows():
+            entry = json.dumps({
+                "track1": row.get("track1", "") if isinstance(row.get("track1"), str) else "",
+                "track2": row.get("track2", "") if isinstance(row.get("track2"), str) else "",
+            }) + "\n"
+            length = len(entry.encode("utf-8"))
+            index[str(idx)] = [offset, length]
+            f.write(entry)
+            offset += length
+
+    index_path = os.path.join(sidecar_dir, "tracks.index.json.gz")
+    with gzip.open(index_path, "wt", encoding="utf-8") as f:
+        json.dump(index, f)
+
+    ndjson_mb = os.path.getsize(ndjson_path) / 1024 / 1024
+    index_kb = os.path.getsize(index_path) / 1024
+    print(f"  tracks.ndjson: {ndjson_mb:.1f} MB  index: {index_kb:.0f} KB", flush=True)
 
 
 def generate_pmtiles(df: pd.DataFrame, output_path: str) -> str:
@@ -539,10 +621,10 @@ def generate_pmtiles(df: pd.DataFrame, output_path: str) -> str:
             "-l", "events",       # layer name in the vector tile
             tmp_geojson,
         ]
-        print(f"  Running tippecanoe...")
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        print(f"  Running tippecanoe ({len(df):,} events)...", flush=True)
+        result = subprocess.run(cmd, capture_output=False, text=True)
         if result.returncode != 0:
-            raise RuntimeError(f"tippecanoe failed:\n{result.stderr}")
+            raise RuntimeError(f"tippecanoe failed (exit {result.returncode})")
     finally:
         os.unlink(tmp_geojson)
 
@@ -565,7 +647,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
     pmtiles_rel = os.path.basename(pmtiles_path)
     sidecar_rel = os.path.basename(sidecar_dir)
 
-    all_bands_ordered = ["0k-3k", "3k-6k", "6k-9k", "9k-12k", "12k-15k", "15k-18k", "18k+"]
+    all_bands_ordered = ["0k-3k", "3k-6k", "6k-9k", "9k-12k", "12k-15k", "15k-18k"]
     alt_bands_set = set(alt_bands)
     extra_bands = sorted(b for b in alt_bands_set if b not in all_bands_ordered)
 
@@ -586,7 +668,10 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
                 "tileSize": 256, "maxzoom": 19,
                 "attribution": "&copy; OpenStreetMap contributors"},
     }
-    pm_layers = [{"id": "osm-layer", "type": "raster", "source": "osm"}]
+    # OSM stays full opacity until z6, then fades out by z7. The long overlap with FAA
+    # gives sectional tiles time to load over the network so there's no visible gap.
+    pm_layers = [{"id": "osm-layer", "type": "raster", "source": "osm",
+                  "paint": {"raster-opacity": ["interpolate", ["linear"], ["zoom"], 6.0, 1.0, 7.0, 0.0]}}]
     if faa_basemap:
         pm_sources["faa-sectional"] = {
             "type": "raster", "tiles": [FAA_TILE_URL],
@@ -594,7 +679,9 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
             "attribution": "FAA VFR Sectional Charts via ArcGIS/Esri",
         }
         pm_layers.append({"id": "faa-layer", "type": "raster", "source": "faa-sectional",
-                           "paint": {"raster-opacity": 0.85}})
+                           "minzoom": 4,
+                           "paint": {"raster-opacity": ["interpolate", ["linear"], ["zoom"], 4.0, 0.0, 5.0, 0.6, 6.0, 1.0],
+                                     "raster-resampling": "linear"}})
     if traffic_tile_dir:
         pm_sources["traffic"] = {
             "type": "raster",
@@ -607,12 +694,10 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
     style_json = json.dumps({"version": 8, "glyphs": glyphs_url,
                               "sources": pm_sources, "layers": pm_layers})
 
-    # Animation JS is identical to the embedded mode except startAnimation
-    # receives props from clicked tile feature (no track data) and then
-    # fetches the sidecar JSON to get track1/track2 before animating.
+    # Animation JS: index fetched once, then per-click Range request for just that event's track line.
     animation_js = (
         'var _animRaf = null, _animT = 0, _tooltip = null, _animSpeed = 1;\n'
-        'var _trackSources = [], _fetchGen = 0;\n'
+        'var _trackSources = [], _fetchGen = 0, _tracksIndex = null;\n'
         '\n'
         'function clearAnimation() {\n'
         '  _fetchGen++;\n'
@@ -672,8 +757,8 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '  if (props.html) showTooltip(props.html);\n'
         '\n'
         '  var tracks = [\n'
-        '    {pts: t1, color: "#1e90ff", id: "track1", name: props.flight1 || "?"},\n'
-        '    {pts: t2, color: "#ff5050", id: "track2", name: props.flight2 || "?"}\n'
+        '    {pts: t1, color: "rgba(30,144,255,0.6)", id: "track1", name: props.flight1 || "?"},\n'
+        '    {pts: t2, color: "rgba(255,80,80,0.6)", id: "track2", name: props.flight2 || "?"}\n'
         '  ].filter(function(t) { return t.pts.length > 0; });\n'
         '\n'
         '  var allTs = [];\n'
@@ -686,13 +771,13 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    var lineId = "anim-" + track.id;\n'
         '    var dotId = "anim-" + track.id + "-dot";\n'
         '    var labelId = "anim-" + track.id + "-label";\n'
-        '    map.addSource(lineId, {type:"geojson", data:{type:"Feature",geometry:{type:"LineString",coordinates:[]}}});\n'
+        '    map.addSource(lineId, {type:"geojson", data:{type:"FeatureCollection",features:[]}});\n'
         '    map.addLayer({id:lineId, type:"line", source:lineId,\n'
-        '      paint:{"line-color":track.color, "line-width":3, "line-opacity":0.9}});\n'
+        '      paint:{"line-color":["get","color"], "line-width":["get","width"], "line-opacity":0.9}});\n'
         '    map.addSource(dotId, {type:"geojson", data:{type:"FeatureCollection",features:[]}});\n'
         '    map.addLayer({id:dotId, type:"circle", source:dotId,\n'
         '      paint:{"circle-radius":6, "circle-color":track.color,\n'
-        '             "circle-stroke-color":"#fff", "circle-stroke-width":2}});\n'
+        '             "circle-stroke-color":"#000", "circle-stroke-width":2}});\n'
         '    map.addSource(labelId, {type:"geojson", data:{type:"FeatureCollection",features:[]}});\n'
         '    map.addLayer({id:labelId, type:"symbol", source:labelId,\n'
         '      layout:{"text-field":["get","label"], "text-size":13,\n'
@@ -703,10 +788,43 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    track._lineId = lineId; track._dotId = dotId; track._labelId = labelId;\n'
         '  });\n'
         '\n'
+        '  var GAP_THRESHOLD = 15;\n'
+        '  function buildSegments(track, upToT) {\n'
+        '    // Returns a FeatureCollection of LineString segments, gray+dashed for data gaps\n'
+        '    var features = [], seg = [], prevT = null;\n'
+        '    for (var i = 0; i < track.pts.length; i++) {\n'
+        '      var p = track.pts[i];\n'
+        '      if (p[0] > upToT) break;\n'
+        '      var isGap = prevT !== null && (p[0] - prevT) > GAP_THRESHOLD;\n'
+        '      if (isGap && seg.length >= 2) {\n'
+        '        features.push({type:"Feature",\n'
+        '          properties:{color:"rgba(160,160,160,0.6)",width:2,gap:false},\n'
+        '          geometry:{type:"LineString",coordinates:seg}});\n'
+        '        seg = [seg[seg.length-1]];\n'
+        '      }\n'
+        '      if (isGap) {\n'
+        '        // Bridge gap with gray dashed segment\n'
+        '        var bridge = [seg[0], [p[2], p[1]]];\n'
+        '        features.push({type:"Feature",\n'
+        '          properties:{color:"rgba(160,160,160,0.6)",width:2,gap:true},\n'
+        '          geometry:{type:"LineString",coordinates:bridge}});\n'
+        '        seg = [[p[2], p[1]]];\n'
+        '      } else {\n'
+        '        seg.push([p[2], p[1]]);\n'
+        '      }\n'
+        '      prevT = p[0];\n'
+        '    }\n'
+        '    if (seg.length >= 2)\n'
+        '      features.push({type:"Feature",\n'
+        '        properties:{color:track.color,width:3,gap:false},\n'
+        '        geometry:{type:"LineString",coordinates:seg}});\n'
+        '    return {type:"FeatureCollection",features:features};\n'
+        '  }\n'
+        '\n'
         '  function resetTracks() {\n'
         '    tracks.forEach(function(track) {\n'
         '      var firstPt = [track.pts[0][2], track.pts[0][1]];\n'
-        '      map.getSource(track._lineId).setData({type:"Feature",geometry:{type:"LineString",coordinates:[]}});\n'
+        '      map.getSource(track._lineId).setData({type:"FeatureCollection",features:[]});\n'
         '      map.getSource(track._dotId).setData({type:"Feature",properties:{},geometry:{type:"Point",coordinates:firstPt}});\n'
         '      map.getSource(track._labelId).setData({type:"Feature",properties:{label:track.name},geometry:{type:"Point",coordinates:firstPt}});\n'
         '    });\n'
@@ -715,14 +833,13 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    _animT += 0.5 * _animSpeed;\n'
         '    if (_animT > maxT + 5) { _animT = minT; resetTracks(); }\n'
         '    tracks.forEach(function(track) {\n'
-        '      var coords = [], lastCoord = null, lastAlt = 0;\n'
+        '      var lastCoord = null, lastAlt = 0;\n'
         '      for (var i = 0; i < track.pts.length; i++) {\n'
         '        var p = track.pts[i];\n'
-        '        if (p[0] > _animT) continue;\n'
-        '        coords.push([p[2], p[1]]); lastCoord = [p[2], p[1]]; lastAlt = p[3] || 0;\n'
+        '        if (p[0] > _animT) break;\n'
+        '        lastCoord = [p[2], p[1]]; lastAlt = p[3] || 0;\n'
         '      }\n'
-        '      if (coords.length >= 2)\n'
-        '        map.getSource(track._lineId).setData({type:"Feature",geometry:{type:"LineString",coordinates:coords}});\n'
+        '      map.getSource(track._lineId).setData(buildSegments(track, _animT));\n'
         '      if (lastCoord) {\n'
         '        map.getSource(track._dotId).setData({type:"Feature",properties:{},geometry:{type:"Point",coordinates:lastCoord}});\n'
         '        map.getSource(track._labelId).setData({type:"Feature",properties:{label:track.name+"\\n"+Math.round(lastAlt)+"ft"},geometry:{type:"Point",coordinates:lastCoord}});\n'
@@ -734,21 +851,37 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '  } catch(err) { console.error("runAnimation error:", err); }\n'
         '}\n'
         '\n'
-        # On click: fetch sidecar JSON then start animation
+        # On click: load index once, then Range-fetch just this event's track line
         'function startAnimation(props) {\n'
         '  clearAnimation();\n'
         '  _animSpeed = 1;\n'
         '  if (props.html) showTooltip(props.html);\n'
         '  var gen = _fetchGen;\n'
-        '  var url = "' + sidecar_rel + '/" + props.event_id + ".json";\n'
-        '  console.log("startAnimation: event_id=", props.event_id, "url=", url);\n'
-        '  fetch(url)\n'
-        '    .then(function(r) { console.log("fetch status:", r.status); return r.json(); })\n'
-        '    .then(function(data) {\n'
-        '      console.log("sidecar data keys:", Object.keys(data), "gen match:", gen === _fetchGen);\n'
-        '      if (gen === _fetchGen) runAnimation(data);\n'
-        '    })\n'
-        '    .catch(function(e) { console.warn("sidecar fetch failed:", e); });\n'
+        '  var eid = String(props.event_id);\n'
+        '  function _animate() {\n'
+        '    if (gen !== _fetchGen) return;\n'
+        '    var loc = _tracksIndex[eid];\n'
+        '    if (!loc) { console.warn("no index entry for event_id", eid); return; }\n'
+        '    var blobUrl = "' + sidecar_rel + '/tracks.ndjson";\n'
+        '    fetch(blobUrl, {headers: {"Range": "bytes=" + loc[0] + "-" + (loc[0]+loc[1]-1)}})\n'
+        '      .then(function(r) { return r.text(); })\n'
+        '      .then(function(text) {\n'
+        '        if (gen !== _fetchGen) return;\n'
+        '        var data = JSON.parse(text);\n'
+        '        data.flight1 = props.flight1;\n'
+        '        data.flight2 = props.flight2;\n'
+        '        runAnimation(data);\n'
+        '      })\n'
+        '      .catch(function(e) { console.warn("track fetch failed:", e); });\n'
+        '  }\n'
+        '  if (_tracksIndex) {\n'
+        '    _animate();\n'
+        '  } else {\n'
+        '    fetch("' + sidecar_rel + '/tracks.index.json.gz")\n'
+        '      .then(function(r) { return r.json(); })\n'
+        '      .then(function(idx) { _tracksIndex = idx; _animate(); })\n'
+        '      .catch(function(e) { console.warn("index fetch failed:", e); });\n'
+        '  }\n'
         '}\n'
         '\n'
         'document.addEventListener("keydown", function(e) {\n'
@@ -781,8 +914,12 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
     if alt_band_checkboxes:
         html += (
             '<div id="alt-band-info">\n'
-            '<b>Altitude Filter</b><br>\n'
+            '<b>Event Altitude Filter</b><br>\n'
             + alt_band_checkboxes +
+            '<div style="margin-top:8px;border-top:1px solid #555;padding-top:6px">\n'
+            '<label style="display:block;font-size:11px;margin-bottom:2px">Heatmap Opacity: <span id="heatmap-opacity-val">30</span>%</label>\n'
+            '<input type="range" id="heatmap-opacity-slider" min="0" max="75" value="30" style="width:100%">\n'
+            '</div>\n'
             '</div>\n'
         )
 
@@ -797,9 +934,21 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '  container: "map",\n'
         '  style: ' + style_json + ',\n'
         '  center: [' + str(center_lon) + ', ' + str(center_lat) + '],\n'
-        '  zoom: ' + str(zoom) + '\n'
+        '  zoom: ' + str(zoom) + ',\n'
+        '  dragRotate: false,\n'
+        '  pitchWithRotate: false,\n'
+        '  touchPitch: false\n'
         '});\n'
-        'map.addControl(new maplibregl.NavigationControl());\n'
+        'map.touchZoomRotate.disableRotation();\n'
+        'map.addControl(new maplibregl.NavigationControl({visualizePitch: false}));\n'
+        '\n'
+        '// Zoom-level readout (debug) — uncomment to enable\n'
+        '// var zoomBox = document.createElement("div");\n'
+        '// zoomBox.style.cssText = "position:absolute;bottom:8px;left:8px;z-index:1000;'
+        'background:rgba(0,0,0,0.7);color:#fff;padding:4px 8px;font:12px monospace;border-radius:3px;";\n'
+        '// document.body.appendChild(zoomBox);\n'
+        '// function updateZoom() { zoomBox.textContent = "zoom: " + map.getZoom().toFixed(2); }\n'
+        '// map.on("zoom", updateZoom); map.on("load", updateZoom);\n'
         '\n'
         + animation_js +
         '\n'
@@ -819,7 +968,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    paint: {"heatmap-weight": 1,\n'
         '            "heatmap-intensity": 1,\n'
         '            "heatmap-radius": ["interpolate", ["exponential", 2], ["zoom"], 8, 20, 9, 40, 10, 80, 11, 160, 12, 320],\n'
-        '            "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0, 10, 0.4, 14, 0.4]}\n'
+        '            "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0, 9, 0.3, 14, 0.3]}\n'
         '  });\n'
         '\n'
         '  // Circle layer colored by quality\n'
@@ -829,7 +978,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    paint: {\n'
         '      "circle-color": ["get", "color"],\n'
         '      "circle-radius": ["get", "radius"],\n'
-        '      "circle-stroke-color": "#fff", "circle-stroke-width": 1\n'
+        '      "circle-stroke-color": "#000", "circle-stroke-width": 1\n'
         '    }\n'
         '  });\n'
         '\n'
@@ -847,12 +996,15 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    map.getCanvas().style.cursor = "";\n'
         '  });\n'
         '\n'
+        '  var _justClickedDot = false;\n'
         '  map.on("click", "events-hit", function(e) {\n'
         '    if (!e.features || !e.features.length) return;\n'
+        '    _justClickedDot = true;\n'
         '    startAnimation(e.features[0].properties);\n'
         '  });\n'
         '\n'
         '  map.on("click", function(e) {\n'
+        '    if (_justClickedDot) { _justClickedDot = false; return; }\n'
         '    var f = map.queryRenderedFeatures(e.point, {layers: ["events-hit"]});\n'
         '    if (!f.length) clearAnimation();\n'
         '  });\n'
@@ -873,6 +1025,16 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '  document.querySelectorAll(".band-cb").forEach(function(cb) {\n'
         '    cb.addEventListener("change", updateBandFilter);\n'
         '  });\n'
+        '\n'
+        '  // Heatmap opacity slider\n'
+        '  var heatSlider = document.getElementById("heatmap-opacity-slider");\n'
+        '  if (heatSlider) {\n'
+        '    heatSlider.addEventListener("input", function() {\n'
+        '      var v = parseInt(this.value) / 100;\n'
+        '      map.setPaintProperty("events-heat", "heatmap-opacity", v);\n'
+        '      document.getElementById("heatmap-opacity-val").textContent = this.value;\n'
+        '    });\n'
+        '  }\n'
         '});\n'
         '</script>\n'
         '</body>\n'
@@ -936,7 +1098,7 @@ def main():
         pmtiles_path = generate_pmtiles(df, output_path)
 
         sidecar_dir = output_path.replace(".html", "_tracks")
-        print(f"  Writing {len(df):,} event track sidecars to {sidecar_dir}/...")
+        print(f"  Writing {len(df):,} event track sidecars to {sidecar_dir}/...", flush=True)
         write_event_sidecars(df, sidecar_dir)
 
         html = generate_pmtiles_html(

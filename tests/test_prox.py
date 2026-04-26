@@ -52,7 +52,7 @@ JSON_STRING_PLANE1_ZEROALT = '{"now": 1661692178, "alt_baro": 0, "gscp": 128, "l
 JSON_STRING_PLANE1_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}\n'
 JSON_STRING_PLANE1_NEAR = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}\n'
 JSON_STRING_PLANE2_NEAR = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d2"}\n'
-JSON_STRING_PLANE3_DELAY = '{"now": 1661692185, "alt_baro": 0, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d3"}\n'
+JSON_STRING_PLANE3_DELAY = '{"now": 1661692183, "alt_baro": 0, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d3"}\n'
 JSON_STRING_PLANE4_TOOFAR = '{"now": 1661692178, "alt_baro": 4300, "gscp": 128, "lat": 40.76864689708049, "lon": -119.20915027077689, "track": 203.4, "hex": "a061d4"}\n'
 JSON_STRING_PLANE5_WITHINPROX = '{"now": 1661692178, "alt_baro": 4300, "gscp": 128, "lat": 40.76759089177806, "lon":  -119.20984743421535, "track": 203.4, "hex": "a061d5"}\n'
 JSON_STRING_PLANE6_TOOFAR_ALT = '{"now": 1661692178, "alt_baro": 4800, "gscp": 128, "lat": 40.76759089177806, "lon":  -119.20984743421535, "track": 203.4, "hex": "a061d6"}\n'
@@ -100,7 +100,7 @@ def big_prox_test(adsb_actions):
     for f in adsb_actions.flights.flight_dict.values():
         rendered_flight_ctr += 1 if f.in_any_bbox() else 0
     assert rendered_flight_ctr == 4  # unexpired aircraft left
-    assert los_update_ctr == 21
+    assert los_update_ctr == 17
 
 
 # Resampling test aircraft - they will cross each other's path in the middle
@@ -137,11 +137,11 @@ def test_resampling_prox():
 
     logging.info("*** resampling test 3 ***")
     run_singlepoint_prox_test(yaml_data)
-    assert los_update_ctr == 4
+    assert los_update_ctr == 2  # central plane expires before crossing with EXPIRE_TIME=5
 
     logging.info("*** resampling test 4 ***")
     run_singlepoint_prox_test_with_expiry(yaml_data)
-    assert los_update_ctr == 4  # no change
+    assert los_update_ctr == 2  # no change
 
 def run_crossing_prox_test(yaml_data):
     adsb_actions = AdsbActions(yaml_data, resample=True)
