@@ -22,7 +22,7 @@ class LOSAnimator:
     AIRCRAFT1_COLOR = "blue"
     AIRCRAFT2_COLOR = "red"
     GAP_COLOR = "gray"         # color for segments spanning a data gap
-    GAP_THRESHOLD_S = 10       # seconds; gaps larger than this are highlighted
+    GAP_THRESHOLD_S = 2        # seconds; gaps larger than this are highlighted
 
     def __init__(self, resampler):
         """Initialize the animator.
@@ -109,7 +109,12 @@ class LOSAnimator:
         GAP_WEIGHT_MULT = 1
         LOS_WEIGHT_MULT = 4
 
-        # Determine which positions are in a significant interpolated gap.
+        # Determine which positions are in a significant data gap.
+        # Two cases:
+        # 1. Runs of resampled=True points spanning > GAP_THRESHOLD_S (gaps within
+        #    MAX_INTERPOLATE_SECS that got filled by the resampler).
+        # 2. Consecutive points with a raw time jump > GAP_THRESHOLD_S (gaps larger
+        #    than MAX_INTERPOLATE_SECS where the resampler produced no points at all).
         in_gap = [False] * len(positions)
         i = 0
         while i < len(positions):
@@ -123,6 +128,13 @@ class LOSAnimator:
                         in_gap[j] = True
             else:
                 i += 1
+
+        # Case 2: no interpolated points exist for large gaps — mark the point
+        # that follows a jump as a gap boundary so the connecting segment is grey.
+        for i in range(1, len(positions)):
+            if positions[i].now - positions[i - 1].now > self.GAP_THRESHOLD_S:
+                in_gap[i] = True
+
 
         def _style_key(idx):
             """Return a tuple representing the visual style for position idx."""
@@ -302,12 +314,21 @@ class LOSAnimator:
         '''
         m.get_root().html.add_child(folium.Element(hide_time_html))
 
-        # Add altitude labels along the track every 20 seconds
+        # Add altitude labels along the track every 20 seconds.
+        # Aircraft 1 labels offset up-right; aircraft 2 offset down-left so they
+        # stay legible when the two planes are superimposed.
         label_interval = 20  # seconds
-        for positions, tail, color in [
-            (positions1, tail1, self.AIRCRAFT1_COLOR),
-            (positions2, tail2, self.AIRCRAFT2_COLOR)
-        ]:
+        # Aircraft 2 label gets a leading <br> so it appears below the dot when
+        # both labels land on the same point.
+        label_interval = 20  # seconds
+        label_prefixes = ["", "<br>"]
+        for (positions, tail, color), prefix in zip(
+            [
+                (positions1, tail1, self.AIRCRAFT1_COLOR),
+                (positions2, tail2, self.AIRCRAFT2_COLOR)
+            ],
+            label_prefixes
+        ):
             if not positions:
                 continue
             start_time_pos = positions[0].now
@@ -329,7 +350,9 @@ class LOSAnimator:
                 folium.Marker(
                     location=[pos.lat, pos.lon],
                     icon=folium.DivIcon(
-                        html=f'<div style="font-size:11px;color:{color};font-weight:bold;white-space:nowrap;text-shadow: 1px 1px 1px white;">{label_text}</div>',
+                        html=(f'<div style="font-size:11px;color:{color};font-weight:bold;'
+                              f'white-space:nowrap;text-shadow: 1px 1px 1px white;">'
+                              f'{prefix}{label_text}</div>'),
                         icon_anchor=(0, 0)
                     )
                 ).add_to(m)
@@ -344,6 +367,7 @@ class LOSAnimator:
             <span style="color: {self.AIRCRAFT2_COLOR};">●</span> {tail2}<br>
             <small><span style="color:orange;">⭕</span> CPA: {datetime.datetime.utcfromtimestamp(event_time).strftime("%H:%M:%S")} UTC</small><br>
             <small><span style="color:magenta;">▬</span> LOS duration: {int(los_end - los_start) if los_start and los_end else "?"} sec</small><br>
+            <small><span style="color:gray;">▬ ▬</span> Data gap</small><br>
             <small>Total duration shown: {end_time - start_time} sec</small><br>
         </div>
         '''

@@ -154,18 +154,42 @@ def load_all_airports():
     return np.array(rows, dtype=np.float64)
 
 
-def precompute_tile_elevations(zoom, airports):
-    """Precompute nearest-airport elevation for all CONUS tiles at given zoom.
+def lookup_airport_by_icao(icao):
+    """Return (lat, lon, elev_ft) for a given ICAO identifier, or raise ValueError."""
+    airports_path = download_with_cache(AIRPORTS_URL, "airports.csv")
+    icao_upper = icao.upper()
+    with open(airports_path, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row.get('ident', '').strip('"').upper() == icao_upper:
+                try:
+                    lat = float(row['latitude_deg'])
+                    lon = float(row['longitude_deg'])
+                    elev = float(row.get('elevation_ft') or 0)
+                    return lat, lon, elev
+                except (ValueError, TypeError):
+                    break
+    raise ValueError(f"Airport '{icao}' not found in OurAirports database")
 
+
+def precompute_tile_elevations(zoom, airports, bounds=None):
+    """Precompute nearest-airport elevation for tiles within bounds at given zoom.
+
+    Args:
+        bounds: (min_lat, max_lat, min_lon, max_lon); defaults to CONUS.
     Returns dict mapping (tx, ty) -> field_elev_ft.
     Uses scipy KD-tree for fast bulk nearest-neighbor lookup.
     """
     from scipy.spatial import cKDTree
 
     n = 2 ** zoom
-    # Compute tile index range covering CONUS
-    ul_lat, ul_lon = CONUS_UPPER_LEFT
-    lr_lat, lr_lon = CONUS_LOWER_RIGHT
+    if bounds is not None:
+        min_lat, max_lat, min_lon, max_lon = bounds
+        ul_lat, ul_lon = max_lat, min_lon
+        lr_lat, lr_lon = min_lat, max_lon
+    else:
+        ul_lat, ul_lon = CONUS_UPPER_LEFT
+        lr_lat, lr_lon = CONUS_LOWER_RIGHT
     _, ty_min, _, _ = latlon_to_tile_pixel(ul_lat, ul_lon, zoom)
     tx_min, _, _, _ = latlon_to_tile_pixel(ul_lat, ul_lon, zoom)
     _, ty_max, _, _ = latlon_to_tile_pixel(lr_lat, lr_lon, zoom)
@@ -441,16 +465,22 @@ def flush_segments(segments_by_tile_band, tile_store):
 # --- Main tile generation ---
 
 def generate_tiles(output_dir, global_files, zoom=DEFAULT_ZOOM,
-                   max_records=None):
+                   max_records=None, bbox=None, max_alt_agl=None,
+                   flat_color=None, skip_geo_filter=False,
+                   alpha_per_track=None):
     """Generate traffic density tiles from global ADS-B files.
-
-    Colors are based on traffic density: red = high density, green = low density.
 
     Args:
         output_dir: Where to write tiles/{z}/{x}/{y}.png
         global_files: List of Path objects to process
         zoom: Tile zoom level (default 11)
         max_records: Stop processing each file after this many records (None = all)
+        bbox: Optional (min_lat, max_lat, min_lon, max_lon) to restrict output
+              region; replaces the default CONUS bounding box check.
+        max_alt_agl: Override FT_MAX_ABOVE_AIRPORT ceiling (ft AGL, default 4000)
+        flat_color: If set, (R, G, B, A) tuple; all tracks rendered in this
+                    constant color instead of the density-based gradient.
+        skip_geo_filter: Skip all geographic filtering (for pre-sharded airport files).
     """
     output_dir = Path(output_dir)
 
@@ -466,7 +496,7 @@ def generate_tiles(output_dir, global_files, zoom=DEFAULT_ZOOM,
     print("Loading airport database...")
     airports = load_all_airports()
     print(f"  {len(airports)} airports loaded")
-    tile_elev_cache = precompute_tile_elevations(zoom, airports)
+    tile_elev_cache = precompute_tile_elevations(zoom, airports, bounds=bbox)
 
     # Disk-backed tile storage with large cache to avoid I/O thrashing.
     # ~6000 tiles × 128KB = ~750MB RAM for a typical single-day CONUS run.
@@ -520,9 +550,14 @@ def generate_tiles(output_dir, global_files, zoom=DEFAULT_ZOOM,
             ts = record['now']
             alt = record.get('alt_baro')
 
-            # Skip records outside continental US
-            if not is_within_conus(lat, lon):
-                continue
+            # Skip records outside region of interest
+            if not skip_geo_filter:
+                if bbox is not None:
+                    min_lat, max_lat, min_lon, max_lon = bbox
+                    if not (min_lat <= lat <= max_lat and min_lon <= lon <= max_lon):
+                        continue
+                elif not is_within_conus(lat, lon):
+                    continue
 
             # Parse altitude
             alt_int = None
@@ -552,7 +587,8 @@ def generate_tiles(output_dir, global_files, zoom=DEFAULT_ZOOM,
                             # skip expensive clip for filtered segments
                             fe = tile_elev_cache[ttx, tty]
                             alt_floor = fe + FT_MIN_BELOW_AIRPORT
-                            alt_ceil = fe + FT_MAX_ABOVE_AIRPORT
+                            alt_ceil = fe + (max_alt_agl if max_alt_agl is not None
+                                             else FT_MAX_ABOVE_AIRPORT)
 
                             if not (alt_floor <= avg_alt <= alt_ceil):
                                 file_filtered += 1
@@ -613,26 +649,40 @@ def generate_tiles(output_dir, global_files, zoom=DEFAULT_ZOOM,
         log_max = math.log1p(DENSITY_FOR_FULL_BRIGHTNESS)
         count_f = count.astype(np.float32)
 
-        # Apply color gradient: high density -> band 0 (purple), low -> band max (light blue)
         rgb = np.zeros((256, 256, 3), dtype=np.uint8)
-        for i in range(256):
-            for j in range(256):
-                if count[i, j] > 0:
-                    norm = min(math.log1p(count[i, j]) / log_max, 1.0)
-                    band_frac = 1.0 - norm  # high density -> band 0
-                    band_idx = int(band_frac * (NUM_BANDS - 1) + 0.5)
-                    color = band_to_color(band_idx)
-                    rgb[i, j, 0] = int(color[0] * COLOR_VIBRANCY + 0.5)
-                    rgb[i, j, 1] = int(color[1] * COLOR_VIBRANCY + 0.5)
-                    rgb[i, j, 2] = int(color[2] * COLOR_VIBRANCY + 0.5)
+        if flat_color is not None:
+            fr, fg, fb, _ = flat_color
+            mask = count > 0
+            rgb[mask, 0] = fr
+            rgb[mask, 1] = fg
+            rgb[mask, 2] = fb
+        else:
+            # Apply color gradient: high density -> band 0 (purple), low -> band max (light blue)
+            for i in range(256):
+                for j in range(256):
+                    if count[i, j] > 0:
+                        norm = min(math.log1p(count[i, j]) / log_max, 1.0)
+                        band_frac = 1.0 - norm  # high density -> band 0
+                        band_idx = int(band_frac * (NUM_BANDS - 1) + 0.5)
+                        color = band_to_color(band_idx)
+                        rgb[i, j, 0] = int(color[0] * COLOR_VIBRANCY + 0.5)
+                        rgb[i, j, 1] = int(color[1] * COLOR_VIBRANCY + 0.5)
+                        rgb[i, j, 2] = int(color[2] * COLOR_VIBRANCY + 0.5)
 
-        # Alpha: quadratic ramp so single tracks (count=1) are nearly invisible
-        # and density must build up before becoming prominent.
-        # count=1 -> norm~0.23 -> alpha~14, count=3 -> ~40, count=10 -> ~127
-        alpha_norm = np.minimum(np.log1p(count_f) / log_max, 1.0)
-        alpha = np.where(count > 0,
-                         (alpha_norm * alpha_norm * 255.0).clip(0, 255),
-                         0).astype(np.uint8)
+        # Alpha: additive-per-track (flat_color mode only), fixed flat alpha, or
+        # quadratic density ramp (default). count=1->norm~0.23->alpha~14, count=10->~127
+        if flat_color is not None and alpha_per_track is not None:
+            # Each overlapping track adds alpha_per_track, saturating at 255
+            alpha = np.minimum(count.astype(np.uint32) * alpha_per_track,
+                               255).astype(np.uint8)
+        elif flat_color is not None:
+            _, _, _, fa = flat_color
+            alpha = np.where(count > 0, fa, 0).astype(np.uint8)
+        else:
+            alpha_norm = np.minimum(np.log1p(count_f) / log_max, 1.0)
+            alpha = np.where(count > 0,
+                             (alpha_norm * alpha_norm * 255.0).clip(0, 255),
+                             0).astype(np.uint8)
         rgba = np.dstack([rgb, alpha])
 
         img = Image.fromarray(rgba, 'RGBA')
@@ -700,11 +750,55 @@ if __name__ == "__main__":
                         help=f"Tile zoom level (default: {DEFAULT_ZOOM})")
     parser.add_argument("--max-records", type=int, default=None,
                         help="Stop processing each file after this many records")
+    parser.add_argument("--airport", type=str, default=None,
+                        help="Use pre-sharded airport files from data/ICAO/ (e.g. KDAB)")
+    parser.add_argument("--max-alt-agl", type=int, default=None,
+                        help="Override altitude ceiling in ft AGL (default: 4000)")
+    parser.add_argument("--flat-color", type=str, default=None,
+                        help="Render all tracks in a fixed RGB color, e.g. '255,0,0' "
+                             "(use with --alpha-per-track or append ,A for fixed alpha)")
+    parser.add_argument("--alpha-per-track", type=int, default=None,
+                        help="Additive alpha per overlapping track in flat-color mode "
+                             "(e.g. 40 means ~6 tracks saturate to opaque)")
     args = parser.parse_args()
 
+    flat_color = None
+    if args.flat_color:
+        parts = [int(x) for x in args.flat_color.split(',')]
+        if len(parts) == 3:
+            parts.append(255)  # default opaque if no A given; alpha_per_track overrides
+        if len(parts) != 4:
+            parser.error("--flat-color must be R,G,B or R,G,B,A  e.g. '255,0,0,180'")
+        flat_color = tuple(parts)
+    if args.alpha_per_track and not flat_color:
+        parser.error("--alpha-per-track requires --flat-color")
+
     dates = generate_date_range(args.start_date, args.end_date, args.day_filter)
-    global_files = global_files_for_dates(dates, Path(args.data_dir))
+
+    skip_geo_filter = False
+    bbox = None
+    if args.airport:
+        icao = args.airport.upper()
+        apt_lat, apt_lon, _ = lookup_airport_by_icao(icao)
+        BBOX_PAD = 0.5  # degrees (~30nm); just for tile precompute, not geo filtering
+        bbox = (apt_lat - BBOX_PAD, apt_lat + BBOX_PAD,
+                apt_lon - BBOX_PAD, apt_lon + BBOX_PAD)
+        shard_dir = Path(args.data_dir) / icao
+        global_files = []
+        for date in dates:
+            gz = shard_dir / f"{date.strftime('%m%d%y')}_{icao}.gz"
+            if gz.exists():
+                global_files.append(gz)
+            else:
+                print(f"Warning: missing {gz}")
+        skip_geo_filter = True  # shard is already geo-filtered
+        print(f"Using pre-sharded files for {icao}: {len(global_files)} files in {shard_dir}")
+    else:
+        global_files = global_files_for_dates(dates, Path(args.data_dir))
 
     logging.basicConfig(level=logging.INFO)
     generate_tiles(args.output_dir, global_files, args.zoom,
-                   args.max_records)
+                   args.max_records, bbox=bbox,
+                   max_alt_agl=args.max_alt_agl, flat_color=flat_color,
+                   skip_geo_filter=skip_geo_filter,
+                   alpha_per_track=args.alpha_per_track)

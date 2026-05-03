@@ -61,7 +61,16 @@ from hotspots.stage2_shard import (
 )
 from hotspots.stage3_analyze import find_shards, analyze_shards, EVENTS_DIR
 from hotspots.stage4_aggregate import aggregate, find_parquet_files, REGIONS, REGIONAL_DIR
-from hotspots.stage5_visualize import generate_html, generate_pmtiles, generate_pmtiles_html, write_event_sidecars, load_events, MAPS_DIR
+from hotspots.stage5_visualize import (
+    generate_html,
+    generate_pmtiles,
+    generate_pmtiles_html,
+    write_event_sidecars,
+    load_events,
+    MAPS_DIR,
+    build_us_airports_lookup,
+    _parse_date_range_from_stem,
+)
 
 import pandas as pd
 
@@ -201,10 +210,14 @@ def run_stage5(
     df: pd.DataFrame,
     output_path: str,
     pmtiles: bool,
-    zoom: float,
+    zoom: float | None,
     traffic_tile_dir: str = "https://airbornehotspots.org/tiles",
+    asset_stem: str | None = None,
 ) -> None:
-    """Generate map HTML (self-contained or PMTiles) from a DataFrame of events."""
+    """Generate map HTML (self-contained or PMTiles) from a DataFrame of events.
+    `zoom=None` means auto-fit to data bounds on load (whole region visible);
+    pass an explicit value to override.
+    """
     MAPS_DIR.mkdir(parents=True, exist_ok=True)
     if df.empty:
         print("  Stage 5 skipped: no events.")
@@ -212,6 +225,19 @@ def run_stage5(
 
     center_lat = float(df["lat"].mean())
     center_lon = float(df["lon"].mean())
+
+    auto_fit = zoom is None
+    static_zoom = zoom if zoom is not None else 7.0  # fallback if AUTO_FIT JS fails
+    bounds = (
+        float(df["lon"].min()), float(df["lat"].min()),
+        float(df["lon"].max()), float(df["lat"].max()),
+    )
+
+    # Date range parsed from the output stem (e.g. *_20250601_20250831.html);
+    # airports lookup baked into the HTML for the upper-left jump box.
+    stem = Path(output_path).stem
+    date_range = _parse_date_range_from_stem(stem)
+    airports_lookup = build_us_airports_lookup()
 
     if pmtiles:
         pmtiles_path = str(Path(output_path).with_suffix(".pmtiles"))
@@ -221,11 +247,20 @@ def run_stage5(
         write_event_sidecars(df, sidecar_dir)
         alt_bands = sorted(df["alt_band"].dropna().unique().tolist()) if "alt_band" in df.columns else []
         html = generate_pmtiles_html(pmtiles_path, sidecar_dir,
-                                     center_lat, center_lon, zoom, alt_bands,
-                                     traffic_tile_dir=traffic_tile_dir)
+                                     center_lat, center_lon, static_zoom, alt_bands,
+                                     traffic_tile_dir=traffic_tile_dir,
+                                     date_range=date_range,
+                                     airports_lookup=airports_lookup,
+                                     asset_stem=asset_stem,
+                                     bounds=bounds,
+                                     auto_fit=auto_fit)
     else:
-        html = generate_html(df, center_lat, center_lon, zoom,
-                             traffic_tile_dir=traffic_tile_dir)
+        html = generate_html(df, center_lat, center_lon, static_zoom,
+                             traffic_tile_dir=traffic_tile_dir,
+                             date_range=date_range,
+                             airports_lookup=airports_lookup,
+                             bounds=bounds,
+                             auto_fit=auto_fit)
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
@@ -337,12 +372,18 @@ def main():
     # Stage 5
     parser.add_argument("--pmtiles", action="store_true",
                         help="Stage 5: PMTiles output (required for large datasets)")
-    parser.add_argument("--zoom", type=float, default=7.0,
-                        help="Initial map zoom (default: 7)")
+    parser.add_argument("--zoom", type=float, default=None,
+                        help="Initial map zoom. Default: auto-fit to data bounds "
+                             "(whole region visible). Pass an explicit value to override.")
     parser.add_argument("--traffic-tiles", type=str,
                         default="https://airbornehotspots.org/tiles",
                         help="Traffic tile URL or local path prefix (default: production URL; "
                              "use ../../../tiles/traffic for local dev)")
+    parser.add_argument("--asset-stem", type=str, default=None,
+                        help="Override the inlined .pmtiles / _tracks filenames in the "
+                             "generated HTML (e.g. --asset-stem conus). Used when the "
+                             "deployer publishes a stable-named alias separate from the "
+                             "dated source files. Only takes effect with --pmtiles.")
 
     # Skip flags
     parser.add_argument("--skip-existing", action="store_true",
@@ -439,7 +480,8 @@ def main():
         print(f"\nStage 5: generate map ({mode})...")
         t5 = time.time()
         run_stage5(df, output_html, pmtiles=args.pmtiles, zoom=args.zoom,
-                   traffic_tile_dir=args.traffic_tiles)
+                   traffic_tile_dir=args.traffic_tiles,
+                   asset_stem=args.asset_stem)
         print(f"  Stage 5 done in {time.time()-t5:.0f}s")
 
     # Summary

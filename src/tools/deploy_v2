@@ -2,22 +2,71 @@
 """
 deploy_v2 - push v2 generated map files to remote storage under /v2.
 
-Uploads data/v2/maps/ (HTML, PMTiles, and per-event track JSON sidecars)
+Uploads data/v2/maps/ (HTML, PMTiles, and per-event track sidecars)
 to {remote}/v2/, preserving the flat layout that the HTML files expect.
 
-Example:
+By default only the assets the live HTML actually needs are pushed:
+  *.html, *.pmtiles, */tracks.ndjson, */tracks.index.json.gz
+Legacy/uncompressed sidecar artifacts (tracks.json, tracks.json.gz) are
+filtered out — they roughly double the upload size and aren't referenced.
+
+We don't pre-gzip anything: Cloudflare's CDN auto-compresses HTML/JSON on
+egress (brotli or gzip per Accept-Encoding), and an earlier attempt to
+ship pre-gzipped HTML with Content-Encoding metadata revealed that
+Cloudflare aggressively decompresses gzipped upstream responses. Plain
+bytes go up; the CDN handles the wire-format compression.
+
+Use --publish-as <name> to additionally promote a chosen dated map to a
+stable URL (e.g. /v2/conus.html). The source map must have been generated
+with `stage5_visualize.py --asset-stem <name>` so its inlined .pmtiles /
+_tracks references already point at the stable filenames.
+
+Examples:
     python src/tools/deploy_v2
     python src/tools/deploy_v2 --remote hotspots-initial:hotspots --dry-run
-    python src/tools/deploy_v2 --maps-dir data/v2/maps --dry-run
+    python src/tools/deploy_v2 --publish-as conus \\
+        --source-stem 24_50_-125_-65_20250601_20250831
 """
 
-import os
-import sys
 import argparse
+import os
 import subprocess
+import sys
 
 DEFAULT_REMOTE = "hotspots-initial:hotspots"
 DEFAULT_MAPS_DIR = "data/v2/maps"
+CACHE_CONTROL = "cache-control=no-cache, must-revalidate"
+
+# Only these patterns are uploaded. Skips legacy tracks.json/tracks.json.gz
+# (uncompressed/duplicate artifacts the HTML doesn't reference).
+INCLUDE_PATTERNS = [
+    "*.html",
+    "*.pmtiles",
+    "*_tracks/tracks.ndjson",
+    "*_tracks/tracks.index.json.gz",
+]
+
+
+def _include_args(patterns: list[str]) -> list[str]:
+    args = []
+    for pat in patterns:
+        args.extend(["--include", pat])
+    return args
+
+
+def _run(cmd: list[str], dry_run: bool) -> None:
+    # --metadata enables --metadata-set to actually take effect (rclone
+    # silently ignores --metadata-set otherwise).
+    # --s3-no-check-bucket: our R2 token has read/write on the existing bucket
+    # but not CreateBucket. rclone's copyto otherwise pre-checks and 403s.
+    cmd = cmd + ["--metadata", "--s3-no-check-bucket"]
+    if dry_run:
+        cmd = cmd + ["--dry-run"]
+    print(f"  {' '.join(cmd)}", file=sys.stderr)
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        print(f"ERROR: rclone failed (exit {result.returncode})", file=sys.stderr)
+        sys.exit(1)
 
 
 def main():
@@ -28,29 +77,73 @@ def main():
     parser.add_argument("--maps-dir", default=DEFAULT_MAPS_DIR,
                         help=f"Local v2 maps directory (default: {DEFAULT_MAPS_DIR})")
     parser.add_argument("--dry-run", "-n", action="store_true",
-                        help="Print rclone commands without running them")
+                        help="Print rclone commands without uploading")
+    parser.add_argument("--publish-as", metavar="NAME", default=None,
+                        help="Also promote a dated map to /v2/<NAME>.html / "
+                             "<NAME>.pmtiles / <NAME>_tracks/. Requires --source-stem.")
+    parser.add_argument("--source-stem", metavar="STEM", default=None,
+                        help="Filename stem (no extension) of the dated map to "
+                             "promote, e.g. 24_50_-125_-65_20250601_20250831")
     args = parser.parse_args()
 
     if not os.path.isdir(args.maps_dir):
         print(f"ERROR: maps directory not found: {args.maps_dir}", file=sys.stderr)
         sys.exit(1)
 
+    if args.publish_as and not args.source_stem:
+        print("ERROR: --publish-as requires --source-stem", file=sys.stderr)
+        sys.exit(1)
+
+    if args.publish_as:
+        # Validate the source files exist before doing any work.
+        src_html = os.path.join(args.maps_dir, f"{args.source_stem}.html")
+        src_pmt = os.path.join(args.maps_dir, f"{args.source_stem}.pmtiles")
+        src_trk = os.path.join(args.maps_dir, f"{args.source_stem}_tracks")
+        for p in (src_html, src_pmt, src_trk):
+            if not os.path.exists(p):
+                print(f"ERROR: source not found: {p}", file=sys.stderr)
+                sys.exit(1)
+
     dst = f"{args.remote}/v2"
     print(f"Deploying {args.maps_dir}/ → {dst}/", file=sys.stderr)
 
-    cmd = [
+    # 1. Bulk push of every dated artifact matching the include filter.
+    _run([
         "rclone", "copy", args.maps_dir, dst,
         "--progress",
-        "--metadata-set", "cache-control=no-cache, must-revalidate",
-    ]
-    if args.dry_run:
-        cmd.append("--dry-run")
+        "--metadata-set", CACHE_CONTROL,
+        *_include_args(INCLUDE_PATTERNS),
+    ], args.dry_run)
 
-    print(f"  {' '.join(cmd)}", file=sys.stderr)
-    result = subprocess.run(cmd)
-    if result.returncode != 0:
-        print(f"ERROR: rclone failed (exit {result.returncode})", file=sys.stderr)
-        sys.exit(1)
+    # 2. Optionally promote a dated map to a stable name.
+    if args.publish_as:
+        name = args.publish_as
+        stem = args.source_stem
+        print(f"\nPromoting {stem}.* → {dst}/{name}.* ...", file=sys.stderr)
+
+        _run([
+            "rclone", "copyto",
+            os.path.join(args.maps_dir, f"{stem}.html"),
+            f"{dst}/{name}.html",
+            "--metadata-set", CACHE_CONTROL,
+        ], args.dry_run)
+
+        _run([
+            "rclone", "copyto",
+            os.path.join(args.maps_dir, f"{stem}.pmtiles"),
+            f"{dst}/{name}.pmtiles",
+            "--metadata-set", CACHE_CONTROL,
+        ], args.dry_run)
+
+        # Tracks dir: copy only the two files we care about.
+        _run([
+            "rclone", "copy",
+            os.path.join(args.maps_dir, f"{stem}_tracks"),
+            f"{dst}/{name}_tracks",
+            "--metadata-set", CACHE_CONTROL,
+            "--include", "tracks.ndjson",
+            "--include", "tracks.index.json.gz",
+        ], args.dry_run)
 
     print("Done.", file=sys.stderr)
 

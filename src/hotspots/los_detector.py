@@ -52,9 +52,10 @@ for _noisy in ("adsb_actions", "adsb_actions.adsbactions", "adsb_actions.resampl
 PROX_ALT_FT = 400
 PROX_LAT_NM = 0.3
 
-# MSL altitude bands in feet: 6 × 3000ft bands up to 18,000ft
-ALT_BANDS = [(0, 3000), (3000, 6000), (6000, 9000),
-             (9000, 12000), (12000, 15000), (15000, 18000)]
+# MSL altitude bands in feet. Upper bound matches the resampler's
+# DEFAULT_MAX_ALTITUDE (10,000 ft) — events above that are dropped upstream,
+# so higher bands would always be empty.
+ALT_BANDS = [(0, 3000, "0k-3k"), (3000, 6000, "3k-6k"), (6000, 10001, "6k-10k")]
 
 # Spatial altitude filter parameters:
 # Events within AIRPORT_EXCLUSION_RADIUS_NM of an airport are required to be
@@ -72,10 +73,10 @@ def alt_band_label(alt_ft) -> str:
         alt = float(alt_ft)
     except (TypeError, ValueError):
         return "unknown"
-    for lo, hi in ALT_BANDS:
+    for lo, hi, label in ALT_BANDS:
         if lo <= alt < hi:
-            return f"{lo//1000}k-{hi//1000}k"
-    return "18k+"
+            return label
+    return "10k+"
 
 
 def _dist_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -220,7 +221,7 @@ class LOSDetector:
         for t in range(t_start, t_end + 1):
             for loc in lbt.get(t, []):
                 if loc.flight == flight_id:
-                    points.append([t, loc.lat, loc.lon, loc.alt_baro])
+                    points.append([t, loc.lat, loc.lon, loc.alt_baro, 1 if loc.resampled else 0])
         return _json.dumps(points)
 
     def _harvest_event(self, los):
@@ -241,7 +242,7 @@ class LOSDetector:
 
         event = {
             "timestamp": los.cpa_time,
-            "datetime_utc": cpa_dt.strftime("%Y-%m-%d %H:%M:%S") + " GMT",
+            "datetime_utc": cpa_dt.strftime("%Y-%m-%dT%H:%M:%S"),
             "lat": meanloc.lat,
             "lon": meanloc.lon,
             "alt_ft": alt_ft,

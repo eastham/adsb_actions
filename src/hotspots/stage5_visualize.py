@@ -66,15 +66,7 @@ def load_events(parquet_path: str) -> pd.DataFrame:
     return df
 
 
-def _fmt_dt(val: str) -> str:
-    """Normalize ISO datetime string: replace T separator with space, append GMT."""
-    s = str(val).replace("T", " ")
-    if s and not s.endswith(" GMT"):
-        s += " GMT"
-    return s
-
-
-def build_tooltip_html(row: pd.Series) -> str:
+def build_tooltip_html(row: pd.Series, event_id: int = None) -> str:
     """Build an HTML tooltip string for an event row."""
     lat_nm = row.get("lateral_nm", 0)
     alt_sep = row.get("alt_sep_ft", 0)
@@ -84,19 +76,165 @@ def build_tooltip_html(row: pd.Series) -> str:
     except (TypeError, ValueError):
         lat_nm = alt_sep = "?"
 
+    dt_display = str(row.get("datetime_utc", "")).replace("T", " ") + " UTC"
+    id_suffix = f" <b>#{event_id}</b>" if event_id is not None else ""
     return (
-        f"{_fmt_dt(row.get('datetime_utc',''))}<br>"
-        f"<b>{row.get('flight1','?')} / {row.get('flight2','?')}</b><br>"
+        f"{dt_display}{id_suffix}<br>"
+        f"<b>{row.get('flight1','?')} / {row.get('flight2','?')}</b><br><br>"
         f"Quality: {row.get('quality','?')}"
-        + (f" ({row.get('quality_explanation','')})" if row.get('quality_explanation') else "") + "<br>"
+        + (f" ({row.get('quality_explanation','')})" if row.get('quality_explanation') else "") + "<br><br>"
         f"Min lateral sep: {lat_nm} nm | Min alt sep: {alt_sep} ft"
+    )
+
+
+def _parse_date_range_from_stem(stem: str) -> tuple[str, str] | None:
+    """Extract (MM/DD/YY, MM/DD/YY) date range from a stem like
+    `24_50_-125_-65_20250601_20250831`. Returns None if no valid YYYYMMDD
+    pair is found at the end.
+    """
+    parts = stem.split("_")
+    if len(parts) < 2:
+        return None
+    a, b = parts[-2], parts[-1]
+    if len(a) != 8 or len(b) != 8 or not (a.isdigit() and b.isdigit()):
+        return None
+    def _fmt(s):
+        return f"{s[4:6]}/{s[6:8]}/{s[2:4]}"
+    return _fmt(a), _fmt(b)
+
+
+# US-airport lookup table built once per process. Keys are ICAO/local codes
+# (uppercased); values are [lon, lat] pairs.
+_us_airports_cache: dict | None = None
+
+def build_us_airports_lookup() -> dict:
+    """Return a {IDENT: [lon, lat]} dict for US public airports from the
+    OurAirports CSV. Indexes by `ident` only (the canonical ICAO-ish code),
+    not gps_code/local_code aliases — keeps the inlined HTML payload small.
+    The jumpToAirport JS prepends "K" to bare 3-letter codes, so users typing
+    `WVI` still resolve to KWVI without alias entries. Cached per-process.
+    """
+    global _us_airports_cache
+    if _us_airports_cache is not None:
+        return _us_airports_cache
+
+    # Reuse the cached CSV downloader from generate_airport_config.
+    from tools.generate_airport_config import (
+        AIRPORTS_URL, download_with_cache,
+    )
+    import csv
+
+    airports_path = download_with_cache(AIRPORTS_URL, "airports.csv")
+    keep_types = {"large_airport", "medium_airport", "small_airport"}
+    table: dict = {}
+    with open(airports_path, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row.get("iso_country") != "US":
+                continue
+            if row.get("type") not in keep_types:
+                continue
+            try:
+                lat = float(row["latitude_deg"])
+                lon = float(row["longitude_deg"])
+            except (KeyError, ValueError):
+                continue
+            ident = (row.get("ident") or "").upper().strip()
+            if ident:
+                table[ident] = [lon, lat]
+
+    _us_airports_cache = table
+    return table
+
+
+def _date_range_header_html(date_range: tuple[str, str] | None) -> str:
+    """Render the 'Data: MM/DD/YY - MM/DD/YY' header line for the upper-right panel.
+    Returns empty string if no date range is supplied.
+    """
+    if not date_range:
+        return ""
+    start, end = date_range
+    return (
+        '<div style="margin-bottom:8px; padding-bottom:6px;'
+        ' border-bottom:1px solid #555;">\n'
+        f'<b>Data: {start} - {end}</b>\n'
+        '</div>\n'
+    )
+
+
+def _airport_jump_panel_html() -> str:
+    """Upper-left panel: airport-code jump input + small acknowledgement footer.
+    The 0.8rem font matches v1's `.stat-label` (smallest acknowledgement-style
+    font in v1, see html/index_template.html).
+    """
+    return (
+        '<div id="airport-jump-box">\n'
+        '<label style="display:flex; align-items:center; gap:6px;">\n'
+        '  Airport Code:\n'
+        '  <input type="text" id="airport-jump" maxlength="4" autocomplete="off"\n'
+        '         style="width:60px; padding:2px 4px;">\n'
+        '  <button onclick="jumpToAirport()" style="padding:2px 8px;">Go</button>\n'
+        '</label>\n'
+        '<hr style="border:0; border-top:1px solid #555; margin:8px 0;">\n'
+        '<div style="font-size:10px; line-height:1.3;">\n'
+        'Data courtesy <a href="https://adsb.lol" target="_blank"'
+        ' style="color:#9cf;text-decoration:underline">adsb.lol</a>,'
+        ' via the Open Database License.<br>\n'
+        'Data is crowdsourced and incomplete. For informational purposes only.\n'
+        '</div>\n'
+        '</div>\n'
+    )
+
+
+def _bounds_js(bounds: tuple[float, float, float, float] | None, auto_fit: bool) -> str:
+    """Emit JS globals DATA_BOUNDS and AUTO_FIT used by the load-time viewport
+    handler. DATA_BOUNDS is in MapLibre's [[lon_min, lat_min], [lon_max, lat_max]]
+    form. AUTO_FIT controls whether the page fits to those bounds when no
+    ?airport= URL param is set.
+    """
+    if bounds is None:
+        return 'var DATA_BOUNDS = null;\nvar AUTO_FIT = false;\n'
+    lon_min, lat_min, lon_max, lat_max = bounds
+    bb = json.dumps([[lon_min, lat_min], [lon_max, lat_max]])
+    return f'var DATA_BOUNDS = {bb};\nvar AUTO_FIT = {"true" if auto_fit else "false"};\n'
+
+
+def _airport_jump_js() -> str:
+    """JS for the airport-code jump box: normalizes 3-letter US codes to ICAO
+    (mirroring v1's searchAirport() in html/index_template.html), looks up
+    [lon, lat] in AIRPORTS, and flyTo's the map. Caller must define a global
+    `AIRPORTS` object and a global `map` (MapLibre instance).
+    The ?airport= URL param is consumed inside the on-load callback so flyTo
+    runs after the map is ready.
+    """
+    return (
+        'function jumpToAirport(code) {\n'
+        '  var input = document.getElementById("airport-jump");\n'
+        '  code = (code || (input ? input.value : "")).trim().toUpperCase();\n'
+        '  if (!code) return;\n'
+        '  if (/^[A-Z]{3}$/.test(code)) code = "K" + code;\n'
+        '  var loc = AIRPORTS[code];\n'
+        '  if (loc) {\n'
+        '    map.flyTo({center: loc, zoom: 11});\n'
+        '  } else {\n'
+        '    alert("Airport " + code + " not in this map.");\n'
+        '  }\n'
+        '}\n'
+        'document.addEventListener("DOMContentLoaded", function() {\n'
+        '  var input = document.getElementById("airport-jump");\n'
+        '  if (input) {\n'
+        '    input.addEventListener("keydown", function(e) {\n'
+        '      if (e.key === "Enter") jumpToAirport();\n'
+        '    });\n'
+        '  }\n'
+        '});\n'
     )
 
 
 def _build_geojson(df: pd.DataFrame) -> dict:
     """Build GeoJSON FeatureCollection from event DataFrame."""
     features = []
-    for _, row in df.iterrows():
+    for i, (_, row) in enumerate(df.iterrows()):
         props = {
             "flight1": str(row.get("flight1", "")),
             "flight2": str(row.get("flight2", "")),
@@ -105,8 +243,8 @@ def _build_geojson(df: pd.DataFrame) -> dict:
             "alt_sep_ft": float(row.get("alt_sep_ft", 0)),
             "alt_ft": float(row.get("alt_ft", 0)),
             "alt_band": str(row.get("alt_band", "")),
-            "datetime_utc": _fmt_dt(row.get("datetime_utc", "")),
-            "html": build_tooltip_html(row),
+            "datetime_utc": str(row.get("datetime_utc", "")),
+            "html": build_tooltip_html(row, event_id=i + 1),
             "track1": row.get("track1", "") if isinstance(row.get("track1"), str) else "",
             "track2": row.get("track2", "") if isinstance(row.get("track2"), str) else "",
             "color": QUALITY_COLORS.get(
@@ -127,13 +265,22 @@ def _build_geojson(df: pd.DataFrame) -> dict:
 
 def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
                   zoom: float, faa_basemap: bool = True,
-                  traffic_tile_dir: str = None) -> str:
-    """Generate a standalone MapLibre GL HTML page with event data."""
+                  traffic_tile_dir: str = None,
+                  date_range: tuple[str, str] | None = None,
+                  airports_lookup: dict | None = None,
+                  bounds: tuple[float, float, float, float] | None = None,
+                  auto_fit: bool = True) -> str:
+    """Generate a standalone MapLibre GL HTML page with event data.
+
+    `bounds` is (lon_min, lat_min, lon_max, lat_max) of the event data; when
+    `auto_fit` is True and no ?airport= URL param is set, the map fits these
+    bounds on load. Otherwise the static center/zoom are used.
+    """
     geojson = _build_geojson(df)
     geojson_json = json.dumps(geojson)
 
     alt_bands = set(df["alt_band"].dropna().unique().tolist()) if "alt_band" in df.columns else set()
-    all_bands_ordered = ["0k-3k", "3k-6k", "6k-9k", "9k-12k", "12k-15k", "15k-18k"]
+    all_bands_ordered = ["0k-3k", "3k-6k", "6k-10k"]
     # Extra bands not in canonical list (shouldn't normally occur)
     extra_bands = sorted(b for b in alt_bands if b not in all_bands_ordered)
 
@@ -213,7 +360,7 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         'function showTooltip(html) {\n'
         '  if (!_tooltip) {\n'
         '    _tooltip = document.createElement("div");\n'
-        '    _tooltip.style.cssText = "position:fixed;top:20px;left:20px;background:rgba(0,0,0,0.85);color:#fff;padding:10px 14px;border-radius:6px;font-size:13px;font-family:sans-serif;z-index:1000;max-width:320px;pointer-events:auto";\n'
+        '    _tooltip.style.cssText = "position:fixed;top:10px;left:10px;background:rgba(0,0,0,0.85);color:#fff;padding:10px 14px;border-radius:6px;font-size:13px;font-family:sans-serif;z-index:1001;max-width:320px;pointer-events:auto";\n'
         '    var close = document.createElement("span");\n'
         '    close.textContent = " \\u2715";\n'
         '    close.style.cssText = "cursor:pointer;float:right;margin-left:8px";\n'
@@ -297,36 +444,46 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '    track._labelId = labelId;\n'
         '  });\n'
         '\n'
-        '  var GAP_THRESHOLD = 15;\n'
+        '  var GAP_THRESHOLD_S = 5;\n'
         '  function buildSegments(track, upToT) {\n'
-        '    // Returns a FeatureCollection of LineString segments, gray+dashed for data gaps\n'
-        '    var features = [], seg = [], prevT = null;\n'
-        '    for (var i = 0; i < track.pts.length; i++) {\n'
-        '      var p = track.pts[i];\n'
-        '      if (p[0] > upToT) break;\n'
-        '      var isGap = prevT !== null && (p[0] - prevT) > GAP_THRESHOLD;\n'
-        '      if (isGap && seg.length >= 2) {\n'
-        '        features.push({type:"Feature",\n'
-        '          properties:{color:"rgba(160,160,160,0.6)",width:2,gap:false},\n'
-        '          geometry:{type:"LineString",coordinates:seg}});\n'
-        '        seg = [seg[seg.length-1]];\n'
-        '      }\n'
-        '      if (isGap) {\n'
-        '        // Bridge gap with gray dashed segment\n'
-        '        var bridge = [seg[0], [p[2], p[1]]];\n'
-        '        features.push({type:"Feature",\n'
-        '          properties:{color:"rgba(160,160,160,0.6)",width:2,gap:true},\n'
-        '          geometry:{type:"LineString",coordinates:bridge}});\n'
-        '        seg = [[p[2], p[1]]];\n'
-        '      } else {\n'
-        '        seg.push([p[2], p[1]]);\n'
-        '      }\n'
-        '      prevT = p[0];\n'
+        '    // p = [timestamp, lat, lon, alt, resampled(0/1)]\n'
+        '    // Pre-pass: mark indices that are part of a significant data gap.\n'
+        '    // Case 1: run of resampled points spanning > GAP_THRESHOLD_S seconds.\n'
+        '    // Case 2: raw time jump > GAP_THRESHOLD_S (gap too large to interpolate).\n'
+        '    var pts = track.pts, n = pts.length;\n'
+        '    var inGap = new Array(n).fill(false);\n'
+        '    var i = 0;\n'
+        '    while (i < n) {\n'
+        '      if (pts[i][4] === 1) {\n'
+        '        var runStart = i;\n'
+        '        while (i < n && pts[i][4] === 1) i++;\n'
+        '        if (pts[i-1][0] - pts[runStart][0] > GAP_THRESHOLD_S)\n'
+        '          for (var j = runStart; j < i; j++) inGap[j] = true;\n'
+        '      } else { i++; }\n'
         '    }\n'
-        '    if (seg.length >= 2)\n'
-        '      features.push({type:"Feature",\n'
-        '        properties:{color:track.color,width:3,gap:false},\n'
+        '    for (var i = 1; i < n; i++)\n'
+        '      if (pts[i][0] - pts[i-1][0] > GAP_THRESHOLD_S) inGap[i] = true;\n'
+        '    // Segment-building pass: emit polylines, splitting on gap/non-gap transitions.\n'
+        '    var features = [], seg = [];\n'
+        '    var prevIsGap = inGap[0];\n'
+        '    function flushSeg(isGapSeg) {\n'
+        '      if (seg.length >= 2) features.push({type:"Feature",\n'
+        '        properties:{color: isGapSeg ? "rgba(160,160,160,0.8)" : track.color,\n'
+        '                    width: isGapSeg ? 2 : 3},\n'
         '        geometry:{type:"LineString",coordinates:seg}});\n'
+        '    }\n'
+        '    for (var i = 0; i < n; i++) {\n'
+        '      var p = pts[i];\n'
+        '      if (p[0] > upToT) break;\n'
+        '      var g = inGap[i];\n'
+        '      if (g !== prevIsGap) {\n'
+        '        flushSeg(prevIsGap);\n'
+        '        seg = seg.length ? [seg[seg.length-1]] : [];\n'
+        '        prevIsGap = g;\n'
+        '      }\n'
+        '      seg.push([p[2], p[1]]);\n'
+        '    }\n'
+        '    flushSeg(prevIsGap);\n'
         '    return {type:"FeatureCollection",features:features};\n'
         '  }\n'
         '\n'
@@ -385,26 +542,50 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '#alt-band-info { position: fixed; top: 10px; right: 10px;\n'
         '  background: rgba(0,0,0,0.75); color: #fff; padding: 8px 12px;\n'
         '  border-radius: 6px; font-size: 12px; font-family: sans-serif; z-index: 1000; }\n'
+        '#airport-jump-box { position: fixed; top: 10px; left: 10px;\n'
+        '  background: rgba(0,0,0,0.75); color: #fff; padding: 8px 12px;\n'
+        '  border-radius: 6px; font-size: 12px; font-family: sans-serif;\n'
+        '  z-index: 1000; max-width: 260px; }\n'
         '</style>\n'
         '</head>\n'
         '<body>\n'
         '<div id="map"></div>\n'
+        + _airport_jump_panel_html()
     )
+
+    date_header_html = _date_range_header_html(date_range)
 
     if alt_band_checkboxes:
         html += (
             '<div id="alt-band-info">\n'
-            '<b>Event Altitude Filter</b><br>\n'
+            + date_header_html +
+            '<b>Event Altitude Filter (MSL)</b><br>\n'
             + alt_band_checkboxes +
+            '<div style="margin-top:8px;border-top:1px solid #555;padding-top:6px">\n'
+            '<label style="display:block;cursor:pointer">'
+            '<input type="checkbox" id="show-low-cb"> Show low-quality events</label>\n'
+            '</div>\n'
             '<div style="margin-top:8px;border-top:1px solid #555;padding-top:6px">\n'
             '<label style="display:block;font-size:11px;margin-bottom:2px">Heatmap Opacity: <span id="heatmap-opacity-val">30</span>%</label>\n'
             '<input type="range" id="heatmap-opacity-slider" min="0" max="75" value="30" style="width:100%">\n'
             '</div>\n'
             '</div>\n'
         )
+    elif date_header_html:
+        html += (
+            '<div id="alt-band-info">\n'
+            + date_header_html +
+            '</div>\n'
+        )
+
+    airports_json = json.dumps(airports_lookup or {})
+    bounds_js = _bounds_js(bounds, auto_fit)
 
     html += (
         '<script>\n'
+        'var AIRPORTS = ' + airports_json + ';\n'
+        + bounds_js
+        + _airport_jump_js() +
         'var EVENTS_GEOJSON = ' + geojson_json + ';\n'
         '\n'
         'var map = new maplibregl.Map({\n'
@@ -500,16 +681,26 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '    document.querySelectorAll(".band-cb:checked").forEach(function(cb) {\n'
         '      checked.push(cb.value);\n'
         '    });\n'
-        '    var filter = checked.length\n'
+        '    var bandFilter = checked.length\n'
         '      ? ["in", ["get", "alt_band"], ["literal", checked]]\n'
         '      : ["==", "1", "0"]; // nothing matches if all unchecked\n'
-        '    map.setFilter("events-circles", filter);\n'
-        '    map.setFilter("events-hit", filter);\n'
-        '    map.setFilter("events-heat", filter);\n'
+        '    var showLow = document.getElementById("show-low-cb").checked;\n'
+        '    var dotFilter = showLow\n'
+        '      ? bandFilter\n'
+        '      : ["all", bandFilter, ["!=", ["get", "quality"], "low"]];\n'
+        '    var heatFilter = ["all", bandFilter, ["!=", ["get", "quality"], "low"]];\n'
+        '    map.setFilter("events-circles", dotFilter);\n'
+        '    map.setFilter("events-hit", dotFilter);\n'
+        '    map.setFilter("events-heat", heatFilter);\n'
         '  }\n'
         '  document.querySelectorAll(".band-cb").forEach(function(cb) {\n'
         '    cb.addEventListener("change", updateBandFilter);\n'
         '  });\n'
+        '  var lowCb = document.getElementById("show-low-cb");\n'
+        '  if (lowCb) lowCb.addEventListener("change", updateBandFilter);\n'
+        '  // Apply once at load so dot/hit filters reflect the initial\n'
+        '  // (unchecked) low-quality state from frame 1.\n'
+        '  updateBandFilter();\n'
         '\n'
         '  // Heatmap opacity slider\n'
         '  var heatSlider = document.getElementById("heatmap-opacity-slider");\n'
@@ -519,6 +710,16 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '      map.setPaintProperty("events-heat", "heatmap-opacity", v);\n'
         '      document.getElementById("heatmap-opacity-val").textContent = this.value;\n'
         '    });\n'
+        '  }\n'
+        '\n'
+        '  // Initial viewport: ?airport=ICAO wins (zooms in tight); otherwise\n'
+        '  // fit the data bounds so the whole region is in view.\n'
+        '  var _params = new URLSearchParams(window.location.search);\n'
+        '  var _initial = _params.get("airport");\n'
+        '  if (_initial) {\n'
+        '    jumpToAirport(_initial);\n'
+        '  } else if (typeof DATA_BOUNDS !== "undefined" && DATA_BOUNDS && AUTO_FIT) {\n'
+        '    map.fitBounds(DATA_BOUNDS, {padding: 30, animate: false, duration: 0});\n'
         '  }\n'
         '});\n'
         '</script>\n'
@@ -535,7 +736,7 @@ def _build_geojson_for_tiles(df: pd.DataFrame) -> dict:
     the corresponding sidecar file on click.
     """
     features = []
-    for idx, row in df.iterrows():
+    for i, (idx, row) in enumerate(df.iterrows()):
         props = {
             "event_id": str(idx),
             "flight1": str(row.get("flight1", "")),
@@ -545,8 +746,8 @@ def _build_geojson_for_tiles(df: pd.DataFrame) -> dict:
             "alt_sep_ft": float(row.get("alt_sep_ft", 0)),
             "alt_ft": float(row.get("alt_ft", 0)),
             "alt_band": str(row.get("alt_band", "")),
-            "datetime_utc": _fmt_dt(row.get("datetime_utc", "")),
-            "html": build_tooltip_html(row),
+            "datetime_utc": str(row.get("datetime_utc", "")),
+            "html": build_tooltip_html(row, event_id=i + 1),
             "color": QUALITY_COLORS.get(str(row.get("quality", "")).lower(), DEFAULT_COLOR),
             "radius": QUALITY_RADIUS.get(str(row.get("quality", "")).lower(), DEFAULT_RADIUS),
         }
@@ -637,17 +838,30 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
                            center_lat: float, center_lon: float,
                            zoom: float, alt_bands: list,
                            faa_basemap: bool = True,
-                           traffic_tile_dir: str = None) -> str:
+                           traffic_tile_dir: str = None,
+                           date_range: tuple[str, str] | None = None,
+                           airports_lookup: dict | None = None,
+                           asset_stem: str | None = None,
+                           bounds: tuple[float, float, float, float] | None = None,
+                           auto_fit: bool = True) -> str:
     """
     Generate a shell HTML page that loads events from a .pmtiles file.
     Tracks are fetched on click from per-event JSON sidecars.
     Requires HTTP serving (not file://).
+
+    `asset_stem` overrides the auto-derived filename for the inlined
+    `.pmtiles` and `_tracks` references — used when the deployer publishes
+    a stable-named alias (e.g. conus.html → conus.pmtiles + conus_tracks/).
     """
     # Paths relative to the HTML file (both live in MAPS_DIR)
-    pmtiles_rel = os.path.basename(pmtiles_path)
-    sidecar_rel = os.path.basename(sidecar_dir)
+    if asset_stem:
+        pmtiles_rel = f"{asset_stem}.pmtiles"
+        sidecar_rel = f"{asset_stem}_tracks"
+    else:
+        pmtiles_rel = os.path.basename(pmtiles_path)
+        sidecar_rel = os.path.basename(sidecar_dir)
 
-    all_bands_ordered = ["0k-3k", "3k-6k", "6k-9k", "9k-12k", "12k-15k", "15k-18k"]
+    all_bands_ordered = ["0k-3k", "3k-6k", "6k-10k"]
     alt_bands_set = set(alt_bands)
     extra_bands = sorted(b for b in alt_bands_set if b not in all_bands_ordered)
 
@@ -713,7 +927,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         'function showTooltip(html) {\n'
         '  if (!_tooltip) {\n'
         '    _tooltip = document.createElement("div");\n'
-        '    _tooltip.style.cssText = "position:fixed;top:20px;left:20px;background:rgba(0,0,0,0.85);color:#fff;padding:10px 14px;border-radius:6px;font-size:13px;font-family:sans-serif;z-index:1000;max-width:320px;pointer-events:auto";\n'
+        '    _tooltip.style.cssText = "position:fixed;top:10px;left:10px;background:rgba(0,0,0,0.85);color:#fff;padding:10px 14px;border-radius:6px;font-size:13px;font-family:sans-serif;z-index:1001;max-width:320px;pointer-events:auto";\n'
         '    var close = document.createElement("span");\n'
         '    close.textContent = " \\u2715";\n'
         '    close.style.cssText = "cursor:pointer;float:right;margin-left:8px";\n'
@@ -788,45 +1002,54 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    track._lineId = lineId; track._dotId = dotId; track._labelId = labelId;\n'
         '  });\n'
         '\n'
-        '  var GAP_THRESHOLD = 15;\n'
+        '  var GAP_THRESHOLD_S = 5;\n'
         '  function buildSegments(track, upToT) {\n'
-        '    // Returns a FeatureCollection of LineString segments, gray+dashed for data gaps\n'
-        '    var features = [], seg = [], prevT = null;\n'
-        '    for (var i = 0; i < track.pts.length; i++) {\n'
-        '      var p = track.pts[i];\n'
-        '      if (p[0] > upToT) break;\n'
-        '      var isGap = prevT !== null && (p[0] - prevT) > GAP_THRESHOLD;\n'
-        '      if (isGap && seg.length >= 2) {\n'
-        '        features.push({type:"Feature",\n'
-        '          properties:{color:"rgba(160,160,160,0.6)",width:2,gap:false},\n'
-        '          geometry:{type:"LineString",coordinates:seg}});\n'
-        '        seg = [seg[seg.length-1]];\n'
-        '      }\n'
-        '      if (isGap) {\n'
-        '        // Bridge gap with gray dashed segment\n'
-        '        var bridge = [seg[0], [p[2], p[1]]];\n'
-        '        features.push({type:"Feature",\n'
-        '          properties:{color:"rgba(160,160,160,0.6)",width:2,gap:true},\n'
-        '          geometry:{type:"LineString",coordinates:bridge}});\n'
-        '        seg = [[p[2], p[1]]];\n'
-        '      } else {\n'
-        '        seg.push([p[2], p[1]]);\n'
-        '      }\n'
-        '      prevT = p[0];\n'
+        '    // p = [timestamp, lat, lon, alt, resampled(0/1)]\n'
+        '    // Pre-pass: mark indices that are part of a significant data gap.\n'
+        '    // Case 1: run of resampled points spanning > GAP_THRESHOLD_S seconds.\n'
+        '    // Case 2: raw time jump > GAP_THRESHOLD_S (gap too large to interpolate).\n'
+        '    var pts = track.pts, n = pts.length;\n'
+        '    var inGap = new Array(n).fill(false);\n'
+        '    var i = 0;\n'
+        '    while (i < n) {\n'
+        '      if (pts[i][4] === 1) {\n'
+        '        var runStart = i;\n'
+        '        while (i < n && pts[i][4] === 1) i++;\n'
+        '        if (pts[i-1][0] - pts[runStart][0] > GAP_THRESHOLD_S)\n'
+        '          for (var j = runStart; j < i; j++) inGap[j] = true;\n'
+        '      } else { i++; }\n'
         '    }\n'
-        '    if (seg.length >= 2)\n'
-        '      features.push({type:"Feature",\n'
-        '        properties:{color:track.color,width:3,gap:false},\n'
+        '    for (var i = 1; i < n; i++)\n'
+        '      if (pts[i][0] - pts[i-1][0] > GAP_THRESHOLD_S) inGap[i] = true;\n'
+        '    // Segment-building pass: emit polylines, splitting on gap/non-gap transitions.\n'
+        '    var features = [], seg = [];\n'
+        '    var prevIsGap = inGap[0];\n'
+        '    function flushSeg(isGapSeg) {\n'
+        '      if (seg.length >= 2) features.push({type:"Feature",\n'
+        '        properties:{color: isGapSeg ? "rgba(160,160,160,0.8)" : track.color,\n'
+        '                    width: isGapSeg ? 2 : 3},\n'
         '        geometry:{type:"LineString",coordinates:seg}});\n'
+        '    }\n'
+        '    for (var i = 0; i < n; i++) {\n'
+        '      var p = pts[i];\n'
+        '      if (p[0] > upToT) break;\n'
+        '      var g = inGap[i];\n'
+        '      if (g !== prevIsGap) {\n'
+        '        flushSeg(prevIsGap);\n'
+        '        seg = seg.length ? [seg[seg.length-1]] : [];\n'
+        '        prevIsGap = g;\n'
+        '      }\n'
+        '      seg.push([p[2], p[1]]);\n'
+        '    }\n'
+        '    flushSeg(prevIsGap);\n'
         '    return {type:"FeatureCollection",features:features};\n'
         '  }\n'
         '\n'
         '  function resetTracks() {\n'
         '    tracks.forEach(function(track) {\n'
-        '      var firstPt = [track.pts[0][2], track.pts[0][1]];\n'
         '      map.getSource(track._lineId).setData({type:"FeatureCollection",features:[]});\n'
-        '      map.getSource(track._dotId).setData({type:"Feature",properties:{},geometry:{type:"Point",coordinates:firstPt}});\n'
-        '      map.getSource(track._labelId).setData({type:"Feature",properties:{label:track.name},geometry:{type:"Point",coordinates:firstPt}});\n'
+        '      map.getSource(track._dotId).setData({type:"FeatureCollection",features:[]});\n'
+        '      map.getSource(track._labelId).setData({type:"FeatureCollection",features:[]});\n'
         '    });\n'
         '  }\n'
         '  function frame() {\n'
@@ -877,8 +1100,25 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '  if (_tracksIndex) {\n'
         '    _animate();\n'
         '  } else {\n'
+        '    // The index is gzipped on R2 but Cloudflare CDN sometimes\n'
+        '    // forwards the body without Content-Encoding: gzip, so we\n'
+        '    // decompress in JS using DecompressionStream (Chrome 80+,\n'
+        '    // Firefox 113+, Safari 16.4+) for cross-CDN robustness.\n'
         '    fetch("' + sidecar_rel + '/tracks.index.json.gz")\n'
-        '      .then(function(r) { return r.json(); })\n'
+        '      .then(function(r) {\n'
+        '        // If the CDN already decompressed for us, the body is\n'
+        '        // plain JSON; otherwise it\\u2019s gzip bytes we have to\n'
+        '        // decompress ourselves. Detect via the gzip magic 1f 8b.\n'
+        '        return r.arrayBuffer().then(function(buf) {\n'
+        '          var bytes = new Uint8Array(buf);\n'
+        '          if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {\n'
+        '            var blob = new Blob([buf]);\n'
+        '            var ds = new DecompressionStream("gzip");\n'
+        '            return new Response(blob.stream().pipeThrough(ds)).json();\n'
+        '          }\n'
+        '          return new Response(buf).json();\n'
+        '        });\n'
+        '      })\n'
         '      .then(function(idx) { _tracksIndex = idx; _animate(); })\n'
         '      .catch(function(e) { console.warn("index fetch failed:", e); });\n'
         '  }\n'
@@ -905,26 +1145,50 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '#alt-band-info { position: fixed; top: 10px; right: 10px;\n'
         '  background: rgba(0,0,0,0.75); color: #fff; padding: 8px 12px;\n'
         '  border-radius: 6px; font-size: 12px; font-family: sans-serif; z-index: 1000; }\n'
+        '#airport-jump-box { position: fixed; top: 10px; left: 10px;\n'
+        '  background: rgba(0,0,0,0.75); color: #fff; padding: 8px 12px;\n'
+        '  border-radius: 6px; font-size: 12px; font-family: sans-serif;\n'
+        '  z-index: 1000; max-width: 260px; }\n'
         '</style>\n'
         '</head>\n'
         '<body>\n'
         '<div id="map"></div>\n'
+        + _airport_jump_panel_html()
     )
+
+    date_header_html = _date_range_header_html(date_range)
 
     if alt_band_checkboxes:
         html += (
             '<div id="alt-band-info">\n'
+            + date_header_html +
             '<b>Event Altitude Filter</b><br>\n'
             + alt_band_checkboxes +
+            '<div style="margin-top:8px;border-top:1px solid #555;padding-top:6px">\n'
+            '<label style="display:block;cursor:pointer">'
+            '<input type="checkbox" id="show-low-cb"> Show low-quality events</label>\n'
+            '</div>\n'
             '<div style="margin-top:8px;border-top:1px solid #555;padding-top:6px">\n'
             '<label style="display:block;font-size:11px;margin-bottom:2px">Heatmap Opacity: <span id="heatmap-opacity-val">30</span>%</label>\n'
             '<input type="range" id="heatmap-opacity-slider" min="0" max="75" value="30" style="width:100%">\n'
             '</div>\n'
             '</div>\n'
         )
+    elif date_header_html:
+        html += (
+            '<div id="alt-band-info">\n'
+            + date_header_html +
+            '</div>\n'
+        )
+
+    airports_json = json.dumps(airports_lookup or {})
+    bounds_js = _bounds_js(bounds, auto_fit)
 
     html += (
         '<script>\n'
+        'var AIRPORTS = ' + airports_json + ';\n'
+        + bounds_js
+        + _airport_jump_js() +
         '// Register PMTiles protocol so MapLibre can load .pmtiles files.\n'
         '// MapLibre 4.x uses tilev4; pmtiles wraps it as tile for v3 compat.\n'
         'var protocol = new pmtiles.Protocol();\n'
@@ -1015,16 +1279,26 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    document.querySelectorAll(".band-cb:checked").forEach(function(cb) {\n'
         '      checked.push(cb.value);\n'
         '    });\n'
-        '    var filter = checked.length\n'
+        '    var bandFilter = checked.length\n'
         '      ? ["in", ["get", "alt_band"], ["literal", checked]]\n'
         '      : ["==", "1", "0"];\n'
-        '    map.setFilter("events-circles", filter);\n'
-        '    map.setFilter("events-hit", filter);\n'
-        '    map.setFilter("events-heat", filter);\n'
+        '    var showLow = document.getElementById("show-low-cb").checked;\n'
+        '    var dotFilter = showLow\n'
+        '      ? bandFilter\n'
+        '      : ["all", bandFilter, ["!=", ["get", "quality"], "low"]];\n'
+        '    var heatFilter = ["all", bandFilter, ["!=", ["get", "quality"], "low"]];\n'
+        '    map.setFilter("events-circles", dotFilter);\n'
+        '    map.setFilter("events-hit", dotFilter);\n'
+        '    map.setFilter("events-heat", heatFilter);\n'
         '  }\n'
         '  document.querySelectorAll(".band-cb").forEach(function(cb) {\n'
         '    cb.addEventListener("change", updateBandFilter);\n'
         '  });\n'
+        '  var lowCb = document.getElementById("show-low-cb");\n'
+        '  if (lowCb) lowCb.addEventListener("change", updateBandFilter);\n'
+        '  // Apply once at load so dot/hit filters reflect the initial\n'
+        '  // (unchecked) low-quality state from frame 1.\n'
+        '  updateBandFilter();\n'
         '\n'
         '  // Heatmap opacity slider\n'
         '  var heatSlider = document.getElementById("heatmap-opacity-slider");\n'
@@ -1034,6 +1308,16 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '      map.setPaintProperty("events-heat", "heatmap-opacity", v);\n'
         '      document.getElementById("heatmap-opacity-val").textContent = this.value;\n'
         '    });\n'
+        '  }\n'
+        '\n'
+        '  // Initial viewport: ?airport=ICAO wins (zooms in tight); otherwise\n'
+        '  // fit the data bounds so the whole region is in view.\n'
+        '  var _params = new URLSearchParams(window.location.search);\n'
+        '  var _initial = _params.get("airport");\n'
+        '  if (_initial) {\n'
+        '    jumpToAirport(_initial);\n'
+        '  } else if (typeof DATA_BOUNDS !== "undefined" && DATA_BOUNDS && AUTO_FIT) {\n'
+        '    map.fitBounds(DATA_BOUNDS, {padding: 30, animate: false, duration: 0});\n'
         '  }\n'
         '});\n'
         '</script>\n'
@@ -1051,8 +1335,10 @@ def main():
     parser.add_argument("--output", help="Output HTML path (default: data/v2/maps/<stem>.html)")
     parser.add_argument("--center", nargs=2, type=float, metavar=("LAT", "LON"),
                         help="Override map center lat/lon")
-    parser.add_argument("--zoom", type=float, default=7.0,
-                        help="Initial zoom level (default: 7)")
+    parser.add_argument("--zoom", type=float, default=None,
+                        help="Initial zoom level. When omitted, the map fits "
+                             "the data bounds on load (whole region visible). "
+                             "Pass an explicit value to override.")
     parser.add_argument("--no-faa-basemap", action="store_true",
                         help="Skip FAA sectional basemap")
     parser.add_argument("--traffic-tiles", type=str, default=None,
@@ -1061,6 +1347,11 @@ def main():
     parser.add_argument("--pmtiles", action="store_true",
                         help="Generate PMTiles + sidecar JSON instead of self-contained HTML "
                              "(required for large datasets; needs HTTP serving, not file://)")
+    parser.add_argument("--asset-stem", type=str, default=None,
+                        help="Override the inlined .pmtiles / _tracks filenames in the "
+                             "generated HTML (e.g. --asset-stem conus). Used when the "
+                             "deployer publishes a stable-named alias separate from the "
+                             "dated source files. Only takes effect with --pmtiles.")
     args = parser.parse_args()
 
     if not os.path.exists(args.input):
@@ -1089,9 +1380,23 @@ def main():
         center_lat = float(df["lat"].mean())
         center_lon = float(df["lon"].mean())
 
-    print(f"Building map (center={center_lat:.2f},{center_lon:.2f}, zoom={args.zoom})...")
+    # Auto-fit on load when --zoom not given. Bounds come from the data lat/lon
+    # extents (with a tiny padding so dots near the edge aren't clipped).
+    auto_fit = args.zoom is None
+    zoom = args.zoom if args.zoom is not None else 7.0  # static fallback if AUTO_FIT JS fails
+    bounds = (
+        float(df["lon"].min()), float(df["lat"].min()),
+        float(df["lon"].max()), float(df["lat"].max()),
+    )
+
+    print(f"Building map (center={center_lat:.2f},{center_lon:.2f}, "
+          f"{'auto-fit' if auto_fit else f'zoom={zoom}'}, "
+          f"bounds=lon[{bounds[0]:.1f},{bounds[2]:.1f}] lat[{bounds[1]:.1f},{bounds[3]:.1f}])...")
 
     alt_bands = df["alt_band"].dropna().unique().tolist() if "alt_band" in df.columns else []
+
+    date_range = _parse_date_range_from_stem(stem)
+    airports_lookup = build_us_airports_lookup()
 
     if args.pmtiles:
         # PMTiles mode: generate .pmtiles + per-event sidecar JSONs + shell HTML
@@ -1103,9 +1408,14 @@ def main():
 
         html = generate_pmtiles_html(
             pmtiles_path, sidecar_dir,
-            center_lat, center_lon, args.zoom,
+            center_lat, center_lon, zoom,
             alt_bands, faa_basemap=not args.no_faa_basemap,
             traffic_tile_dir=args.traffic_tiles,
+            date_range=date_range,
+            airports_lookup=airports_lookup,
+            asset_stem=args.asset_stem,
+            bounds=bounds,
+            auto_fit=auto_fit,
         )
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
@@ -1117,9 +1427,13 @@ def main():
         print(f"    Then: http://localhost:8080/{output_path}")
     else:
         # Self-contained mode: all data embedded in HTML (practical up to ~500 events)
-        html = generate_html(df, center_lat, center_lon, args.zoom,
+        html = generate_html(df, center_lat, center_lon, zoom,
                              faa_basemap=not args.no_faa_basemap,
-                             traffic_tile_dir=args.traffic_tiles)
+                             traffic_tile_dir=args.traffic_tiles,
+                             date_range=date_range,
+                             airports_lookup=airports_lookup,
+                             bounds=bounds,
+                             auto_fit=auto_fit)
 
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:

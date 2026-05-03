@@ -208,7 +208,7 @@ def _airport_row(icao, stats):
                 f'No data available</td></tr>')
 
     num_events = stats['num_events']
-    link = f'{icao}/{icao}_map.html'
+    link = f'/v2/conus.html?airport={icao}'
     quality_data = stats.get('quality_data')
     name = stats.get('airport_name', icao)
     state = stats.get('airport_state', '')

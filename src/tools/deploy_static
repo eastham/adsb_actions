@@ -57,6 +57,7 @@ def main():
     for f in files:
         cmd = ["rclone", "copyto", f, f"{args.remote}/{os.path.basename(f)}",
                "--progress",
+               "--s3-no-check-bucket",
                "--metadata-set", "cache-control=no-cache, must-revalidate"]
         if args.dry_run:
             cmd.append("--dry-run")

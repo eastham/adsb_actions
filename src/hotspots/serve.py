@@ -58,14 +58,24 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         # Return only the requested range
         remaining = length
         buf_size = 64 * 1024
-        while remaining > 0:
-            chunk = f.read(min(buf_size, remaining))
-            if not chunk:
-                break
-            self.wfile.write(chunk)
-            remaining -= len(chunk)
-        f.close()
+        try:
+            while remaining > 0:
+                chunk = f.read(min(buf_size, remaining))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                remaining -= len(chunk)
+        except BrokenPipeError:
+            pass
+        finally:
+            f.close()
         return None
+
+    def log_error(self, format, *args):
+        # Suppress broken-pipe noise from browsers closing connections early.
+        if len(args) > 0 and "Broken pipe" in str(args[-1]):
+            return
+        super().log_error(format, *args)
 
     def end_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
