@@ -113,9 +113,15 @@ if __name__ == "__main__":
         airport_codes = [c for c in airport_codes if c not in failed]
 
     # Phase 1: Ensure global files exist (sequential — involves downloading)
+    # Skip if the downstream CONUS file already exists — the global file is only
+    # needed to produce CONUS, so re-downloading tar parts would be wasted work.
     for date in dates:
         date_str = date.strftime('%m%d%y')
         input_file = f"data/global_{date_str}.gz"
+        destination_file = f"data/CONUS_{date_str}.gz"
+
+        if os.path.exists(destination_file):
+            continue
 
         if not os.path.exists(input_file):
             if args.dry_run:
@@ -142,7 +148,7 @@ if __name__ == "__main__":
         input_file = f"data/global_{date_str}.gz"
         destination_file = f"data/CONUS_{date_str}.gz"
 
-        if not os.path.exists(input_file):
+        if not os.path.exists(input_file) and not os.path.exists(destination_file):
             print(f"Global file {input_file} missing, skipping")
             continue
         if args.dry_run:
