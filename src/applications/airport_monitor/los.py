@@ -14,6 +14,7 @@ from adsb_actions.stats import Stats
 from adsb_actions.location import Location
 from adsb_actions.adsb_logger import Logger
 from adsb_actions.flight import PLAYBACK_WEBSITE
+from adsb_actions.flights import MIN_PROX_FRESH
 
 logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
@@ -130,10 +131,9 @@ def process_los(flight1, flight2):
     # Check if either flight's data is stale relative to the other.
     # If timestamps differ significantly, one aircraft stopped reporting
     # and we shouldn't trust the distance calculation.
-    MIN_FRESH = 5 # seconds - must match flights.py
     now1 = flight1.lastloc.now
     now2 = flight2.lastloc.now
-    if abs(now1 - now2) > MIN_FRESH:
+    if abs(now1 - now2) > MIN_PROX_FRESH:
         logger.debug("process_los skipped: timestamps too far apart (%s: %.0f, %s: %.0f)",
                      flight1.flight_id, now1, flight2.flight_id, now2)
         return

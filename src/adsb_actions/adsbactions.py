@@ -36,6 +36,7 @@ from .webhooks import register_webhook_handler
 from .page import send_slack, send_page
 
 from .adsb_logger import Logger
+from adsb_actions.flights import MIN_PROX_FRESH
 
 logger = logging.getLogger(__name__)
 logger.level = logging.INFO
@@ -58,6 +59,8 @@ def _log_loop_stats(last_read_time: float, flights: int,
     time_str = datetime.datetime.utcfromtimestamp(last_read_time).strftime('%m/%d %H:%MZ')
     logger.info("Main loop at: %s ts: %s flights=%d pts/s=%.0f",
                 time_str, int(last_read_time), flights, pts_per_sec)
+    logger.info(f"*** USING MIN_PROX_FRESH={MIN_PROX_FRESH} sec for proximity checks")
+
     if logger.isEnabledFor(logging.DEBUG):
         import gc
         gc_counts = gc.get_count()

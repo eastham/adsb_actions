@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
 LOGGER = Logger()
 
+MIN_PROX_FRESH = 10  # seconds; older locations not evaluated in proximity checks
+
 class Flights:
     """all Flight objects in the system, indexed by flight_id"""
 
@@ -124,16 +126,14 @@ class Flights:
         all flights (e.g. from a spatial grid pre-filter).
         """
 
-        MIN_FRESH = 5 # seconds.  Older locations not evaluated
-
         for flight1 in (candidates if candidates is not None else self.flight_dict.values()):
             if flight1 is flight2:
                 continue
             if self.ignore_unboxed_flights and not flight2.in_any_bbox():
                 continue # performance optimization
-            if last_read_time - flight1.lastloc.now > MIN_FRESH:
+            if last_read_time - flight1.lastloc.now > MIN_PROX_FRESH:
                 continue
-            if last_read_time - flight2.lastloc.now > MIN_FRESH:
+            if last_read_time - flight2.lastloc.now > MIN_PROX_FRESH:
                 continue
 
             loc1 = flight1.lastloc
