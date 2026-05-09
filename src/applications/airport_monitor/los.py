@@ -2,6 +2,7 @@
 These are pushed once upon first detection and again once
 expired, so that the minimum distance is logged."""
 
+import bisect
 import copy
 import logging
 import os
@@ -203,7 +204,64 @@ def _check_teleportation(locations):
     return None
 
 CPA_WINDOW_S = 10  # seconds around CPA to check for real data
-SPARSE_DATA_THRESHOLD = 0.75  # require 75% real data during LOS
+SPARSE_DATA_THRESHOLD = 0.10  # require 20% real data during LOS
+FORMATION_PROXIMITY_NM = 0.6   # distance threshold for sustained-proximity check
+FORMATION_RATIO_THRESHOLD = 0.5  # fraction of co-observed samples within threshold to flag formation
+FORMATION_MATCH_TOLERANCE_S = 5  # max timestamp gap to consider two samples co-observed
+FORMATION_MAX_INITIAL_SEPARATION_NM = 1.0  # if aircraft start farther apart than this, can't be formation
+
+def _initial_separation_nm(locs1, locs2, event_start, match_tolerance_s):
+    """Lateral distance (nm) between the two flights at the start of the event.
+    Picks the real report from each flight nearest to event_start (within
+    match_tolerance_s on both sides) and returns the distance between them.
+    Returns None if no co-observed pair exists near event_start."""
+    if not locs1 or not locs2:
+        return None
+
+    def nearest(locs, t):
+        best = min(locs, key=lambda l: abs(l.now - t))
+        return best if abs(best.now - t) <= match_tolerance_s else None
+
+    n1 = nearest(locs1, event_start)
+    n2 = nearest(locs2, event_start)
+    if n1 is None or n2 is None:
+        return None
+    return n1 - n2
+
+def _sustained_proximity_ratio(locs1, locs2, threshold_nm, match_tolerance_s):
+    """Return fraction of co-observed samples where the two aircraft are within
+    threshold_nm of each other.  'Co-observed' means both flights have a real
+    report within match_tolerance_s of each other.
+
+    Returns (ratio, paired_count) where ratio is None if no pairs found."""
+    # Build a sorted list of (time, loc) for locs2 to enable fast nearest lookup
+    sorted2 = sorted(locs2, key=lambda l: l.now)
+    if not sorted2:
+        return None, 0
+
+    times2 = [l.now for l in sorted2]
+
+    close_count = 0
+    total_pairs = 0
+
+    for loc1 in locs1:
+        # Find nearest loc2 by timestamp
+        idx = bisect.bisect_left(times2, loc1.now)
+        candidates = []
+        if idx < len(sorted2):
+            candidates.append(sorted2[idx])
+        if idx > 0:
+            candidates.append(sorted2[idx - 1])
+        nearest = min(candidates, key=lambda l: abs(l.now - loc1.now))
+        if abs(nearest.now - loc1.now) > match_tolerance_s:
+            continue  # no co-observed pair within tolerance
+        total_pairs += 1
+        if (loc1 - nearest) <= threshold_nm:
+            close_count += 1
+
+    if total_pairs == 0:
+        return None, 0
+    return close_count / total_pairs, total_pairs
 
 def calculate_event_quality(los, flight1, flight2):
     """Calculate event quality score based on duration, aircraft type, and CPA.
@@ -239,21 +297,37 @@ def calculate_event_quality(los, flight1, flight2):
     event_duration_min = event_duration / 60.0
     min_track_duration_min = min_track_duration / 60.0
 
+    # Pre-compute initial separation for formation heuristics (D and long-duration).
+    # Formation flights are close from the start; if aircraft were > 1nm apart at
+    # event start they cannot be formation regardless of how the event unfolds.
+    loc_history = getattr(los, 'location_history', {})
+    fids = list(loc_history.keys())
+    initial_sep = None
+    if len(fids) == 2:
+        initial_sep = _initial_separation_nm(
+            loc_history[fids[0]], loc_history[fids[1]],
+            los.create_time, FORMATION_MATCH_TOLERANCE_S)
+    formation_possible = initial_sep is None or initial_sep <= FORMATION_MAX_INITIAL_SEPARATION_NM
+
     # Apply quality criteria with explanations
-    if event_duration > 60:
-        reasons.append(f"long duration ({event_duration_min:.1f}min - likely formation flight)")
+    if event_duration > 60 and formation_possible:
+        reasons.append(f"long duration {event_duration_min:.1f}min - likely formation flight")
         quality = 'low'
-    elif min_track_duration < 60:
-        reasons.append(f"short track ({min_track_duration_min:.1f}min - insufficient data)")
-        quality = 'low'
-    elif event_duration > 30:
-        reasons.append(f"moderate duration ({event_duration_min:.1f}min - may be formation flight)")
+    elif event_duration > 60:
+        # Long but aircraft started far apart — not formation, downgrade to medium
+        reasons.append(f"long duration {event_duration_min:.1f}min but started separated")
         quality = 'medium'
     elif is_helicopter:
         reasons.append("helicopter involved")
+        quality = 'low'
+    elif min_track_duration < 60:
+        reasons.append(f"short track {min_track_duration_min:.1f}min - insufficient data")
+        quality = 'low'
+    elif event_duration > 30:
+        reasons.append(f"moderate duration {event_duration_min:.1f}min - may be formation flight")
         quality = 'medium'
     else:
-        reasons.append(f"brief event ({event_duration_min:.1f}min) with good tracks")
+        reasons.append(f"brief event {event_duration_min:.1f}min with good tracks")
         quality = 'high'
 
         # Check if high quality event qualifies for very high
@@ -262,7 +336,6 @@ def calculate_event_quality(los, flight1, flight2):
             reasons.append(f"very close CPA ({cpa_lateral_nm:.2f}nm, {cpa_vertical_ft:.0f}ft)")
 
     # Location-level quality checks (only when event_locations populated, i.e. batch mode)
-    loc_history = getattr(los, 'location_history', {})
     cpa_time = getattr(los, 'cpa_time', None)
 
     if loc_history and cpa_time is not None:
@@ -275,19 +348,21 @@ def calculate_event_quality(los, flight1, flight2):
                                            cpa_time + CPA_WINDOW_S, cpa_loc)
             if near_cpa == 0:
                 quality = 'low'
-                reasons.append(f"no sane data near CPA ({fid}: 0 real in ±{CPA_WINDOW_S}s within 0.5nm)")
+                reasons = []
+                reasons.append(f"no sane data near CPA {fid}: 0 real in ±{CPA_WINDOW_S}s within 0.5nm")
                 break
 
         # Heuristic B: sparse data during LOS → cap at medium
-        if quality in ('high', 'vhigh') and event_duration > 0:
+        if quality in ('high', 'vhigh') and event_duration > 5:
             for fid, locs in loc_history.items():
                 real_count = _count_real_reports(locs, los.create_time, los.last_time)
                 # Expected ~1 report/sec with typical ADS-B; compare to interval
                 real_frac = real_count / event_duration
                 if real_frac < SPARSE_DATA_THRESHOLD:
                     quality = 'medium'
+                    reasons = []
                     reasons.append(
-                        f"sparse data during LOS ({fid}: {real_count} real of {event_duration:.0f}s)")
+                        f"sparse data during LOS {fid}: {real_count} real during {event_duration:.0f}s event")
                     break
 
         # Heuristic C: teleportation in track → low quality
@@ -296,14 +371,39 @@ def calculate_event_quality(los, flight1, flight2):
             if result:
                 speed_kts, t0, t1 = result
                 quality = 'low'
-                reasons.append(f"teleportation ({fid}: {speed_kts:.0f}kts between t={t0:.0f}-{t1:.0f})")
+                reasons = []
+                reasons.append(f"teleportation {fid}: {speed_kts:.0f}kts between t={t0:.0f}-{t1:.0f}")
+                break
+
+        # Heuristic D: sustained proximity → likely formation flight or coverage gap.
+        # Inhibited (via formation_possible) when aircraft started > 1nm apart.
+        if formation_possible and len(fids) == 2:
+            ratio, pairs = _sustained_proximity_ratio(
+                loc_history[fids[0]], loc_history[fids[1]],
+                FORMATION_PROXIMITY_NM, FORMATION_MATCH_TOLERANCE_S)
+            if ratio is not None and ratio >= FORMATION_RATIO_THRESHOLD:
+                quality = 'low'
+                reasons = []
+                reasons.append(
+                    f"sustained proximity ({ratio:.0%} of {pairs} paired samples within "
+                    f"{FORMATION_PROXIMITY_NM}nm — likely formation flight or coverage gap)")
+
+        # Heuristic E: track ended before LOS started → LOS computed against frozen position.
+        # loc_history contains real reports only, so the last timestamp is the true end of track.
+        for fid, locs in loc_history.items():
+            if not locs:
+                continue
+            last_real_t = max(l.now for l in locs)
+            if last_real_t < los.create_time:
+                quality = 'low'
+                reasons = []
+                reasons.append(
+                    f"track ended before LOS {fid}: last real {los.create_time - last_real_t:.0f}s before event")
                 break
 
     # Add secondary factors as additional context
     if quality not in ['low', 'vhigh'] and min_track_duration < 120:
         reasons.append(f"track={min_track_duration_min:.1f}min")
-    if quality not in ['medium', 'vhigh'] and is_helicopter:
-        reasons.append("helicopter")
 
     explanation = "; ".join(reasons)
     return quality, explanation

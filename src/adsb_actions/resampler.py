@@ -17,9 +17,9 @@ logger.level = logging.WARNING
 LOGGER = Logger()
 
 MAX_INTERPOLATE_SECS = 60 # max seconds that we'll interpolate over.
-EXPIRE_TIME = 20 # seconds to keep stale position reports around for interpolation.
+EXPIRE_TIME = 5 # seconds to keep stale position reports around for interpolation.
 DEFAULT_MIN_ALTITUDE = 0  # default minimum altitude for resampling
-DEFAULT_MAX_ALTITUDE = 10000  # default maximum altitude for resampling
+DEFAULT_MAX_ALTITUDE = 12000  # default maximum altitude for resampling
 
 # Trace sanity thresholds
 MAX_IMPLIED_SPEED_KTS = 600  # implied speed above this = position teleport
@@ -204,7 +204,7 @@ class Resampler:
 
     def do_prox_checks(self, rules, bboxes, sample_interval: int = 1,
                        ignore_unboxed_flights: bool = True,
-                       gc_callback = None) -> None:
+                       gc_callback = None, label: str = None) -> None:
         """Inspect resampled history to detect proximity events.
 
         This method:
@@ -324,7 +324,8 @@ class Resampler:
         logger.info("  Proximity events found: %d", len(found_prox_events))
         logger.info("  Flight expires during processing: %d", self.expire_ctr)
         logger.info("  Final active flights: %d", len(flights.flight_dict))
-        print(f"  Resampling done: {location_ctr:,} events, {len(found_prox_events)} proximity events, "
+        label_str = f" [{label}]" if label else ""
+        print(f"  Resampling done{label_str}: {location_ctr:,} events, {len(found_prox_events)} proximity events, "
               f"{self.expire_ctr} flights expired")
         return found_prox_events
 

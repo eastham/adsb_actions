@@ -38,7 +38,7 @@ from .page import send_slack, send_page
 from .adsb_logger import Logger
 
 logger = logging.getLogger(__name__)
-logger.level = logging.INFO
+logger.level = logging.WARNING
 LOGGER = Logger()
 
 def _log_loop_stats(last_read_time: float, flights: int,
@@ -142,7 +142,7 @@ class AdsbActions:
         register_webhook_handler('slack', send_slack)
         register_webhook_handler('page', send_page)
 
-    def do_resampled_prox_checks(self, gc_callback) -> list:
+    def do_resampled_prox_checks(self, gc_callback, label: str = None) -> list:
         """Complete resampling to detect proximity events between position
         updates."""
         if not self.enable_resample:
@@ -151,7 +151,7 @@ class AdsbActions:
 
         return self.resampler.do_prox_checks(self.rules, self.flights.bboxes,
                                              ignore_unboxed_flights=self.flights.ignore_unboxed_flights,
-                                             gc_callback=gc_callback)
+                                             gc_callback=gc_callback, label=label)
 
     def loop(self, string_data = None, iterator_data = None, delay: float = 0.) -> None:
         """Process ADS-B json data in a loop on the previously-opened socket.
