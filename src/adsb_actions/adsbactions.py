@@ -39,7 +39,7 @@ from .adsb_logger import Logger
 from adsb_actions.flights import MIN_PROX_FRESH
 
 logger = logging.getLogger(__name__)
-logger.level = logging.WARNING
+logger.level = logging.INFO
 LOGGER = Logger()
 
 def _log_loop_stats(last_read_time: float, flights: int,
