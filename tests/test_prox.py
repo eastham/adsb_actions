@@ -4,6 +4,7 @@ import yaml
 
 from adsb_actions.stats import Stats
 from adsb_actions.adsbactions import AdsbActions
+from adsb_actions.flights import MIN_PROX_FRESH
 
 YAML_STRING = """
   config:
@@ -48,14 +49,15 @@ def los_update_cb(flight1, flight2):
     logging.info(f"got los_update_cb {flight1.flight_id} {flight2.flight_id}")
     los_update_ctr += 1
 
-JSON_STRING_PLANE1_ZEROALT = '{"now": 1661692178, "alt_baro": 0, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}\n'
-JSON_STRING_PLANE1_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}\n'
-JSON_STRING_PLANE1_NEAR = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}\n'
-JSON_STRING_PLANE2_NEAR = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d2"}\n'
-JSON_STRING_PLANE3_DELAY = '{"now": 1661692183, "alt_baro": 0, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d3"}\n'
-JSON_STRING_PLANE4_TOOFAR = '{"now": 1661692178, "alt_baro": 4300, "gscp": 128, "lat": 40.76864689708049, "lon": -119.20915027077689, "track": 203.4, "hex": "a061d4"}\n'
-JSON_STRING_PLANE5_WITHINPROX = '{"now": 1661692178, "alt_baro": 4300, "gscp": 128, "lat": 40.76759089177806, "lon":  -119.20984743421535, "track": 203.4, "hex": "a061d5"}\n'
-JSON_STRING_PLANE6_TOOFAR_ALT = '{"now": 1661692178, "alt_baro": 4800, "gscp": 128, "lat": 40.76759089177806, "lon":  -119.20984743421535, "track": 203.4, "hex": "a061d6"}\n'
+_BASE_NOW = 1661692178
+JSON_STRING_PLANE1_ZEROALT   = f'{{"now": {_BASE_NOW}, "alt_baro": 0, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}}\n'
+JSON_STRING_PLANE1_DISTANT   = f'{{"now": {_BASE_NOW}, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}}\n'
+JSON_STRING_PLANE1_NEAR      = f'{{"now": {_BASE_NOW}, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1"}}\n'
+JSON_STRING_PLANE2_NEAR      = f'{{"now": {_BASE_NOW}, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d2"}}\n'
+JSON_STRING_PLANE3_DELAY     = f'{{"now": {_BASE_NOW + MIN_PROX_FRESH}, "alt_baro": 0, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d3"}}\n'
+JSON_STRING_PLANE4_TOOFAR    = f'{{"now": {_BASE_NOW}, "alt_baro": 4300, "gscp": 128, "lat": 40.76864689708049, "lon": -119.20915027077689, "track": 203.4, "hex": "a061d4"}}\n'
+JSON_STRING_PLANE5_WITHINPROX = f'{{"now": {_BASE_NOW}, "alt_baro": 4300, "gscp": 128, "lat": 40.76759089177806, "lon": -119.20984743421535, "track": 203.4, "hex": "a061d5"}}\n'
+JSON_STRING_PLANE6_TOOFAR_ALT = f'{{"now": {_BASE_NOW}, "alt_baro": 4800, "gscp": 128, "lat": 40.76759089177806, "lon": -119.20984743421535, "track": 203.4, "hex": "a061d6"}}\n'
 
 def test_prox():
     Stats.reset()
@@ -100,18 +102,27 @@ def big_prox_test(adsb_actions):
     for f in adsb_actions.flights.flight_dict.values():
         rendered_flight_ctr += 1 if f.in_any_bbox() else 0
     assert rendered_flight_ctr == 4  # unexpired aircraft left
-    assert los_update_ctr == 17
+    if MIN_PROX_FRESH == 5:
+        assert los_update_ctr == 17 # due to big gap on one of the airplanes
+    elif MIN_PROX_FRESH == 10:
+        assert los_update_ctr == 21
+    else:
+        raise AssertionError(f"Unexpected MIN_PROX_FRESH={MIN_PROX_FRESH}: update expected counts")
 
 
 # Resampling test aircraft - they will cross each other's path in the middle
+_RESAMPLE_BEFORE = 1661692168
+_RESAMPLE_AFTER  = 1661692188
+_RESAMPLE_MID    = (_RESAMPLE_BEFORE + _RESAMPLE_AFTER) // 2  # crossing point
 # one aircraft varying in latitude only
-JSON_STRING_PLANE11_BEFORE = '{"now": 1661692168, "alt_baro": 4000, "gscp": 128, "lat": 39.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d2"}\n'
-JSON_STRING_PLANE11_AFTER = '{"now": 1661692188, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d2"}\n'
+JSON_STRING_PLANE11_BEFORE = f'{{"now": {_RESAMPLE_BEFORE}, "alt_baro": 4000, "gscp": 128, "lat": 39.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d2"}}\n'
+JSON_STRING_PLANE11_AFTER  = f'{{"now": {_RESAMPLE_AFTER}, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d2"}}\n'
 # one aircraft varying in longitude only
-JSON_STRING_PLANE12_BEFORE = '{"now": 1661692168, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -118.2122323, "track": 203.4, "hex": "a061d3"}\n'
-JSON_STRING_PLANE12_AFTER = '{"now": 1661692188, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -120.2122323, "track": 203.4, "hex": "a061d3"}\n'
-# one aircraft in the middle that never moves
-JSON_STRING_PLANE13_CENTRAL = '{"now": 1661692168, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d4"}\n'
+JSON_STRING_PLANE12_BEFORE = f'{{"now": {_RESAMPLE_BEFORE}, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -118.2122323, "track": 203.4, "hex": "a061d3"}}\n'
+JSON_STRING_PLANE12_AFTER  = f'{{"now": {_RESAMPLE_AFTER}, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -120.2122323, "track": 203.4, "hex": "a061d3"}}\n'
+# one aircraft in the middle that never moves; placed just far enough before the crossing midpoint
+# that it's stale (> MIN_PROX_FRESH seconds old) when the crossing occurs
+JSON_STRING_PLANE13_CENTRAL = f'{{"now": {_RESAMPLE_MID - MIN_PROX_FRESH - 1}, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d4"}}\n'
 
 
 def test_resampling_prox():
@@ -204,15 +215,15 @@ YAML_ONE_IN_LIST = """
 
 # PLANE1 has flight "N61D1" (participating), PLANE5 has no flight field (non-participating).
 # Both are in proximity range of each other.
-JSON_OIL_PLANE1 = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1", "flight": "N61D1   "}\n'
-JSON_OIL_PLANE5 = '{"now": 1661692178, "alt_baro": 4300, "gscp": 128, "lat": 40.76759089177806, "lon": -119.20984743421535, "track": 203.4, "hex": "a061d5", "flight": "N99999  "}\n'
+_OIL_BASE_NOW = 1661692178
+JSON_OIL_PLANE1 = f'{{"now": {_OIL_BASE_NOW}, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d1", "flight": "N61D1   "}}\n'
+JSON_OIL_PLANE5 = f'{{"now": {_OIL_BASE_NOW}, "alt_baro": 4300, "gscp": 128, "lat": 40.76759089177806, "lon": -119.20984743421535, "track": 203.4, "hex": "a061d5", "flight": "N99999  "}}\n'
 # A second non-participating plane, also in proximity range of PLANE1
-JSON_OIL_PLANE6 = '{"now": 1661692178, "alt_baro": 4300, "gscp": 128, "lat": 40.76759089177806, "lon": -119.20984743421535, "track": 203.4, "hex": "a061d6", "flight": "N88888  "}\n'
+JSON_OIL_PLANE6 = f'{{"now": {_OIL_BASE_NOW}, "alt_baro": 4300, "gscp": 128, "lat": 40.76759089177806, "lon": -119.20984743421535, "track": 203.4, "hex": "a061d6", "flight": "N88888  "}}\n'
 # A second participating plane (hex a061d7 -> N12343) — pair of two participating should NOT fire
-JSON_OIL_PLANE7 = '{"now": 1661692178, "alt_baro": 4300, "gscp": 128, "lat": 40.76759089177806, "lon": -119.20984743421535, "track": 203.4, "hex": "a061d7"}\n'
-# Trigger must be within MIN_FRESH (5s) of the test planes (t=178), and >= CHECKPOINT_INTERVAL (5s) after last_checkpoint.
-# Use t+5 exactly: 1661692183 is 5s after t=178, satisfying both constraints.
-JSON_OIL_TRIGGER = '{"now": 1661692183, "alt_baro": 0, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d3"}\n'
+JSON_OIL_PLANE7 = f'{{"now": {_OIL_BASE_NOW}, "alt_baro": 4300, "gscp": 128, "lat": 40.76759089177806, "lon": -119.20984743421535, "track": 203.4, "hex": "a061d7"}}\n'
+# Trigger must be within MIN_PROX_FRESH of the test planes, and >= CHECKPOINT_INTERVAL after last_checkpoint.
+JSON_OIL_TRIGGER = f'{{"now": {_OIL_BASE_NOW + MIN_PROX_FRESH}, "alt_baro": 0, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d3"}}\n'
 
 def test_one_in_aircraft_list():
     """one_in_aircraft_list fires when exactly one aircraft in the pair is in the list."""
