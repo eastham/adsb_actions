@@ -59,7 +59,6 @@ def _log_loop_stats(last_read_time: float, flights: int,
     time_str = datetime.datetime.utcfromtimestamp(last_read_time).strftime('%m/%d %H:%MZ')
     logger.info("Main loop at: %s ts: %s flights=%d pts/s=%.0f",
                 time_str, int(last_read_time), flights, pts_per_sec)
-    logger.info(f"*** USING MIN_PROX_FRESH={MIN_PROX_FRESH} sec for proximity checks")
 
     if logger.isEnabledFor(logging.DEBUG):
         import gc
@@ -123,10 +122,14 @@ class AdsbActions:
         self.pedantic = pedantic
         self.enable_resample = resample
 
+        logger.info(
+            f"AdsbActions init. *** USING MIN_PROX_FRESH={MIN_PROX_FRESH} sec for proximity checks")
+
         # Initialize location history for resampling
         # Pass bboxes/latlongrings to resampler for spatial filtering (memory optimization)
         # only if explicitly requested via resample_bbox_filter
         if resample:
+            logger.info(f"Resampling enabled.")
             resampler_bboxes = self.flights.bboxes if resample_bbox_filter else None
             resampler_latlongrings = self._extract_latlongrings(yaml_data) if resample_bbox_filter else None
             min_alt, max_alt = self._extract_altitude_limits(yaml_data)
