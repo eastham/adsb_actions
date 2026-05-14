@@ -107,6 +107,34 @@
 				</outerBoundaryIs>
 			</Polygon>
 		</Placemark>
+		<Placemark>
+			<name>23L ground: 0-4300 0-360</name>
+			<styleUrl>#msn_ylw-pushpin2610</styleUrl>
+			<Polygon>
+				<tessellate>1</tessellate>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-119.18505244663602,40.76905771425442,0 -119.18476755336398,40.76826228574557,0 -119.20436755336398,40.761242285745574,0 -119.20465244663602,40.762037714254426,0 -119.18505244663602,40.76905771425442,0
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark>
+			<name>23r ground: 0-4300 0-360</name>
+			<styleUrl>#msn_ylw-pushpin2610</styleUrl>
+			<Polygon>
+				<tessellate>1</tessellate>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-119.21278239187528,40.76278772287405,0 -119.2124976081247,40.761992277125955,0 -119.23045760812471,40.755562277125954,0 -119.23074239187528,40.75635772287405,0 -119.21278239187528,40.76278772287405,0
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
 	</Folder>
 </Document>
 </kml>
