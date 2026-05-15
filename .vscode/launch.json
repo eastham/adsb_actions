@@ -82,10 +82,21 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/applications/airport_monitor/main.py",
-        "args": "--ipaddr 127.0.0.1 --port 30006 --rules examples/88nv/airport_monitor_rules.yaml",
+        "args": "--ipaddr boxone --port 30006 --rules examples/88nv/airport_monitor_rules.yaml",
         "console": "integratedTerminal",
         "justMyCode": true
       },
+      {
+        "name": "Airport monitoring from local json file",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/applications/airport_monitor/main.py",
+        "args": "--testdata examples/88nv/runwaytruck.json --delay 3 --rules examples/88nv/airport_monitor_rules.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+
       {
         "name": "Multi-airport monitoring via TCP API",
         "type": "debugpy",
@@ -183,7 +194,7 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/tools/replay_to_adsb.py",
-        "args": "--inject_addr boxone:30001 tests/20minutes.json --speed_x 1",
+        "args": "--inject_addr boxone:30001 tests/runwaytruck.json --speed_x 1",
         "console": "integratedTerminal",
         "justMyCode": true
       }

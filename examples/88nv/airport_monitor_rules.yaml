@@ -7,22 +7,36 @@
 
   config:
     kmls:
-      - examples/88nv/regions/brc_pusher_gates.kml
+      - examples/88nv/regions/brc_pusher_gates.kml 
+      - examples/88nv/regions/runways.kml
 
   aircraft_lists:
-    watched_aircraft: [ "N1234" ]
-    medevac_aircraft: [ "N12345" ]
+    # airport vehicles:
+    airport_ground_vehicles: [ "N10CE", "N10CF", "N10CG", "N10CH", "N10CJ", "N10CK", "N10CL", "N10CM", "N10CN", "N10CP" ]
+
+    # includes shared vehicles (can also use airport_ground_vehicles plus N10D prefix)
+    all_ground_vehicles: [ "N10CE", "N10CF", "N10CG", "N10CH", "N10CJ", "N10CK", "N10CL", "N10CM", "N10CN", "N10CP", "N10D", "N10DA", "N10DB", "N10DC", "N10DD", "N10DE", "N10DF", "N10DG", "N10DH", "N10DI", "N10DJ", "N10DK", "N10DL", "N10DM", "N10DN", "N10DO", "N10DP", "N10DQ", "N10DR", "N10DS", "N10DT", "N10DU", "N10DV", "N10DW", "N10DX", "N10DY", "N10DZ"]
+
+    excluded_aircraft: [ "N12345" ]
+
+    medevac_aircraft: [ "N45567" ]
+
+    airport_ground_vehicles_and_medevac: [ "N10CE", "N10CF", "N10CG", "N10CH", "N10CJ", "N10CK", "N10CL", "N10CM", "N10CN", "N10CP", "N407PW" ]
+
   rules:
+#    # Print all aircraft positions, useful for debugging:
 #    print:
 #      conditions:
-#        exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
+#        exclude_aircraft_substrs: [ "N10D"]  # shared ground vehicles
+#        exclude_aircraft_list: airport_ground_vehicles 
 #      actions:
 #        print: True
 
     takeoff:
       conditions:
         transition_regions: [ "Generic Gate Ground", "Generic Gate Air" ]
-        exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
+        exclude_aircraft_substrs: [ "N10D"]  # shared ground vehicles
+        exclude_aircraft_list: airport_ground_vehicles 
 
       actions:
         print: True
@@ -32,8 +46,9 @@
     # aircraft appeared suddenly in the air nearby, we treat this as a takeoff
     takeoff_popup:
       conditions:
-        transition_regions: [ ~, "Generic Gate Air" ]
-        exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
+        transition_regions: [ "~brc_pusher_gates.kml", "Generic Gate Air" ]
+        exclude_aircraft_substrs: [ "N10D"]  # shared ground vehicles
+        exclude_aircraft_list: airport_ground_vehicles 
       actions:
         print: True
         callback: "popup_takeoff"
@@ -42,71 +57,92 @@
     landing:
       conditions:
         transition_regions: [ "Generic Gate Air", "Generic Gate Ground" ]
-        exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
+        exclude_aircraft_substrs: [ "N10D"]  # shared ground vehicles
+        exclude_aircraft_list: airport_ground_vehicles 
       actions:
         print: True
         callback: "landing"
 
-    # handle LOS (Loss of Separation / close-proximity events)
-    prox:
+    loss_of_separation:
       conditions:
         min_alt: 4000
         max_alt: 10000
         regions: [ "Generic Gate Air", "Vicinity" ]
         proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
-        exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
+        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
+        exclude_aircraft_list: airport_ground_vehicles 
       actions:
+        print: True
         callback: los_update_cb
 
-
-    # This rule will trigger a slack message when a watched aircraft is seen.
-    watched_aircraft_seen_tcp_slack:
+    # Trigger a slack message when a excluded aircraft is seen.
+    excluded_aircraft_seen_slack:
       conditions:
-        aircraft_list: watched_aircraft  # use aircraft_list above
-        cooldown: 30  # minutes to wait before matching a second time for this a/c
-
+        aircraft_list: excluded_aircraft  # use aircraft_list above
+        cooldown: 30  # minutes
       actions:
         webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
         print: "excluded aircraft seen"
 
-    watched_aircraft_seen_tcp_page:
+    excluded_aircraft_seen_page:
       conditions:
-        aircraft_list: watched_aircraft  # use aircraft_list above
-        cooldown: 30  # minutes to wait before matching a second time for this a/c
+        aircraft_list: excluded_aircraft  # use aircraft_list above
+        cooldown: 30  # minutes
         time_ranges: [ "1300-0100" ]
       actions:
         webhook: ['page', 'deputy manager safety']
-        print: "excluded aircraft seen"
+        print: "excluded aircraft seen page"
   
-    #low_flying_aircraft_prepost_slack:
-    #  conditions:
-    #    latlongring: [10, 40.7646878, -119.2271]
-    #    cooldown: 30
-    #    max_alt: 8000
-    #    exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
-    #  actions:
-    #    webhook: ['slack', 'slack_nearby_webhook']
-    #    print: "low flying"
+    low_flying_aircraft_prepost_slack:
+      conditions:
+        latlongring: [10, 40.7646878, -119.2271]
+        cooldown: 30
+        max_alt: 6000
+        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
+        exclude_aircraft_list: airport_ground_vehicles 
+      actions:
+        webhook: ['slack', 'slack_nearby_webhook']
+        print: "low flying"
 
-    #low_flying_aircraft_prepost_page:
-    #  conditions:
-    #    time_ranges: [ "1300-0100" ]
-    #    latlongring: [10, 40.7646878, -119.2271]
-    #    cooldown: 30
-    #    max_alt: 8000
-    #    exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
-    #  actions:
-    #    webhook: ['page', 'deputy manager safety']
-    #    print: "low flying"
+    low_flying_aircraft_prepost_page:
+       conditions:
+         time_ranges: [ "1300-0100" ]
+         latlongring: [10, 40.7646878, -119.2271]
+         cooldown: 30
+         max_alt: 6000
+         exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
+         exclude_aircraft_list: airport_ground_vehicles 
+       actions:
+         webhook: ['page', 'deputy manager safety']
+         print: "low flying"
 
-    #after_hours_aircraft_seen_slack:
-    #  conditions:
-    #    latlongring: [10, 40.7646878, -119.2271]
-    #    cooldown: 60
-    #    max_alt: 8000
-    #    exclude_aircraft_substrs: [ "N10C", "N10D"]  # ground vehicles
-    #    exclude_aircraft_list: medevac_aircraft
-    #    time_ranges: [ "0100-1300" ]
-    #  actions:
-    #    webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
-    #    print: "after-hours"
+    vehicle_on_runway_slack:
+      conditions:
+        regions: [ "23r ground", "23L ground" ]
+        aircraft_list: all_ground_vehicles
+        time_ranges: [ "1330-0130" ]
+        cooldown: 30 # minutes
+      actions:
+        webhook: ['slack', 'slack_nearby_webhook']
+        print: "vehicle on runway"
+
+    vehicle_on_runway_audio:
+      conditions:
+        regions: [ "23R ground", "23L ground" ]
+        aircraft_list: all_ground_vehicles
+        cooldown: .5 # 30 seconds
+      actions:
+        callback: vehicle_on_runway_audio_cb
+        print: "vehicle on runway"
+
+    after_hours_aircraft_seen_slack:
+      conditions:
+        latlongring: [10, 40.7646878, -119.2271]
+        cooldown: 60
+        max_alt: 6000
+        exclude_aircraft_substrs: [ "N10D"]  # ground vehicles
+        exclude_aircraft_list: airport_ground_vehicles_and_medevac
+        time_ranges: [ "0130-1330" ]
+      actions:
+        webhook: ['slack', 'slack_nearby_webhook']
+        print: "after-hours"

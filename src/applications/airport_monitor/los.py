@@ -120,7 +120,7 @@ def process_los_launch(flight1, flight2, do_threading=True):
         t.start()
 
         if not LOS.gc_thread:
-            LOS.gc_thread = threading.Thread(target=gc_loop)
+            LOS.gc_thread = threading.Thread(target=gc_loop, daemon=True)
             LOS.gc_thread.start()
     else:
         process_los(flight1, flight2)

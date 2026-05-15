@@ -237,7 +237,8 @@ class AdsbActions:
             if delay:
                 time.sleep(delay)
 
-        logger.info("Exiting main loop, parsed %s points.", Stats.json_readlines)
+        logger.info("Exiting main loop, parsed %s points so far in this instance.",
+                    Stats.json_readlines)
         self.rules.print_final_report()
 
     def register_callback(self, name: str, fn: Callable) -> None:
@@ -382,7 +383,7 @@ class AdsbActions:
         Stats.json_readlines += 1
 
         if jsondict and 'alt_baro' in jsondict:
-            # We got some valid data, process it. (points with no altitude
+            # We got some valid data, process it and run rules. (points with no altitude
             # are ignored, they are likely to be dummy entries anyway)
             loc_update = Location.from_dict(jsondict)
 

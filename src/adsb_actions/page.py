@@ -14,8 +14,8 @@ LOGGER = Logger()
 
 CONFIG = Config()
 
-SEND_SLACK = True
-SEND_PAGE = True
+SEND_SLACK = False
+SEND_PAGE = False
 
 def send_slack(channel: str, text: str) -> bool:
     """Send a message to a slack channel.

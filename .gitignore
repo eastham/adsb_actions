@@ -39,7 +39,6 @@ var/
 # Data analysis output files
 *.log
 *.csv
-*.kml
 *.out
 *.html
 *.gz
