@@ -14,6 +14,7 @@ import csv
 import gzip
 import logging
 import math
+import os
 import shutil
 import sys
 import time
@@ -50,6 +51,23 @@ NUM_BANDS = 10
 
 # Default zoom level (~190ft/pixel at 40°N; zoom 12 would be ~95ft/pixel)
 DEFAULT_ZOOM = 11
+
+# Per-zoom alpha gamma applied during downsample. Values <1 brighten faint
+# pixels; the closer to 0, the more aggressive. Tuned so sparse single-airport
+# data is visible at z5 while CONUS-scale data still has density contrast.
+# Keys outside this range fall back to 1.0 (no boost).
+LOW_ZOOM_GAMMA = {10: 0.9, 9: 0.75, 8: 0.6, 7: 0.5, 6: 0.4, 5: 0.3}
+
+# Per-zoom noise floor applied to *child* tile alpha before aggregation. Pixels
+# with alpha at or below the threshold are zeroed out, so a single flight that
+# passed through a pixel won't propagate up the pyramid as a visible thin line.
+# The renderer's "1 flight here" alpha is ~8 (from the log1p density math);
+# "2 flights" is ~22. Floor=15 at low zooms drops single-pass and keeps ≥2
+# overlapping. We don't apply this when generating z10 (preserve full detail
+# at near-source zooms); kicks in starting at z9 and gets stricter on the way
+# down so that residual single-track contributions from the now-averaged
+# z(N+1) input also get cleaned up.
+LOW_ZOOM_NOISE_FLOOR = {10: 0, 9: 8, 8: 12, 7: 14, 6: 15, 5: 15}
 
 DENSITY_FOR_FULL_BRIGHTNESS = 40  # adjust this: lower = brighter single tracks
 COLOR_VIBRANCY = 0.9  # adjust this: 1.0 = full brightness, <1.0 = dimmer, >1.0 = brighter
@@ -333,10 +351,14 @@ def band_to_color(band, num_bands=NUM_BANDS):
 
 # --- Data streaming ---
 
-def stream_global_file(path):
+def stream_global_file(path, status=None):
     """Yield record dicts from a gzipped JSONL file.
 
-    Skips records missing hex, now, lat, or lon.
+    Skips records missing hex, now, lat, or lon. If `status` is a dict, sets
+    `status["error"]` to the exception on read failure so the caller can
+    distinguish a clean EOF from a partial-read (e.g. network glitch). The
+    iterator still terminates normally — partial data has already been
+    yielded — but the caller can decide whether to trust the result.
     """
     try:
         with gzip.open(path, 'rb') as f:
@@ -352,6 +374,8 @@ def stream_global_file(path):
                     yield record
     except (EOFError, OSError) as e:
         logger.warning(f"Error reading {path}: {e} (using partial data)")
+        if status is not None:
+            status["error"] = e
 
 
 # --- Disk-backed tile storage ---
@@ -365,17 +389,24 @@ class TileStore:
     Keeps tile count data as .npy files on disk, with a small LRU cache of
     recently-used tiles in memory. This bounds RAM to ~cache_size tiles
     regardless of how many total tiles exist.
+
+    `resume=True` keeps any existing on-disk state (used by the per-file
+    checkpoint flow); the default wipes the work dir for a clean start.
     """
 
-    def __init__(self, work_dir, cache_size=500):
+    def __init__(self, work_dir, cache_size=500, resume=False):
         self.work_dir = Path(work_dir)
-        # Clean any stale data from previous (possibly crashed) runs
-        if self.work_dir.exists():
+        if not resume and self.work_dir.exists():
             shutil.rmtree(self.work_dir)
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.cache_size = cache_size
         self._cache = OrderedDict()  # (tx,ty) -> count
         self.tile_keys = set()  # all tiles ever created
+        if resume:
+            # Re-seed tile_keys from whatever is on disk
+            for npy in self.work_dir.glob("*_count.npy"):
+                tx, ty, _ = npy.name.split("_", 2)
+                self.tile_keys.add((int(tx), int(ty)))
 
     def _tile_path(self, tx, ty):
         return self.work_dir / f"{tx}_{ty}_count.npy"
@@ -464,10 +495,95 @@ def flush_segments(segments_by_tile_band, tile_store):
 
 # --- Main tile generation ---
 
+def downsample_to_low_zooms(output_dir, source_zoom, seed_tiles=None,
+                            min_zoom=5):
+    """Generate tiles at zooms (source_zoom-1) ... min_zoom by 2x2-downsampling
+    each parent's four child tiles. Uses premultiplied-alpha RGB averaging so
+    color stays saturated when sparse pixels neighbor transparent ones; alpha
+    is averaged normally so density falls naturally with zoom-out.
+
+    Each zoom level applies an alpha gamma boost (LOW_ZOOM_GAMMA) to keep
+    sparse areas visible at low zooms — bilinear averaging alone craters alpha
+    geometrically, and even production CONUS data has thinly-trafficked regions
+    that disappear at z5 without a boost. Gamma asymptotes to 1.0 so dense
+    areas don't blow out further.
+
+    `seed_tiles` is the set of (tx, ty) coords at source_zoom; pass it from the
+    just-rendered tile set to skip a filesystem walk. If None, the source-zoom
+    directory is scanned.
+    """
+    output_dir = Path(output_dir)
+    if seed_tiles is None:
+        child_tiles = set()
+        z_dir = output_dir / str(source_zoom)
+        if not z_dir.exists():
+            print(f"  No source tiles found at {z_dir}")
+            return
+        for x_dir in z_dir.iterdir():
+            if not x_dir.is_dir():
+                continue
+            tx = int(x_dir.name)
+            for tp in x_dir.glob("*.png"):
+                child_tiles.add((tx, int(tp.stem)))
+        print(f"  Seeded {len(child_tiles)} tiles from {z_dir}")
+    else:
+        child_tiles = set(seed_tiles)
+
+    # range stop is exclusive: stop=min_zoom-1 yields lowest generated = min_zoom
+    for parent_zoom in range(source_zoom - 1, min_zoom - 1, -1):
+        child_zoom = parent_zoom + 1
+        gamma = LOW_ZOOM_GAMMA.get(parent_zoom, 1.0)
+        noise_floor = LOW_ZOOM_NOISE_FLOOR.get(parent_zoom, 0)
+        parent_tiles = {(tx // 2, ty // 2) for tx, ty in child_tiles}
+        parent_saved_tiles = set()
+        for ptx, pty in sorted(parent_tiles):
+            canvas = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
+            has_content = False
+            for dx, dy in [(0, 0), (1, 0), (0, 1), (1, 1)]:
+                if (ptx * 2 + dx, pty * 2 + dy) in child_tiles:
+                    child_path = (output_dir / str(child_zoom)
+                                  / str(ptx * 2 + dx) / f"{pty * 2 + dy}.png")
+                    canvas.paste(Image.open(child_path), (dx * 256, dy * 256))
+                    has_content = True
+            if not has_content:
+                continue
+            arr = np.array(canvas).astype(np.float32)  # (512,512,4)
+            rgb = arr[:, :, :3]
+            alpha_u8 = arr[:, :, 3]  # uint-scale [0,255] for thresholding
+            if noise_floor > 0:
+                # Mask out lone-flight pixels in the child canvas before aggregation
+                # so they don't survive as thin lines at lower zooms. Color goes
+                # to 0 too so it doesn't bias the premultiplied RGB average.
+                mask = alpha_u8 <= noise_floor
+                alpha_u8 = np.where(mask, 0, alpha_u8)
+                rgb = np.where(mask[:, :, None], 0, rgb)
+            alpha = (alpha_u8 / 255.0)[:, :, None]  # (512,512,1) in [0,1]
+            premul = rgb * alpha
+            premul_down = premul.reshape(256, 2, 256, 2, 3).mean(axis=(1, 3))
+            alpha_down = alpha.reshape(256, 2, 256, 2, 1).mean(axis=(1, 3))
+            # Clamp denominator to avoid div-by-zero where alpha==0
+            safe_alpha = np.where(alpha_down > 1.0 / 255.0, alpha_down, 1.0)
+            rgb_down = premul_down / np.broadcast_to(safe_alpha, premul_down.shape)
+            if gamma != 1.0:
+                alpha_down = np.where(alpha_down > 0,
+                                      np.clip(alpha_down ** gamma, 0, 1),
+                                      0)
+            rgb_u8_out = np.clip(rgb_down, 0, 255).astype(np.uint8)
+            alpha_u8_out = np.clip(alpha_down[:, :, 0] * 255.0, 0, 255).astype(np.uint8)
+            rgba = np.dstack([rgb_u8_out, alpha_u8_out])
+            tile_path = output_dir / str(parent_zoom) / str(ptx) / f"{pty}.png"
+            tile_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.fromarray(rgba, "RGBA").save(tile_path)
+            parent_saved_tiles.add((ptx, pty))
+        print(f"  Generated {len(parent_saved_tiles)} tiles at zoom {parent_zoom} "
+              f"(gamma={gamma}, floor={noise_floor})")
+        child_tiles = parent_saved_tiles
+
+
 def generate_tiles(output_dir, global_files, zoom=DEFAULT_ZOOM,
                    max_records=None, bbox=None, max_alt_agl=None,
                    flat_color=None, skip_geo_filter=False,
-                   alpha_per_track=None):
+                   alpha_per_track=None, fresh=False):
     """Generate traffic density tiles from global ADS-B files.
 
     Args:
@@ -501,7 +617,33 @@ def generate_tiles(output_dir, global_files, zoom=DEFAULT_ZOOM,
     # Disk-backed tile storage with large cache to avoid I/O thrashing.
     # ~6000 tiles × 128KB = ~750MB RAM for a typical single-day CONUS run.
     work_dir = Path("/tmp/traffic_tiles_work")
-    tile_store = TileStore(work_dir, cache_size=8000)
+    # Snapshot dir holds a copy of work_dir as of the last fully-processed
+    # input file. If a previous run crashed mid-file, work_dir may have
+    # double-counted partial data; we restore from snapshot in that case.
+    snapshot_dir = Path("/tmp/traffic_tiles_work_snapshot")
+    manifest_path = snapshot_dir / "processed.txt"
+
+    if fresh:
+        if work_dir.exists():
+            shutil.rmtree(work_dir)
+        if snapshot_dir.exists():
+            shutil.rmtree(snapshot_dir)
+        print("--fresh: cleared any prior work_dir/snapshot")
+
+    resuming = False
+    processed_names = set()
+    if snapshot_dir.exists() and manifest_path.exists():
+        # Restore work_dir from the last good snapshot
+        if work_dir.exists():
+            shutil.rmtree(work_dir)
+        print(f"Resuming from snapshot at {snapshot_dir}")
+        shutil.copytree(snapshot_dir, work_dir)
+        with open(manifest_path) as f:
+            processed_names = set(line.strip() for line in f if line.strip())
+        print(f"  {len(processed_names)} files already processed")
+        resuming = True
+
+    tile_store = TileStore(work_dir, cache_size=8000, resume=resuming)
 
     total_records = 0
     total_segments = 0
@@ -509,6 +651,10 @@ def generate_tiles(output_dir, global_files, zoom=DEFAULT_ZOOM,
     total_renders = 0
 
     for file_idx, global_gz in enumerate(global_files):
+        if global_gz.name in processed_names:
+            print(f"\n[{file_idx+1}/{len(global_files)}] Skipping {global_gz.name} "
+                  f"(already in snapshot)")
+            continue
         print(f"\n[{file_idx+1}/{len(global_files)}] Processing {global_gz.name}...")
         t0 = time.time()
 
@@ -520,8 +666,9 @@ def generate_tiles(output_dir, global_files, zoom=DEFAULT_ZOOM,
         file_filtered = 0
         file_renders = 0
         since_flush = 0
+        read_status = {}  # populated by stream_global_file on read error
 
-        for record in stream_global_file(global_gz):
+        for record in stream_global_file(global_gz, status=read_status):
             file_records += 1
             since_flush += 1
             if max_records and file_records > max_records:
@@ -623,6 +770,46 @@ def generate_tiles(output_dir, global_files, zoom=DEFAULT_ZOOM,
               f"{file_renders} tile-band renders in {elapsed:.1f}s")
         print(f"  Total tiles: {len(tile_store.tile_keys)}")
 
+        if "error" in read_status:
+            # The input file errored mid-read (network glitch, etc.) and we
+            # only got partial data. Skip the checkpoint AND abort: the
+            # already-flushed mid-file counts have polluted work_dir, and the
+            # only clean way to recover is to restart, which restores
+            # work_dir from the previous good snapshot.
+            print(f"  ABORT: {global_gz.name} read failed ({read_status['error']!r}). "
+                  f"Skipping checkpoint to avoid persisting partial data.")
+            print(f"  Re-run the same command — resume will restore the "
+                  f"previous good snapshot and retry this file.")
+            sys.exit(1)
+
+        # Checkpoint: flush all cached counts to disk, snapshot the work dir,
+        # and append this file to the manifest. On crash mid-next-file, the
+        # next run restores from this snapshot and reprocesses only the file
+        # that was in flight.
+        t_chk = time.time()
+        tile_store.flush_all()
+        # Atomic-ish swap: write snapshot to a temp dir, then rename over the
+        # old one so we never have a half-written snapshot on crash.
+        tmp_snapshot = Path(str(snapshot_dir) + ".new")
+        if tmp_snapshot.exists():
+            shutil.rmtree(tmp_snapshot)
+        shutil.copytree(work_dir, tmp_snapshot)
+        # Manifest lives inside the snapshot so the two are always consistent
+        processed_names.add(global_gz.name)
+        with open(tmp_snapshot / "processed.txt", "w") as f:
+            for name in sorted(processed_names):
+                f.write(name + "\n")
+        if snapshot_dir.exists():
+            old = Path(str(snapshot_dir) + ".old")
+            if old.exists():
+                shutil.rmtree(old)
+            os.rename(snapshot_dir, old)
+        os.rename(tmp_snapshot, snapshot_dir)
+        old = Path(str(snapshot_dir) + ".old")
+        if old.exists():
+            shutil.rmtree(old)
+        print(f"  Checkpoint saved in {time.time() - t_chk:.1f}s")
+
     # Flush remaining cached tiles to disk before saving
     tile_store.flush_all()
 
@@ -694,39 +881,11 @@ def generate_tiles(output_dir, global_files, zoom=DEFAULT_ZOOM,
 
     print(f"  Saved {saved} tiles to {output_dir}/{zoom}/")
     print("Now generating lower zoom levels by downsampling...")
-    # Generate lower zoom levels by downsampling (4 child tiles -> 1 parent)
-    # Use saved_tiles set to compute parents directly — no directory walking
-    child_tiles = saved_tiles
-    for parent_zoom in range(zoom - 1, max(zoom - 4, 5), -1):
-        child_zoom = parent_zoom + 1
-        parent_tiles = {(tx // 2, ty // 2) for tx, ty in child_tiles}
+    downsample_to_low_zooms(output_dir, zoom, seed_tiles=saved_tiles)
 
-        parent_saved = 0
-        parent_saved_tiles = set()
-        for ptx, pty in sorted(parent_tiles):
-            # Paste 4 children at full res into 512x512, then resize once
-            canvas = Image.new('RGBA', (512, 512), (0, 0, 0, 0))
-            has_content = False
-            for dx, dy in [(0, 0), (1, 0), (0, 1), (1, 1)]:
-                if (ptx * 2 + dx, pty * 2 + dy) in child_tiles:
-                    child_path = (output_dir / str(child_zoom)
-                                  / str(ptx * 2 + dx) / f"{pty * 2 + dy}.png")
-                    canvas.paste(Image.open(child_path), (dx * 256, dy * 256))
-                    has_content = True
-
-            if has_content:
-                parent_img = canvas.resize((256, 256), Image.BILINEAR)
-                tile_path = output_dir / str(parent_zoom) / str(ptx) / f"{pty}.png"
-                tile_path.parent.mkdir(parents=True, exist_ok=True)
-                parent_img.save(tile_path)
-                parent_saved_tiles.add((ptx, pty))
-                parent_saved += 1
-
-        print(f"  Generated {parent_saved} tiles at zoom {parent_zoom}")
-        child_tiles = parent_saved_tiles
-
-    # Clean up work directory
+    # Clean up work directory and the per-file checkpoint snapshot
     shutil.rmtree(work_dir, ignore_errors=True)
+    shutil.rmtree(snapshot_dir, ignore_errors=True)
 
     print(f"\nTotals: {total_records:,} records, {total_segments:,} segments, "
           f"{total_filtered:,} altitude-filtered, {total_renders} renders")
@@ -735,10 +894,19 @@ def generate_tiles(output_dir, global_files, zoom=DEFAULT_ZOOM,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Generate traffic track tiles from global ADS-B data")
-    parser.add_argument("--start-date", type=validate_date, required=True,
-                        help="Start date in mm/dd/yy format")
-    parser.add_argument("--end-date", type=validate_date, required=True,
-                        help="End date in mm/dd/yy format")
+    parser.add_argument("--start-date", type=validate_date,
+                        help="Start date in mm/dd/yy format "
+                             "(not required with --downsample-only)")
+    parser.add_argument("--end-date", type=validate_date,
+                        help="End date in mm/dd/yy format "
+                             "(not required with --downsample-only)")
+    parser.add_argument("--downsample-only", action="store_true",
+                        help="Skip data ingestion; just regenerate low-zoom "
+                             "tiles from existing --zoom tiles in --output-dir")
+    parser.add_argument("--fresh", action="store_true",
+                        help="Wipe any prior checkpoint snapshot and start "
+                             "from scratch (default is to resume if a "
+                             "snapshot exists)")
     parser.add_argument("--day-filter", type=str, default="all",
                         choices=["all", "weekday", "weekend"],
                         help="Filter dates by day type (default: all)")
@@ -761,6 +929,15 @@ if __name__ == "__main__":
                         help="Additive alpha per overlapping track in flat-color mode "
                              "(e.g. 40 means ~6 tracks saturate to opaque)")
     args = parser.parse_args()
+
+    if args.downsample_only:
+        logging.basicConfig(level=logging.INFO)
+        downsample_to_low_zooms(args.output_dir, args.zoom)
+        sys.exit(0)
+
+    if not args.start_date or not args.end_date:
+        parser.error("--start-date and --end-date are required "
+                     "(unless using --downsample-only)")
 
     flat_color = None
     if args.flat_color:
@@ -801,4 +978,5 @@ if __name__ == "__main__":
                    args.max_records, bbox=bbox,
                    max_alt_agl=args.max_alt_agl, flat_color=flat_color,
                    skip_geo_filter=skip_geo_filter,
-                   alpha_per_track=args.alpha_per_track)
+                   alpha_per_track=args.alpha_per_track,
+                   fresh=args.fresh)

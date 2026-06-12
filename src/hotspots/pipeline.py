@@ -72,6 +72,11 @@ from hotspots.stage5_visualize import (
     _parse_date_range_from_stem,
 )
 
+from tools.v2_airport_quality import (
+    build_v2_airport_quality,
+    load_us_airports_with_elev,
+)
+
 import pandas as pd
 
 
@@ -213,10 +218,16 @@ def run_stage5(
     zoom: float | None,
     traffic_tile_dir: str = "https://airbornehotspots.org/tiles",
     asset_stem: str | None = None,
+    airport_quality: dict | None = None,
+    html_only: bool = False,
 ) -> None:
     """Generate map HTML (self-contained or PMTiles) from a DataFrame of events.
     `zoom=None` means auto-fit to data bounds on load (whole region visible);
     pass an explicit value to override.
+
+    `html_only=True` (PMTiles mode only) skips tippecanoe and sidecar
+    regeneration, reusing the existing `.pmtiles` and `_tracks/` next to
+    `output_path`. Useful when only the embedded JS/CSS/HTML changed.
     """
     MAPS_DIR.mkdir(parents=True, exist_ok=True)
     if df.empty:
@@ -239,18 +250,41 @@ def run_stage5(
     date_range = _parse_date_range_from_stem(stem)
     airports_lookup = build_us_airports_lookup()
 
+    # When provided, the airport-quality dict is inlined into the
+    # self-contained HTML, or written as a sidecar JSON next to the
+    # PMTiles HTML and fetched at load.
+    airport_quality_url: str | None = None
+    if airport_quality is not None and pmtiles:
+        stem_for_aq = asset_stem or Path(output_path).stem
+        aq_filename = f"{stem_for_aq}_quality.json"
+        aq_dest = Path(output_path).parent / aq_filename
+        with open(aq_dest, "w", encoding="utf-8") as f:
+            import json as _json
+            _json.dump(airport_quality, f)
+        airport_quality_url = aq_filename
+
     if pmtiles:
         pmtiles_path = str(Path(output_path).with_suffix(".pmtiles"))
         sidecar_dir = output_path.replace(".html", "_tracks")
-        generate_pmtiles(df, pmtiles_path)
-        print(f"  Writing {len(df):,} event track sidecars...")
-        write_event_sidecars(df, sidecar_dir)
+        if html_only:
+            missing = [p for p in (pmtiles_path, sidecar_dir) if not Path(p).exists()]
+            if missing:
+                raise SystemExit(
+                    f"--html-only requires existing assets, but missing: {missing}. "
+                    f"Run once without --html-only to generate them."
+                )
+            print(f"  --html-only: reusing existing {Path(pmtiles_path).name} and {Path(sidecar_dir).name}/")
+        else:
+            generate_pmtiles(df, pmtiles_path)
+            print(f"  Writing {len(df):,} event track sidecars...")
+            write_event_sidecars(df, sidecar_dir)
         alt_bands = sorted(df["alt_band"].dropna().unique().tolist()) if "alt_band" in df.columns else []
         html = generate_pmtiles_html(pmtiles_path, sidecar_dir,
                                      center_lat, center_lon, static_zoom, alt_bands,
                                      traffic_tile_dir=traffic_tile_dir,
                                      date_range=date_range,
                                      airports_lookup=airports_lookup,
+                                     airport_quality_url=airport_quality_url,
                                      asset_stem=asset_stem,
                                      bounds=bounds,
                                      auto_fit=auto_fit)
@@ -259,6 +293,7 @@ def run_stage5(
                              traffic_tile_dir=traffic_tile_dir,
                              date_range=date_range,
                              airports_lookup=airports_lookup,
+                             airport_quality=airport_quality,
                              bounds=bounds,
                              auto_fit=auto_fit)
 
@@ -396,12 +431,31 @@ def main():
                         help="Skip Stage 4 (aggregation)")
     parser.add_argument("--skip-stage5", action="store_true",
                         help="Skip Stage 5 (visualization)")
+    parser.add_argument("--html-only", action="store_true",
+                        help="Stage 5: regenerate only the HTML, reusing the "
+                             "existing .pmtiles and _tracks/ next to the output. "
+                             "Use this when only embedded JS/CSS changed and you "
+                             "want to skip the slow tippecanoe + sidecar rebuild. "
+                             "Requires --pmtiles.")
+
+    # Airport-quality stage (between Stage 4 and Stage 5).
+    parser.add_argument("--airport-quality", action="store_true",
+                        help="Compute per-airport ADS-B coverage quality and "
+                             "render airplane icons on the v2 map. Off by "
+                             "default: a CONUS-month run takes hours.")
+    parser.add_argument("--airport-quality-path", type=str, default=None,
+                        help="Override the airport_quality.json output path. "
+                             "Default: data/v2/airport_quality_<start>_<end>.json. "
+                             "If the file already exists, reuse it (skip recompute).")
 
     # Paths
     parser.add_argument("--conus-dir", default="data",
                         help="Directory containing CONUS_*.gz files (default: data)")
 
     args = parser.parse_args()
+
+    if args.html_only and not args.pmtiles:
+        parser.error("--html-only requires --pmtiles (only PMTiles mode has reusable assets)")
 
     # Resolve region
     if args.region:
@@ -474,6 +528,93 @@ def main():
                         region_label, regional_parquet)
         print(f"  Stage 4 done in {time.time()-t4:.0f}s")
 
+    # Optional: per-airport ADS-B quality scores → airport_quality.json,
+    # rendered as airplane icons on the v2 map.
+    #
+    # Resolution order:
+    #   1. If --airport-quality-path points at a pre-built aggregate JSON,
+    #      use it verbatim.
+    #   2. Else: aggregate whatever per-day files exist under data/v2/aq/
+    #      that fall within --start-date..--end-date. Warn about missing
+    #      days but don't recompute by default — the compute step is hours
+    #      long for CONUS-scale ranges.
+    #   3. Else (no per-day cache at all and no --skip-existing): trigger a
+    #      fresh compute via build_v2_airport_quality(). Suppressed when
+    #      --skip-existing is set, matching the project's "use what's on
+    #      disk" convention for that flag.
+    airport_quality = None
+    if args.airport_quality:
+        from pathlib import Path as _P
+        from tools.v2_airport_quality import (
+            aggregate_days, V2_AQ_DIR, aq_day_path,
+        )
+        import json as _json
+
+        if args.airport_quality_path:
+            # Explicit pre-built aggregate path — use it as-is.
+            aq_path = _P(args.airport_quality_path)
+            if not aq_path.exists():
+                raise SystemExit(f"--airport-quality-path not found: {aq_path}")
+            print(f"\nAirport-quality: loading {aq_path}")
+            with open(aq_path, "r", encoding="utf-8") as f:
+                airport_quality = _json.load(f)
+        else:
+            # Inventory the per-day cache for the requested date range.
+            requested_dates = list(_date_range(start_date, end_date))
+            present = [d for d in requested_dates
+                       if aq_day_path(V2_AQ_DIR, d.strftime("%Y%m%d")).exists()]
+            missing = [d for d in requested_dates if d not in present]
+
+            if present:
+                if missing:
+                    span = (
+                        f"{present[0].strftime('%Y-%m-%d')}..{present[-1].strftime('%Y-%m-%d')}"
+                        if present else "(none)")
+                    print(
+                        f"\nAirport-quality: aggregating {len(present)} per-day "
+                        f"file(s) from {V2_AQ_DIR}/ "
+                        f"(have: {span}; missing {len(missing)} day(s) — "
+                        f"first missing: {missing[0].strftime('%Y-%m-%d')})"
+                    )
+                    print(
+                        f"  Note: events parquet covers "
+                        f"{args.start_date}..{args.end_date} ({n_days} day(s)); "
+                        f"airport-quality reflects {len(present)} day(s) only."
+                    )
+                else:
+                    print(
+                        f"\nAirport-quality: aggregating {len(present)} per-day "
+                        f"file(s) from {V2_AQ_DIR}/"
+                    )
+                airport_quality = aggregate_days(date_range=present)
+            elif args.skip_existing:
+                print(
+                    f"\nAirport-quality: no per-day files found in {V2_AQ_DIR}/ "
+                    f"for {args.start_date}..{args.end_date}, and --skip-existing "
+                    f"is set — skipping airport quality.\n"
+                    f"  To compute fresh, run:\n"
+                    f"    python -m src.tools.v2_airport_quality --mode compute \\\n"
+                    f"        --start-date {args.start_date} --end-date {args.end_date} "
+                    f"--workers {args.workers}"
+                )
+            else:
+                # No cache and not --skip-existing → fresh compute (slow!).
+                print(
+                    f"\nAirport-quality: no per-day cache, computing fresh "
+                    f"({n_days} day(s); ~1 hour/day single-threaded). "
+                    f"Use --skip-existing to skip."
+                )
+                t_aq = time.time()
+                airports = load_us_airports_with_elev()
+                airport_quality = build_v2_airport_quality(
+                    grid_dir=GRID_DIR,
+                    airports=airports,
+                    date_range=list(_date_range(start_date, end_date)),
+                    workers=args.workers,
+                )
+                print(f"  Airport-quality done in {time.time()-t_aq:.0f}s "
+                      f"({len(airport_quality)} airports)")
+
     # Stage 5: visualize
     if not args.skip_stage5:
         mode = "PMTiles" if args.pmtiles else "self-contained HTML"
@@ -481,7 +622,9 @@ def main():
         t5 = time.time()
         run_stage5(df, output_html, pmtiles=args.pmtiles, zoom=args.zoom,
                    traffic_tile_dir=args.traffic_tiles,
-                   asset_stem=args.asset_stem)
+                   asset_stem=args.asset_stem,
+                   airport_quality=airport_quality,
+                   html_only=args.html_only)
         print(f"  Stage 5 done in {time.time()-t5:.0f}s")
 
     # Summary
@@ -490,6 +633,14 @@ def main():
         _print_summary(all_stats, lat_min, lat_max, lon_min, lon_max, wall_elapsed)
     else:
         print(f"\nDone in {wall_elapsed/60:.1f} min")
+
+    # Print deploy hint when PMTiles output is expected to exist.
+    if args.pmtiles:
+        stem = Path(output_html).stem
+        deploy_cmd = f"python src/tools/deploy_v2 --source-stem {stem} --traffic-tiles-dir tiles/traffic"
+        if args.asset_stem:
+            deploy_cmd += f" --publish-as {args.asset_stem}"
+        print(f"\nTo deploy:\n  {deploy_cmd}")
 
 
 if __name__ == "__main__":

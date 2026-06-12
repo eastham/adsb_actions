@@ -23,7 +23,17 @@ logger = logging.getLogger(__name__)
 LOW_ALT_MIN_AGL = 800
 LOW_ALT_MAX_AGL = 1500
 LOW_ALT_RADIUS_NM = 5
-SURFACE_AGL = 200             # Below this = track reached near the surface
+SURFACE_AGL = 500             # Below this AGL inside the ring = "completed
+                              # approach". 
+                              
+# A track that enters AND exits the LOW_ALT_RADIUS_NM ring while still
+# being tracked (≥2 boundary transitions) is treated as a transit, not an
+# approach to this airport, and dropped from both numerator and denominator
+# of the track-loss metric. The argument: if the receiver kept the aircraft
+# the whole way through the ring, it can't have been "lost" in any
+# coverage-meaningful sense — whatever the pilot was doing.
+# (No altitude floor — missed approaches with full ring-exit visibility
+# also get dropped, which is the right call for a receiver-coverage metric.)
 
 # Gap metric
 MAX_TRACK_GAP_S = 300         # Gaps above this excluded from gap statistics
@@ -79,6 +89,7 @@ def analyze_shard_quality(shard_gz: Path, field_elev: int = 0,
 
     completed = 0
     lost = 0
+    through = 0
     all_gaps = []
 
     for hex_id, pts in by_hex.items():
@@ -93,23 +104,63 @@ def analyze_shard_quality(shard_gz: Path, field_elev: int = 0,
             if 0 < gap <= MAX_TRACK_GAP_S:
                 all_gaps.append(gap)
 
-        # Track-loss metric: check if any point is in the low-altitude
-        # range (within 5nm, 800-1500ft AGL)
-        in_low_alt = False
+        # Track-loss metric, with through-flight and loiter detection.
+        #
+        # An approach we want to score: enters the 5 nm ring at corridor
+        # altitude (800-1500 AGL → "in_corridor"), descends below the
+        # corridor floor inside the ring (proves it was on a real final),
+        # and either reaches surface (completed) or doesn't (lost).
+        #
+        # Dropped categories:
+        # - Through-flight: enters AND exits the ring (≥2 transitions).
+        #   Receiver kept tracking the whole transit, so it can't have
+        #   been "lost" in any coverage-meaningful sense. Includes missed
+        #   approaches with full ring-exit visibility — fine for a
+        #   receiver-coverage metric.
+        # - Loiter / pattern / overflight: track entered the corridor
+        #   altitude band inside the ring but never descended below
+        #   LOW_ALT_MIN_AGL (800 AGL). If the aircraft was actually on
+        #   final it would cross that altitude on the way down. Tracks
+        #   that stay above it are pattern work, surveying, helicopter
+        #   loiter, or traffic to a *neighboring* airport that just
+        #   clipped this airport's ring at altitude.
+        in_corridor = False        # entered the 800-1500 AGL band inside ring
+        descended_below_floor = False  # crossed below 800 AGL inside ring
         reached_surface = False
+        ring_transitions = 0
+        prev_inside: bool | None = None
         for p in pts:
             alt = p["alt"]
-            if alt is None:
-                continue
             dist = _fast_distance_nm(airport_lat, airport_lon,
                                      p["lat"], p["lon"])
-            if (dist <= LOW_ALT_RADIUS_NM
-                    and low_alt_min <= alt <= low_alt_max):
-                in_low_alt = True
+            inside = dist <= LOW_ALT_RADIUS_NM
+            if prev_inside is not None and inside != prev_inside:
+                ring_transitions += 1
+            prev_inside = inside
+
+            if alt is None:
+                continue
+            if inside and low_alt_min <= alt <= low_alt_max:
+                in_corridor = True
+            if inside and alt < low_alt_min:
+                descended_below_floor = True
+            # Surface check is generous — any point ≤ surface_alt counts,
+            # not just inside-ring. ADS-B sometimes drops out at very low
+            # altitude inside the ring then re-acquires on the ramp at 0 ft
+            # with lat/lon drift just outside; restricting to inside-ring
+            # would undercount completions for those cases.
             if alt <= surface_alt:
                 reached_surface = True
 
-        if in_low_alt:
+        if in_corridor:
+            if ring_transitions >= 2:
+                through += 1
+                continue
+            if not descended_below_floor:
+                # Never came below 800 AGL inside the ring — not an
+                # approach attempt. Also dropped from the metric.
+                through += 1
+                continue
             if reached_surface:
                 completed += 1
             else:
@@ -128,6 +179,7 @@ def analyze_shard_quality(shard_gz: Path, field_elev: int = 0,
         "low_alt_tracks": total_low,
         "completed_tracks": completed,
         "lost_tracks": lost,
+        "through_tracks": through,
         "median_gap_s": median_gap,
         "p90_gap_s": p90_gap,
         "total_tracks": len(by_hex),
@@ -144,6 +196,10 @@ def build_data_quality(icao: str, airport_dir: Path,
     """Build data quality JSON structure for one airport across all dates.
 
     If preloaded_shards is provided, uses those instead of reading from disk.
+    Returns None when the airport has no shards at all (i.e. wasn't
+    evaluated). When shards exist but yield no usable data, returns a dict
+    with score="none" so callers can distinguish "evaluated, no data" from
+    "not evaluated."
     """
     if preloaded_shards is not None:
         shard_files = sorted(preloaded_shards.keys())
@@ -154,20 +210,36 @@ def build_data_quality(icao: str, airport_dir: Path,
     if not shard_files:
         return None
 
-    all_results = []
+    per_date_results = []
     for shard in shard_files:
         shard_records = preloaded_shards.get(shard) if preloaded_shards else None
         result = analyze_shard_quality(shard, field_elev=field_elev,
                                        airport_lat=airport_lat,
                                        airport_lon=airport_lon,
                                        records=shard_records)
-        if result:
-            all_results.append(result)
+        per_date_results.append(result)
 
-    if not all_results:
-        return None
+    return aggregate_per_date_results(per_date_results, icao,
+                                      num_dates=len(shard_files))
 
-    # Weighted average lost rate
+
+def aggregate_per_date_results(per_date: list[dict | None], icao: str,
+                               num_dates: int | None = None) -> dict:
+    """Combine per-date analyze_shard_quality results into one airport dict.
+
+    `per_date` may contain Nones (dates with no records); they're filtered.
+    `num_dates` defaults to len(per_date) if not given — pass it explicitly
+    when the caller knows the intended date-range count (e.g. some dates had
+    no shard at all and shouldn't have been in the list).
+
+    Always returns a dict. When no per-date result has usable data, the
+    returned dict has score="none" so callers can distinguish "evaluated,
+    no data" from "not evaluated" (which a None return would mean).
+    """
+    if num_dates is None:
+        num_dates = len(per_date)
+    all_results = [r for r in per_date if r]
+
     total_low = sum(r["low_alt_tracks"] for r in all_results)
     total_completed = sum(r["completed_tracks"] for r in all_results)
     weighted_lost_rate = None
@@ -177,17 +249,13 @@ def build_data_quality(icao: str, airport_dir: Path,
         completion_rate = total_completed / total_low
 
     # Aggregate gap metrics (median of medians)
-    median_gaps = [r["median_gap_s"] for r in all_results
-                   if r["median_gap_s"] is not None]
-    median_gaps.sort()
+    median_gaps = sorted(r["median_gap_s"] for r in all_results
+                         if r["median_gap_s"] is not None)
     agg_median_gap = median_gaps[len(median_gaps) // 2] if median_gaps else None
 
-    p90_gaps = [r["p90_gap_s"] for r in all_results
-                if r["p90_gap_s"] is not None]
-    p90_gaps.sort()
+    p90_gaps = sorted(r["p90_gap_s"] for r in all_results
+                      if r["p90_gap_s"] is not None)
     agg_p90_gap = p90_gaps[len(p90_gaps) // 2] if p90_gaps else None
-
-    num_dates = len(shard_files)
 
     term_score = _score_termination(weighted_lost_rate)
     gap_score = _score_gap(agg_median_gap)
@@ -220,7 +288,7 @@ def build_data_quality(icao: str, airport_dir: Path,
 
 def _score_termination(rate: float | None) -> str:
     if rate is None:
-        return "yellow"
+        return "none"
     if rate < TERM_GREEN:
         return "green"
     if rate < TERM_YELLOW:
@@ -230,7 +298,7 @@ def _score_termination(rate: float | None) -> str:
 
 def _score_gap(median_gap: float | None) -> str:
     if median_gap is None:
-        return "yellow"
+        return "none"
     if median_gap < GAP_GREEN:
         return "green"
     if median_gap < GAP_YELLOW:
@@ -238,10 +306,17 @@ def _score_gap(median_gap: float | None) -> str:
     return "red"
 
 
-_SCORE_ORDER = {"green": 0, "yellow": 1, "red": 2}
+_SCORE_ORDER = {"none": -1, "green": 0, "yellow": 1, "red": 2}
 
 
 def _overall_score(term_score: str, gap_score: str) -> str:
-    worst = max(term_score, gap_score,
-                key=lambda s: _SCORE_ORDER[s])
-    return worst
+    # Termination is the load-bearing signal (did approaches get tracked all
+    # the way to the surface?). Without it we can't claim coverage is good
+    # even if en-route gaps look fine — gap-only is a misleading green/yellow.
+    # Gap=None alone is fine to defer to termination, since it implies near-
+    # zero records and termination would also be None in that case.
+    if term_score == "none":
+        return "none"
+    if gap_score == "none":
+        return term_score
+    return max(term_score, gap_score, key=lambda s: _SCORE_ORDER[s])

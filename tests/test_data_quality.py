@@ -14,7 +14,6 @@ from src.tools.data_quality import (
     build_data_quality,
     _score_termination,
     _score_gap,
-    _score_confidence,
     _overall_score,
 )
 
@@ -34,7 +33,7 @@ def test_score_termination():
     assert _score_termination(0.49) == "yellow"
     assert _score_termination(0.50) == "red"
     assert _score_termination(0.80) == "red"
-    assert _score_termination(None) == "yellow"
+    assert _score_termination(None) == "none"
 
 
 def test_score_gap():
@@ -45,24 +44,31 @@ def test_score_gap():
     assert _score_gap(14.9) == "yellow"
     assert _score_gap(15.0) == "red"
     assert _score_gap(30.0) == "red"
-    assert _score_gap(None) == "yellow"
-
-
-def test_score_confidence():
-    assert _score_confidence(10) == "green"
-    assert _score_confidence(5) == "green"
-    assert _score_confidence(4) == "yellow"
-    assert _score_confidence(3) == "yellow"
-    assert _score_confidence(2) == "red"
-    assert _score_confidence(1) == "red"
+    assert _score_gap(None) == "none"
 
 
 def test_overall_score():
-    assert _overall_score("green", "green", "green") == "green"
-    assert _overall_score("green", "yellow", "green") == "yellow"
-    assert _overall_score("green", "green", "red") == "red"
-    assert _overall_score("red", "red", "red") == "red"
-    assert _overall_score("yellow", "red", "green") == "red"
+    assert _overall_score("green", "green") == "green"
+    assert _overall_score("green", "yellow") == "yellow"
+    assert _overall_score("green", "red") == "red"
+    assert _overall_score("red", "red") == "red"
+    assert _overall_score("yellow", "red") == "red"
+
+
+def test_overall_score_with_none():
+    # Both none -> none
+    assert _overall_score("none", "none") == "none"
+    # Termination=none drives overall=none regardless of gap signal:
+    # without approach data we can't score approach quality, even if
+    # en-route gaps look fine.
+    assert _overall_score("none", "green") == "none"
+    assert _overall_score("none", "yellow") == "none"
+    assert _overall_score("none", "red") == "none"
+    # Gap=none alone defers to termination (gap=None implies near-zero
+    # records, in which case termination would also typically be none).
+    assert _overall_score("green", "none") == "green"
+    assert _overall_score("yellow", "none") == "yellow"
+    assert _overall_score("red", "none") == "red"
 
 
 # --- Shard analysis tests ---
@@ -125,9 +131,8 @@ def test_build_data_quality(tmp_path):
 
     # Check sub-scores exist
     details = result["details"]
-    assert details["terminationScore"] in ("green", "yellow", "red")
-    assert details["gapScore"] in ("green", "yellow", "red")
-    assert details["confidenceScore"] in ("green", "yellow", "red")
+    assert details["terminationScore"] in ("green", "yellow", "red", "none")
+    assert details["gapScore"] in ("green", "yellow", "red", "none")
 
     # Gap metrics should be present
     assert result["medianGapS"] is not None
@@ -135,12 +140,26 @@ def test_build_data_quality(tmp_path):
 
 
 def test_build_data_quality_empty(tmp_path):
-    """Empty directory returns None."""
+    """Empty directory returns None (airport not evaluated at all)."""
     airport_dir = tmp_path / "EMPTY"
     airport_dir.mkdir()
     result = build_data_quality("EMPTY", airport_dir, field_elev=0,
                                 airport_lat=0.0, airport_lon=0.0)
     assert result is None
+
+
+def test_aggregate_per_date_results_no_data():
+    """Evaluated but all dates yielded no usable data → score 'none' dict."""
+    from src.tools.data_quality import aggregate_per_date_results
+    result = aggregate_per_date_results([None, None, None],
+                                        "FAKE", num_dates=3)
+    assert result is not None
+    assert result["icao"] == "FAKE"
+    assert result["score"] == "none"
+    assert result["numDates"] == 3
+    assert result["lostRate"] is None
+    assert result["medianGapS"] is None
+    assert result["totalLowAltTracks"] == 0
 
 
 def test_quality_in_html(tmp_path):

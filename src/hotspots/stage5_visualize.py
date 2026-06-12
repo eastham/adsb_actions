@@ -78,10 +78,17 @@ def build_tooltip_html(row: pd.Series, event_id: int = None) -> str:
 
     dt_display = str(row.get("datetime_utc", "")).replace("T", " ") + " UTC"
     id_suffix = f" <b>#{event_id}</b>" if event_id is not None else ""
+    quality = row.get('quality', '?')
+    dot_color = QUALITY_COLORS.get(quality, DEFAULT_COLOR)
+    quality_dot = (
+        f'<span style="display:inline-block;width:10px;height:10px;'
+        f'border-radius:50%;background:{dot_color};'
+        f'margin-right:4px;vertical-align:middle;"></span>'
+    )
     return (
         f"{dt_display}{id_suffix}<br>"
         f"<b>{row.get('flight1','?')} / {row.get('flight2','?')}</b><br><br>"
-        f"Quality: {row.get('quality','?')}"
+        f"Quality: {quality_dot}{quality}"
         + (f" ({row.get('quality_explanation','')})" if row.get('quality_explanation') else "") + "<br><br>"
         f"Min lateral sep: {lat_nm} nm | Min alt sep: {alt_sep} ft"
     )
@@ -111,8 +118,9 @@ def build_us_airports_lookup() -> dict:
     """Return a {IDENT: [lon, lat]} dict for US public airports from the
     OurAirports CSV. Indexes by `ident` only (the canonical ICAO-ish code),
     not gps_code/local_code aliases — keeps the inlined HTML payload small.
-    The jumpToAirport JS prepends "K" to bare 3-letter codes, so users typing
-    `WVI` still resolve to KWVI without alias entries. Cached per-process.
+    The jumpToAirport JS retries with a "K" prefix when a 3-char lookup misses,
+    so users typing `WVI` or `C83` still resolve to KWVI/KC83 without aliases.
+    Cached per-process.
     """
     global _us_airports_cache
     if _us_airports_cache is not None:
@@ -157,7 +165,7 @@ def _date_range_header_html(date_range: tuple[str, str] | None) -> str:
     return (
         '<div style="margin-bottom:8px; padding-bottom:6px;'
         ' border-bottom:1px solid #555;">\n'
-        f'<b>Data: {start} - {end}</b>\n'
+        f'<b>LOS data: {start} - {end}</b>\n'
         '</div>\n'
     )
 
@@ -169,8 +177,13 @@ def _airport_jump_panel_html() -> str:
     """
     return (
         '<div id="airport-jump-box">\n'
-        '<label style="display:flex; align-items:center; gap:6px;">\n'
-        '  Airport Code:\n'
+        '<div style="color:#ff0; text-align:center;">\n'
+        '<b><a href="https://airbornehotspots.org" style="color:inherit;">airbornehotspots.org</a></b><br/>\n'
+        'Purple: low-altitude traffic patterns <br/> Colored dots: Loss Of Separation events.  \n'
+        'Zoom in and click on a dot to replay that event.</div>\n'
+        '<hr style="border:0; border-top:1px solid #555; margin:8px 0;">\n'
+        '<label style="display:flex; align-items:center; justify-content:center; gap:6px;">\n'
+        '  Go To Airport Code:\n'
         '  <input type="text" id="airport-jump" maxlength="4" autocomplete="off"\n'
         '         style="width:60px; padding:2px 4px;">\n'
         '  <button onclick="jumpToAirport()" style="padding:2px 8px;">Go</button>\n'
@@ -199,6 +212,209 @@ def _bounds_js(bounds: tuple[float, float, float, float] | None, auto_fit: bool)
     return f'var DATA_BOUNDS = {bb};\nvar AUTO_FIT = {"true" if auto_fit else "false"};\n'
 
 
+def _airport_quality_js(airport_quality: dict | None,
+                        sidecar_url: str | None = None) -> str:
+    """JS that injects airport quality icons + labels + hover popups onto the
+    map. The map must already exist as a global `map` (MapLibre instance) and
+    `AIRPORTS` must be populated.
+
+    If `sidecar_url` is given, AIRPORT_QUALITY is fetched at runtime (used
+    in PMTiles mode where the shell HTML stays small). Otherwise the dict is
+    inlined verbatim (used in self-contained mode).
+    """
+    if sidecar_url is not None:
+        loader = (
+            'fetch(' + json.dumps(sidecar_url) + ')\n'
+            '  .then(function(r) { return r.ok ? r.json() : {}; })\n'
+            '  .catch(function() { return {}; })\n'
+            '  .then(function(AIRPORT_QUALITY) {\n'
+            '    addAirportQuality(AIRPORT_QUALITY);\n'
+            '  });\n'
+        )
+    else:
+        inlined = json.dumps(airport_quality or {})
+        loader = (
+            'addAirportQuality(' + inlined + ');\n'
+        )
+
+    # Per-color airplane-icon images (registered with map.addImage at load) +
+    # text labels + invisible hit-target circles. We use raster icons (canvas-
+    # rendered SVGs) rather than MapLibre's text-symbol path because the demo
+    # font doesn't contain airplane glyphs, and icons are also more legible
+    # at small sizes. Hit-target circle on top makes hovering forgiving.
+    return (
+        'function addAirportQuality(AIRPORT_QUALITY) {\n'
+        '  // Airplane SVG — a simple "up-and-to-the-right" silhouette.\n'
+        '  // Drawn with `currentColor` so we can recolor per score by setting\n'
+        '  // `color:` in the wrapper. 24x24 viewBox.\n'
+        '  function airplaneSVG(stroke) {\n'
+        '    return \'<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"\'\n'
+        '         + \' viewBox="0 0 24 24" fill="currentColor" stroke="\' + stroke + \'"\'\n'
+        '         + \' stroke-width="1" stroke-linejoin="round" stroke-linecap="round">\'\n'
+        '         + \'<path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/>\'\n'
+        '         + \'</svg>\';\n'
+        '  }\n'
+        '  // Render an SVG to a 32x32 ImageBitmap-compatible image we can\n'
+        '  // hand to map.addImage. Returns a Promise.\n'
+        '  function svgToImage(svgStr, fillColor) {\n'
+        '    return new Promise(function(resolve, reject) {\n'
+        '      var wrapped = \'<div xmlns="http://www.w3.org/1999/xhtml" style="color:\' + fillColor + \'">\' + svgStr + \'</div>\';\n'
+        '      var blob = new Blob([svgStr.replace("currentColor", fillColor)], {type:"image/svg+xml"});\n'
+        '      var url = URL.createObjectURL(blob);\n'
+        '      var img = new Image();\n'
+        '      img.onload = function() {\n'
+        '        var c = document.createElement("canvas");\n'
+        '        c.width = 32; c.height = 32;\n'
+        '        var ctx = c.getContext("2d");\n'
+        '        ctx.drawImage(img, 0, 0, 32, 32);\n'
+        '        URL.revokeObjectURL(url);\n'
+        '        var data = ctx.getImageData(0, 0, 32, 32);\n'
+        '        resolve({width: 32, height: 32, data: new Uint8Array(data.data)});\n'
+        '      };\n'
+        '      img.onerror = reject;\n'
+        '      img.src = url;\n'
+        '    });\n'
+        '  }\n'
+        '\n'
+        '  var labels = {green:"Good", yellow:"Fair", red:"Poor", none:"No data"};\n'
+        '  var colors = {green:"#2ecc71", yellow:"#e0c020",\n'
+        '                red:"#e74c3c", none:"#888"};\n'
+        '\n'
+        '  // Register one icon image per score color.\n'
+        '  var iconNames = {};\n'
+        '  var registerPromises = [];\n'
+        '  Object.keys(colors).forEach(function(s) {\n'
+        '    var name = "aq-plane-" + s;\n'
+        '    iconNames[s] = name;\n'
+        '    registerPromises.push(\n'
+        '      svgToImage(airplaneSVG("#000"), colors[s]).then(function(img) {\n'
+        '        if (!map.hasImage(name)) map.addImage(name, img);\n'
+        '      })\n'
+        '    );\n'
+        '  });\n'
+        '\n'
+        '  Promise.all(registerPromises).then(function() {\n'
+        '    var qFeatures = [];\n'
+        '    for (var icao in AIRPORT_QUALITY) {\n'
+        '      var loc = AIRPORTS[icao]; if (!loc) continue;\n'
+        '      var q = AIRPORT_QUALITY[icao];\n'
+        '      var s = q.score || "none";\n'
+        '      qFeatures.push({type:"Feature",\n'
+        '        geometry:{type:"Point", coordinates:loc},\n'
+        '        properties:{icao:icao, score:s,\n'
+        '          icon: iconNames[s] || iconNames["none"],\n'
+        '          label:icao + " — " + (labels[s] || "?"),\n'
+        '          color:colors[s] || "#888",\n'
+        '          lostRate:q.lostRate, medianGapS:q.medianGapS,\n'
+        '          completionRate:q.completionRate, numDates:q.numDates,\n'
+        '          totalLowAltTracks:q.totalLowAltTracks}});\n'
+        '    }\n'
+        '    if (!qFeatures.length) return;\n'
+        '    map.addSource("airport-quality", {type:"geojson",\n'
+        '      data:{type:"FeatureCollection", features:qFeatures}});\n'
+        '\n'
+        '    // Airplane icon, colored per score.\n'
+        '    map.addLayer({id:"aq-dot", type:"symbol", source:"airport-quality",\n'
+        '      minzoom: 8,\n'
+        '      layout:{"icon-image":["get","icon"],\n'
+        '              "icon-size":0.7,\n'
+        '              "icon-allow-overlap":true,\n'
+        '              "icon-ignore-placement":true}});\n'
+        '\n'
+        '    /* Label rendered below the icon — hidden for now.\n'
+        '    map.addLayer({id:"aq-label", type:"symbol", source:"airport-quality",\n'
+        '      minzoom: 8,\n'
+        '      layout:{"text-field":["get","label"], "text-size":11,\n'
+        '              "text-offset":[0, 1.2], "text-anchor":"top",\n'
+        '              "text-allow-overlap":false,\n'
+        '              "text-ignore-placement":false},\n'
+        '      paint:{"text-color":["case",\n'
+        '                            ["==", ["get","score"], "none"], "#fff",\n'
+        '                            ["get","color"]],\n'
+        '             "text-halo-color":"#000","text-halo-width":1.6}});\n'
+        '    */\n'
+        '\n'
+        '    // Invisible hit-target circle on top for forgiving hover.\n'
+        '    map.addLayer({id:"aq-hit", type:"circle", source:"airport-quality",\n'
+        '      minzoom: 8,\n'
+        '      paint:{"circle-color":"rgba(0,0,0,0)",\n'
+        '             "circle-radius":14,\n'
+        '             "circle-stroke-width":0}});\n'
+        '  });\n'
+        '\n'
+        '  // Hover popup with explainer + per-airport metrics. Black panel\n'
+        '  // styling matches the other UI panels.\n'
+        '  var aqPopup = new maplibregl.Popup({closeButton:false, closeOnClick:false,\n'
+        '                                      maxWidth:"320px",\n'
+        '                                      className:"aq-popup"});\n'
+        '  function pct(x) {\n'
+        '    return (x === null || x === undefined) ? "n/a" : (Math.round(x*100) + "%");\n'
+        '  }\n'
+        '  function num(x, suffix) {\n'
+        '    if (x === null || x === undefined) return "n/a";\n'
+        '    return x + (suffix || "");\n'
+        '  }\n'
+        '  function aqHtml(p) {\n'
+        '    var headers = {green:"Good ADS-B coverage",\n'
+        '                   yellow:"Fair ADS-B coverage",\n'
+        '                   red:"Poor ADS-B coverage",\n'
+        '                   none:"No approach data"};\n'
+        '    var explain = {\n'
+        '      green:"Most arrivals/departures are seen past <500 feet AGL.",\n'
+        '      yellow:"Some arrivals/departures are not seen below 500 feet AGL - events may be incomplete.",\n'
+        '      red:"Many arrivals/departures are not seen below 500 feet AGL — events may be incomplete.",\n'
+        '      none:"No aircraft were observed approaching/departing this airport in the date range, so coverage cannot be scored."};\n'
+        '    var html = "<div style=\\"font:12px sans-serif;line-height:1.4;color:#fff\\">"\n'
+        '             + "<div style=\\"font-weight:bold;margin-bottom:2px;color:" + p.color + "\\">"\n'
+        '             +   p.icao + " &mdash; " + (headers[p.score] || "Unknown")\n'
+        '             + "</div>"\n'
+        '             + "<div style=\\"color:#ccc;margin-bottom:6px\\">"\n'
+        '             +   (explain[p.score] || "") + "</div>";\n'
+        '    if (p.score !== "none") {\n'
+        '      html += "<div><b>Approach/departure completeness:</b> " + pct(p.completionRate)\n'
+        '            + " <span style=\\"color:#aaa\\">(of " + (p.totalLowAltTracks || 0)\n'
+        '            + " low-altitude tracks)</span></div>"\n'
+        '            + "<div><b>Median gap between reports:</b> " + num(p.medianGapS, " s")\n'
+        '            + " <span style=\\"color:#aaa\\">(lower = better)</span></div>";\n'
+        '    }\n'
+        '    html += "<div style=\\"color:#aaa;margin-top:4px\\">"\n'
+        '          +   "Based on " + (p.numDates || 0) + " day(s) of data."\n'
+        '          + "</div>"\n'
+        '          + "</div>";\n'
+        '    return html;\n'
+        '  }\n'
+        '  map.on("mouseenter", "aq-hit", function(e) {\n'
+        '    map.getCanvas().style.cursor = "pointer";\n'
+        '    var p = e.features[0].properties;\n'
+        '    aqPopup.setLngLat(e.features[0].geometry.coordinates)\n'
+        '           .setHTML(aqHtml(p)).addTo(map);\n'
+        '  });\n'
+        '  map.on("mouseleave", "aq-hit", function() {\n'
+        '    map.getCanvas().style.cursor = "";\n'
+        '    aqPopup.remove();\n'
+        '  });\n'
+        '}\n'
+        + loader
+    )
+
+
+# CSS for the airport-quality popup. Black panel + white text matches the
+# styling of the other UI panels (#alt-band-info, #airport-jump-box).
+_AQ_POPUP_CSS = (
+    '.aq-popup .maplibregl-popup-content {\n'
+    '  background: rgba(0,0,0,0.85); color: #fff;\n'
+    '  padding: 10px 12px; border-radius: 6px;\n'
+    '  font-family: sans-serif;\n'
+    '}\n'
+    '.aq-popup .maplibregl-popup-tip {\n'
+    '  border-top-color: rgba(0,0,0,0.85) !important;\n'
+    '  border-bottom-color: rgba(0,0,0,0.85) !important;\n'
+    '  border-left-color: rgba(0,0,0,0.85) !important;\n'
+    '  border-right-color: rgba(0,0,0,0.85) !important;\n'
+    '}\n'
+)
+
+
 def _airport_jump_js() -> str:
     """JS for the airport-code jump box: normalizes 3-letter US codes to ICAO
     (mirroring v1's searchAirport() in html/index_template.html), looks up
@@ -212,8 +428,13 @@ def _airport_jump_js() -> str:
         '  var input = document.getElementById("airport-jump");\n'
         '  code = (code || (input ? input.value : "")).trim().toUpperCase();\n'
         '  if (!code) return;\n'
-        '  if (/^[A-Z]{3}$/.test(code)) code = "K" + code;\n'
+        '  // AIRPORTS is keyed by OurAirports `ident` (e.g. KWVI, KC83). Users\n'
+        '  // commonly type the 3-char local/IATA code (WVI, C83); try the\n'
+        '  // K-prefixed form too if the raw code misses.\n'
         '  var loc = AIRPORTS[code];\n'
+        '  if (!loc && code.length === 3 && code[0] !== "K") {\n'
+        '    loc = AIRPORTS["K" + code];\n'
+        '  }\n'
         '  if (loc) {\n'
         '    map.flyTo({center: loc, zoom: 11});\n'
         '  } else {\n'
@@ -268,6 +489,7 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
                   traffic_tile_dir: str = None,
                   date_range: tuple[str, str] | None = None,
                   airports_lookup: dict | None = None,
+                  airport_quality: dict | None = None,
                   bounds: tuple[float, float, float, float] | None = None,
                   auto_fit: bool = True) -> str:
     """Generate a standalone MapLibre GL HTML page with event data.
@@ -328,11 +550,15 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
                                   "raster-resampling": "linear"}})
 
     if traffic_tile_dir:
-        # Tile URL relative to the HTML output (tiles live next to the HTML or at a known path)
+        # Tile URL relative to the HTML output (tiles live next to the HTML or at a known path).
+        # minzoom/maxzoom match what traffic_tiles.py generates: keeps MapLibre from
+        # 404-spamming outside that range, and lets it overzoom past maxzoom.
         sources["traffic"] = {
             "type": "raster",
             "tiles": [traffic_tile_dir.rstrip("/") + "/{z}/{x}/{y}.png"],
             "tileSize": 256,
+            "minzoom": 5,
+            "maxzoom": 11,
             "attribution": "Traffic Density",
         }
         layers.append({"id": "traffic-layer", "type": "raster", "source": "traffic",
@@ -546,6 +772,10 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '  background: rgba(0,0,0,0.75); color: #fff; padding: 8px 12px;\n'
         '  border-radius: 6px; font-size: 12px; font-family: sans-serif;\n'
         '  z-index: 1000; max-width: 260px; }\n'
+        '@media (max-width: 480px) {\n'
+        '  #alt-band-info { top: auto; bottom: 10px; }\n'
+        '}\n'
+        + _AQ_POPUP_CSS +
         '</style>\n'
         '</head>\n'
         '<body>\n'
@@ -559,15 +789,15 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         html += (
             '<div id="alt-band-info">\n'
             + date_header_html +
-            '<b>Event Altitude Filter (MSL)</b><br>\n'
+            '<b>LOS Altitude Filter (MSL)</b><br>\n'
             + alt_band_checkboxes +
             '<div style="margin-top:8px;border-top:1px solid #555;padding-top:6px">\n'
             '<label style="display:block;cursor:pointer">'
-            '<input type="checkbox" id="show-low-cb"> Show low-quality events</label>\n'
+            '<input type="checkbox" id="show-low-cb"> Show low-quality LOS events</label>\n'
             '</div>\n'
             '<div style="margin-top:8px;border-top:1px solid #555;padding-top:6px">\n'
-            '<label style="display:block;font-size:11px;margin-bottom:2px">Heatmap Opacity: <span id="heatmap-opacity-val">30</span>%</label>\n'
-            '<input type="range" id="heatmap-opacity-slider" min="0" max="75" value="30" style="width:100%">\n'
+            '<label style="display:block;font-size:11px;margin-bottom:2px">LOS Heatmap Opacity: <span id="heatmap-opacity-val">0</span>%</label>\n'
+            '<input type="range" id="heatmap-opacity-slider" min="0" max="75" value="0" style="width:100%">\n'
             '</div>\n'
             '</div>\n'
         )
@@ -595,10 +825,12 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '  zoom: ' + str(zoom) + ',\n'
         '  dragRotate: false,\n'
         '  pitchWithRotate: false,\n'
-        '  touchPitch: false\n'
+        '  touchPitch: false,\n'
+        '  attributionControl: false\n'
         '});\n'
         'map.touchZoomRotate.disableRotation();\n'
-        'map.addControl(new maplibregl.NavigationControl({visualizePitch: false}));\n'
+        'map.addControl(new maplibregl.NavigationControl({visualizePitch: false}), "bottom-left");\n'
+        'map.addControl(new maplibregl.AttributionControl({compact: true}));\n'
         '\n'
         '// Zoom-level readout (debug) — uncomment to enable\n'
         '// var zoomBox = document.createElement("div");\n'
@@ -624,7 +856,7 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '      "heatmap-weight": 1,\n'
         '      "heatmap-intensity": 1,\n'
         '      "heatmap-radius": ["interpolate", ["exponential", 2], ["zoom"], 8, 20, 9, 40, 10, 80, 11, 160, 12, 320],\n'
-        '      "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0, 9, 0.3, 14, 0.3]\n'
+        '      "heatmap-opacity": 0\n'
         '    }\n'
         '  });\n'
         '\n'
@@ -711,6 +943,10 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '      document.getElementById("heatmap-opacity-val").textContent = this.value;\n'
         '    });\n'
         '  }\n'
+        '\n'
+        + ('  // Airport-quality icons (per-airport ADS-B coverage score)\n'
+           + _airport_quality_js(airport_quality)
+           if airport_quality else '') +
         '\n'
         '  // Initial viewport: ?airport=ICAO wins (zooms in tight); otherwise\n'
         '  // fit the data bounds so the whole region is in view.\n'
@@ -841,6 +1077,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
                            traffic_tile_dir: str = None,
                            date_range: tuple[str, str] | None = None,
                            airports_lookup: dict | None = None,
+                           airport_quality_url: str | None = None,
                            asset_stem: str | None = None,
                            bounds: tuple[float, float, float, float] | None = None,
                            auto_fit: bool = True) -> str:
@@ -897,10 +1134,13 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
                            "paint": {"raster-opacity": ["interpolate", ["linear"], ["zoom"], 4.0, 0.0, 5.0, 0.6, 6.0, 1.0],
                                      "raster-resampling": "linear"}})
     if traffic_tile_dir:
+        # See generate_html(): minzoom/maxzoom match what traffic_tiles.py generates.
         pm_sources["traffic"] = {
             "type": "raster",
             "tiles": [traffic_tile_dir.rstrip("/") + "/{z}/{x}/{y}.png"],
             "tileSize": 256,
+            "minzoom": 5,
+            "maxzoom": 11,
             "attribution": "Traffic Density",
         }
         pm_layers.append({"id": "traffic-layer", "type": "raster", "source": "traffic",
@@ -1074,54 +1314,67 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '  } catch(err) { console.error("runAnimation error:", err); }\n'
         '}\n'
         '\n'
-        # On click: load index once, then Range-fetch just this event's track line
+        # Index is fetched once and cached. Kicked off on map load so the
+        # first event click doesn't pay the cold-fetch cost.
+        'var _indexPromise = null;\n'
+        'function loadTracksIndex() {\n'
+        '  if (_tracksIndex) return Promise.resolve(_tracksIndex);\n'
+        '  if (_indexPromise) return _indexPromise;\n'
+        '  // The index is gzipped on R2 but Cloudflare CDN sometimes\n'
+        '  // forwards the body without Content-Encoding: gzip, so we\n'
+        '  // decompress in JS using DecompressionStream (Chrome 80+,\n'
+        '  // Firefox 113+, Safari 16.4+) for cross-CDN robustness.\n'
+        '  _indexPromise = fetch("' + sidecar_rel + '/tracks.index.json.gz")\n'
+        '    .then(function(r) {\n'
+        '      // If the CDN already decompressed for us, the body is\n'
+        '      // plain JSON; otherwise it\\u2019s gzip bytes we have to\n'
+        '      // decompress ourselves. Detect via the gzip magic 1f 8b.\n'
+        '      return r.arrayBuffer().then(function(buf) {\n'
+        '        var bytes = new Uint8Array(buf);\n'
+        '        if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {\n'
+        '          var blob = new Blob([buf]);\n'
+        '          var ds = new DecompressionStream("gzip");\n'
+        '          return new Response(blob.stream().pipeThrough(ds)).json();\n'
+        '        }\n'
+        '        return new Response(buf).json();\n'
+        '      });\n'
+        '    })\n'
+        '    .then(function(idx) { _tracksIndex = idx; return idx; })\n'
+        '    .catch(function(e) { console.warn("index fetch failed:", e); _indexPromise = null; throw e; });\n'
+        '  return _indexPromise;\n'
+        '}\n'
+        '\n'
+        # On click: ensure index is loaded, then Range-fetch this event's track line
         'function startAnimation(props) {\n'
         '  clearAnimation();\n'
         '  _animSpeed = 1;\n'
-        '  if (props.html) showTooltip(props.html);\n'
+        '  var baseHtml = props.html || "";\n'
+        '  if (baseHtml) showTooltip(baseHtml);\n'
         '  var gen = _fetchGen;\n'
         '  var eid = String(props.event_id);\n'
-        '  function _animate() {\n'
+        '  // Only show the spinner if the fetch is slow enough to notice.\n'
+        '  var spinnerTimer = setTimeout(function() {\n'
         '    if (gen !== _fetchGen) return;\n'
-        '    var loc = _tracksIndex[eid];\n'
-        '    if (!loc) { console.warn("no index entry for event_id", eid); return; }\n'
+        '    showTooltip(baseHtml + \'<div style="margin-top:6px;color:#aaa;font-style:italic">Loading track data\\u2026</div>\');\n'
+        '  }, 250);\n'
+        '  function clearSpinner() { clearTimeout(spinnerTimer); if (gen === _fetchGen && baseHtml) showTooltip(baseHtml); }\n'
+        '  loadTracksIndex().then(function(idx) {\n'
+        '    if (gen !== _fetchGen) { clearTimeout(spinnerTimer); return; }\n'
+        '    var loc = idx[eid];\n'
+        '    if (!loc) { clearSpinner(); console.warn("no index entry for event_id", eid); return; }\n'
         '    var blobUrl = "' + sidecar_rel + '/tracks.ndjson";\n'
         '    fetch(blobUrl, {headers: {"Range": "bytes=" + loc[0] + "-" + (loc[0]+loc[1]-1)}})\n'
         '      .then(function(r) { return r.text(); })\n'
         '      .then(function(text) {\n'
-        '        if (gen !== _fetchGen) return;\n'
+        '        if (gen !== _fetchGen) { clearTimeout(spinnerTimer); return; }\n'
+        '        clearSpinner();\n'
         '        var data = JSON.parse(text);\n'
         '        data.flight1 = props.flight1;\n'
         '        data.flight2 = props.flight2;\n'
         '        runAnimation(data);\n'
         '      })\n'
-        '      .catch(function(e) { console.warn("track fetch failed:", e); });\n'
-        '  }\n'
-        '  if (_tracksIndex) {\n'
-        '    _animate();\n'
-        '  } else {\n'
-        '    // The index is gzipped on R2 but Cloudflare CDN sometimes\n'
-        '    // forwards the body without Content-Encoding: gzip, so we\n'
-        '    // decompress in JS using DecompressionStream (Chrome 80+,\n'
-        '    // Firefox 113+, Safari 16.4+) for cross-CDN robustness.\n'
-        '    fetch("' + sidecar_rel + '/tracks.index.json.gz")\n'
-        '      .then(function(r) {\n'
-        '        // If the CDN already decompressed for us, the body is\n'
-        '        // plain JSON; otherwise it\\u2019s gzip bytes we have to\n'
-        '        // decompress ourselves. Detect via the gzip magic 1f 8b.\n'
-        '        return r.arrayBuffer().then(function(buf) {\n'
-        '          var bytes = new Uint8Array(buf);\n'
-        '          if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {\n'
-        '            var blob = new Blob([buf]);\n'
-        '            var ds = new DecompressionStream("gzip");\n'
-        '            return new Response(blob.stream().pipeThrough(ds)).json();\n'
-        '          }\n'
-        '          return new Response(buf).json();\n'
-        '        });\n'
-        '      })\n'
-        '      .then(function(idx) { _tracksIndex = idx; _animate(); })\n'
-        '      .catch(function(e) { console.warn("index fetch failed:", e); });\n'
-        '  }\n'
+        '      .catch(function(e) { clearSpinner(); console.warn("track fetch failed:", e); });\n'
+        '  }).catch(function() { clearSpinner(); });\n'
         '}\n'
         '\n'
         'document.addEventListener("keydown", function(e) {\n'
@@ -1149,6 +1402,10 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '  background: rgba(0,0,0,0.75); color: #fff; padding: 8px 12px;\n'
         '  border-radius: 6px; font-size: 12px; font-family: sans-serif;\n'
         '  z-index: 1000; max-width: 260px; }\n'
+        '@media (max-width: 480px) {\n'
+        '  #alt-band-info { top: auto; bottom: 10px; }\n'
+        '}\n'
+        + _AQ_POPUP_CSS +
         '</style>\n'
         '</head>\n'
         '<body>\n'
@@ -1162,15 +1419,15 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         html += (
             '<div id="alt-band-info">\n'
             + date_header_html +
-            '<b>Event Altitude Filter</b><br>\n'
+            '<b>LOS Altitude Filter (MSL)</b><br>\n'
             + alt_band_checkboxes +
             '<div style="margin-top:8px;border-top:1px solid #555;padding-top:6px">\n'
             '<label style="display:block;cursor:pointer">'
             '<input type="checkbox" id="show-low-cb"> Show low-quality events</label>\n'
             '</div>\n'
             '<div style="margin-top:8px;border-top:1px solid #555;padding-top:6px">\n'
-            '<label style="display:block;font-size:11px;margin-bottom:2px">Heatmap Opacity: <span id="heatmap-opacity-val">30</span>%</label>\n'
-            '<input type="range" id="heatmap-opacity-slider" min="0" max="75" value="30" style="width:100%">\n'
+            '<label style="display:block;font-size:11px;margin-bottom:2px">LOS Heatmap Opacity: <span id="heatmap-opacity-val">0</span>%</label>\n'
+            '<input type="range" id="heatmap-opacity-slider" min="0" max="75" value="0" style="width:100%">\n'
             '</div>\n'
             '</div>\n'
         )
@@ -1201,10 +1458,12 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '  zoom: ' + str(zoom) + ',\n'
         '  dragRotate: false,\n'
         '  pitchWithRotate: false,\n'
-        '  touchPitch: false\n'
+        '  touchPitch: false,\n'
+        '  attributionControl: false\n'
         '});\n'
         'map.touchZoomRotate.disableRotation();\n'
-        'map.addControl(new maplibregl.NavigationControl({visualizePitch: false}));\n'
+        'map.addControl(new maplibregl.NavigationControl({visualizePitch: false}), "bottom-left");\n'
+        'map.addControl(new maplibregl.AttributionControl({compact: true}));\n'
         '\n'
         '// Zoom-level readout (debug) — uncomment to enable\n'
         '// var zoomBox = document.createElement("div");\n'
@@ -1217,6 +1476,10 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         + animation_js +
         '\n'
         'map.on("load", function() {\n'
+        '  // Warm the tracks index in the background so the first event\n'
+        '  // click doesn\'t pay the cold-fetch cost.\n'
+        '  loadTracksIndex();\n'
+        '\n'
         '  // Load events from PMTiles file via range requests\n'
         '  map.addSource("events", {\n'
         '    type: "vector",\n'
@@ -1232,7 +1495,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    paint: {"heatmap-weight": 1,\n'
         '            "heatmap-intensity": 1,\n'
         '            "heatmap-radius": ["interpolate", ["exponential", 2], ["zoom"], 8, 20, 9, 40, 10, 80, 11, 160, 12, 320],\n'
-        '            "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0, 9, 0.3, 14, 0.3]}\n'
+        '            "heatmap-opacity": 0}\n'
         '  });\n'
         '\n'
         '  // Circle layer colored by quality\n'
@@ -1310,6 +1573,10 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    });\n'
         '  }\n'
         '\n'
+        + ('  // Airport-quality icons (per-airport ADS-B coverage score)\n'
+           + _airport_quality_js(None, sidecar_url=airport_quality_url)
+           if airport_quality_url else '') +
+        '\n'
         '  // Initial viewport: ?airport=ICAO wins (zooms in tight); otherwise\n'
         '  // fit the data bounds so the whole region is in view.\n'
         '  var _params = new URLSearchParams(window.location.search);\n'
@@ -1352,6 +1619,10 @@ def main():
                              "generated HTML (e.g. --asset-stem conus). Used when the "
                              "deployer publishes a stable-named alias separate from the "
                              "dated source files. Only takes effect with --pmtiles.")
+    parser.add_argument("--airport-quality", type=str, default=None,
+                        help="Path to airport_quality.json from v2_airport_quality. "
+                             "Self-contained mode inlines it; PMTiles mode copies it "
+                             "next to the HTML and fetches it at load.")
     args = parser.parse_args()
 
     if not os.path.exists(args.input):
@@ -1398,6 +1669,20 @@ def main():
     date_range = _parse_date_range_from_stem(stem)
     airports_lookup = build_us_airports_lookup()
 
+    # Load airport quality if provided. In self-contained mode we pass the
+    # dict for inlining; in PMTiles mode we copy the JSON next to the HTML
+    # and pass its relative URL so the page fetches it at load.
+    airport_quality = None
+    airport_quality_url = None
+    if args.airport_quality:
+        if not os.path.exists(args.airport_quality):
+            print(f"WARN: airport-quality file not found: {args.airport_quality}",
+                  file=sys.stderr)
+        else:
+            with open(args.airport_quality, "r", encoding="utf-8") as f:
+                airport_quality = json.load(f)
+            print(f"  Loaded {len(airport_quality)} airport quality entries.")
+
     if args.pmtiles:
         # PMTiles mode: generate .pmtiles + per-event sidecar JSONs + shell HTML
         pmtiles_path = generate_pmtiles(df, output_path)
@@ -1406,6 +1691,15 @@ def main():
         print(f"  Writing {len(df):,} event track sidecars to {sidecar_dir}/...", flush=True)
         write_event_sidecars(df, sidecar_dir)
 
+        # Copy airport-quality JSON next to the HTML so it's fetchable.
+        if airport_quality is not None:
+            stem_for_aq = args.asset_stem or Path(output_path).stem
+            aq_filename = f"{stem_for_aq}_quality.json"
+            aq_dest = Path(output_path).parent / aq_filename
+            with open(aq_dest, "w", encoding="utf-8") as f:
+                json.dump(airport_quality, f)
+            airport_quality_url = aq_filename
+
         html = generate_pmtiles_html(
             pmtiles_path, sidecar_dir,
             center_lat, center_lon, zoom,
@@ -1413,6 +1707,7 @@ def main():
             traffic_tile_dir=args.traffic_tiles,
             date_range=date_range,
             airports_lookup=airports_lookup,
+            airport_quality_url=airport_quality_url,
             asset_stem=args.asset_stem,
             bounds=bounds,
             auto_fit=auto_fit,
@@ -1432,6 +1727,7 @@ def main():
                              traffic_tile_dir=args.traffic_tiles,
                              date_range=date_range,
                              airports_lookup=airports_lookup,
+                             airport_quality=airport_quality,
                              bounds=bounds,
                              auto_fit=auto_fit)
 
