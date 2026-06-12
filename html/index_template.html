@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-TBDC7S1GCL"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-TBDC7S1GCL');
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ADS-B Loss of Separation Analysis</title>
@@ -115,7 +124,7 @@
   }
   /* Search box */
   .search-bar {
-    display: flex; align-items: center; gap: 12px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
     margin-bottom: 24px; padding: 12px 20px;
     background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
   }
@@ -183,6 +192,7 @@
 <nav class="navbar">
   <a class="navbar-brand" href="index.html">airbornehotspots.org</a>
   <a href="faq.html">FAQ</a>
+  <a href="casestudies.html">Case Studies</a>
   <a href="methodology.html">Methodology</a>
   <a href="contact.html">Get in Touch</a>
 </nav>
@@ -227,7 +237,7 @@ Use of this site is entirely at your own risk, and the authors make no warrantie
     <label for="airport-search">Go to Airport:</label>
     <input type="text" id="airport-search" maxlength="4"
            placeholder="e.g. WVI" autocomplete="off">
-    <button onclick="searchAirport()">Go</button>
+    <button onclick="searchAirport()">Go</button><span>or go <a href="v2/conus.html">direct to the world map</a>.</span>
   </div>
 <!--BEGIN:section_blocks-->
     <div class="section">
@@ -248,8 +258,8 @@ Use of this site is entirely at your own risk, and the authors make no warrantie
             </tr>
           </thead>
           <tbody>
-            <tr><td><a href="KWVI/KWVI_map.html" target="_blank">KWVI</a></td><td>Watsonville Muni</td><td>CA</td><td style="text-align:right;font-variant-numeric:tabular-nums">24</td><td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:0.85em;font-weight:600;color:#16a34a;background:#d1fae5">Good</span></td></tr>
-            <tr><td><a href="KPAO/KPAO_map.html" target="_blank">KPAO</a></td><td>Palo Alto</td><td>CA</td><td style="text-align:right;font-variant-numeric:tabular-nums">12</td><td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:0.85em;font-weight:600;color:#ca8a04;background:#fef9c3">Fair</span></td></tr>
+            <tr><td><a href="/v2/conus.html?airport=KWVI" target="_blank">KWVI</a></td><td>Watsonville Muni</td><td>CA</td><td style="text-align:right;font-variant-numeric:tabular-nums">24</td><td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:0.85em;font-weight:600;color:#16a34a;background:#d1fae5">Good</span></td></tr>
+            <tr><td><a href="/v2/conus.html?airport=KPAO" target="_blank">KPAO</a></td><td>Palo Alto</td><td>CA</td><td style="text-align:right;font-variant-numeric:tabular-nums">12</td><td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:0.85em;font-weight:600;color:#ca8a04;background:#fef9c3">Fair</span></td></tr>
             <tr class="no-data"><td>KSQL</td><td colspan="4" style="color:#9ca3af;font-style:italic">No data available</td></tr>
           </tbody>
         </table>
@@ -318,16 +328,9 @@ function searchAirport() {
   if (/^[A-Z]{3}$/.test(raw)) {
     icao = 'K' + raw;
   }
-  var url = icao + '/' + icao + '_map.html';
-  fetch(url, {method: 'HEAD'}).then(function(resp) {
-    if (resp.ok) {
-      maybeNavigate(url);
-    } else {
-      window.location.href = 'unavailable.html?id=' + encodeURIComponent(icao);
-    }
-  }).catch(function() {
-    window.location.href = 'unavailable.html?id=' + encodeURIComponent(icao);
-  });
+  // v2 single global map; airport deep-link via query param.
+  var url = '/v2/conus.html?airport=' + encodeURIComponent(icao);
+  maybeNavigate(url);
 }
 
 // Allow Enter key in search box
