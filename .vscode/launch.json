@@ -112,7 +112,7 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/analyzers/prox_analyze_from_files.py",
-        "args": "--yaml examples/88nv/prox_analyze_from_files.yaml tests/sample_readsb_data --resample",
+        "args": "--yaml examples/generated/KAUN/prox_analyze_from_files.yaml --resample --sorted-file data/KAUN/081525_KAUN.gz",
         "console": "integratedTerminal",
         "justMyCode": true
       },
@@ -122,7 +122,7 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/analyzers/prox_analyze_from_files.py",
-        "args": "--yaml examples/KWVI/prox_analyze_from_files.yaml --sorted-file examples/KWVI/1213.wvi5nm.gz --resample",
+        "args": "--yaml examples/KAUN/prox_analyze_from_files.yaml  --start-date 08/15/25 --end-date 08/15/25   --airports AUN --no-download",
         "console": "integratedTerminal",
         "justMyCode": true
       },
@@ -132,7 +132,7 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/tools/los_offline_pipeline.py",
-        "args": "1/17/26 KWVI",
+        "args": "1/25/26 KWVI",
         "console": "integratedTerminal",
         "justMyCode": true
       },

@@ -2,7 +2,7 @@
 private.yaml
 
 # Auto-generated airport configs
-examples/generated/
+examples/generated*
 src/tools/.cache/
 
 
@@ -39,9 +39,8 @@ var/
 # Data analysis output files
 *.log
 *.csv
-*.kml
+
 *.out
-*.html
 *.gz
 
 # Analysis-generated HTML and maps
@@ -62,6 +61,7 @@ acas/
 heatmap/
 /tiles*
 /data*
+/output/
 
 # notes
 COMMANDS
