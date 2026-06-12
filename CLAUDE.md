@@ -25,18 +25,22 @@ This file has a LOS event: tests/fixtures/KWVI/060825_KWVI_traffic.csv
 
 ## /examples/generated: partial pipeline results stored here
 
+# analysis pipleines
+
+## Analysis pipelines have two versions:
+### v1: per-airport analysis, data is in examples/generated and data/. code is mostly in src/tools
+
+### v2: one-global-map analysis, data is in data/v2.  code is mostly in src/hotspots 
+
+Architecture of v2 is described in src/hotspots/PIPELINE_PLAN.md
+***assume all requests are about v2 unless specified otherwise.***
+
+traffic tile generation for v2 is still done using the v1 era src/tools/traffic_tiles.py 
+
+
 # common command lines
 
-## LOS research entire pipeline run:
- python src/tools/batch_los_pipeline.py \
-        --start-date 08/01/25 --end-date 08/31/25 \
-        --airports ./examples/busiest_nontowered_and_local.txt --max-airports 10
-
-## individual airport/day LOS analysis (outputs CSV file of events)
-python3 src/analyzers/prox_analyze_from_files.py --yaml examples/generated/KWVI/prox_analyze_from_files.yaml --resample --sorted-file examples/generated/KWVI/080225_KWVI.gz --animate-los --animation-dir examples/generated/KWVI > examples/generated/KWVI/080225_KWVI.out 2>&1
-
-## run the LOS visualizer to use CSV LOS events to generate static HTML with a high-level map and individual html's of events:
-cat examples/generated/KWVI/KWVI_combined.csv.out | python3 src/postprocessing/visualizer.py --sw 36.76903279623333,-121.99851398823964 --ne 37.10236612956666,-121.58148784376036 --native-heatmap --heatmap-opacity 0.5 --heatmap-radius 50 --busyness-data examples/generated/KWVI/KWVI_busyness.json --data-quality examples/generated/KWVI/KWVI_quality.json --output examples/generated/KWVI/KWVI_map.html  --traffic-tiles tiles/traffic/ --no-browser
+see src/tools/COMMANDS
 
 # Project conventions
 
@@ -49,3 +53,9 @@ source .venv/bin/activate && <command>
 ## Code locations
 core code in src/adsb_actions including resampler
 analysis code in src/analyzers
+
+There are several large data directories linked from the project directory, so don't use find in the root.  all relevant code is in src/
+
+Note that the "data" directory in the project root is a network
+drive, if things appear to be missing it probably got unmounted
+and the user needs to correct.
