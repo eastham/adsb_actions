@@ -118,6 +118,7 @@ class Rules:
                             'one_in_aircraft_list', 'exclude_aircraft_substrs',
                             'min_alt', 'max_alt',
                             'transition_regions', 'changed_regions',
+                            'joined_region', 'departed_region',
                             'regions', 'latlongring',
                             'cooldown', 'rule_cooldown', 'has_attr', 'min_time',
                             'max_time', 'time_ranges', 'enabled', 'squawk',
@@ -228,11 +229,26 @@ class Rules:
                 return False
 
         if 'transition_regions' in conditions:
-            # moved from one region to another.  None is a valid region.
+            # moved from one region to another.  None is a valid region,
+            # representing being outside of any region in any kml file
             condition_value = conditions['transition_regions']
             result = (flight.was_in_bboxes([condition_value[0]]) and
                        flight.is_in_bboxes([condition_value[1]]))
             if not result:
+                return False
+
+        if 'joined_region' in conditions:
+            # entered this region; was not in it previously
+            region = conditions['joined_region']
+            if not (flight.is_in_bboxes([region]) and
+                    not flight.was_in_bboxes([region])):
+                return False
+
+        if 'departed_region' in conditions:
+            # left this region; was in it previously
+            region = conditions['departed_region']
+            if not (flight.was_in_bboxes([region]) and
+                    not flight.is_in_bboxes([region])):
                 return False
 
         if 'changed_regions' in conditions:

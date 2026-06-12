@@ -2,6 +2,7 @@
 Location last seen, tail number, etc."""
 
 import datetime
+import os
 import statistics
 import logging
 from dataclasses import dataclass, field
@@ -43,6 +44,7 @@ class Flight:
     flags: dict = field(default_factory=lambda: ({}))  # persistent notes taken about this flight
 
     # bbox lists are indexed by kml file, in the order they were specified.
+    # NB: flight can only be in one bbox per kml file.
     inside_bboxes: list = field(default_factory=list)  # list of bbox names we're in
     inside_bboxes_indices: list = field(default_factory=list) # list of bbox indices
     prev_inside_bboxes = None           # what bboxes were we inside at last position update
@@ -53,6 +55,10 @@ class Flight:
         bboxes_len = len(self.all_bboxes_list) if self.all_bboxes_list else 0
         self.inside_bboxes = [None] * bboxes_len
         self.inside_bboxes_indices = [None] * bboxes_len
+        self._kml_filename_to_slot = {
+            os.path.basename(b.filename): i
+            for i, b in enumerate(self.all_bboxes_list or [])
+        }
 
     def to_str(self):
         """String representation includes lat/long and bbox list."""
@@ -94,34 +100,42 @@ class Flight:
                 return True
         return False
 
-    def is_in_bboxes(self, bb_list: list):
-        """Is the flight in any of the bboxes specified in bb_list?
-        If no boxes are specified on bb_list (None, [None], []), the flight 
-        must have been in no boxes to match."""
+    def _kml_slot_for(self, filename: str) -> int:
+        """Return the inside_bboxes slot index for the given KML basename, or -1."""
+        return self._kml_filename_to_slot.get(filename, -1)
 
-        # special case: empty bb_list requires flight to be in no boxes
+    def _matches_bb_list(self, bb_list: list, inside: list) -> bool:
+        """Check if list `inside` matches a rule list `bb_list`.
+        In bb_list, None/[]/[None]/["~"] means not in any bbox.
+        "~filename" means not in any region of that specific KML file.
+        Named strings match any slot in inside."""
+        inside_not_in_any = all(b is None for b in inside)
+
         if bb_list is None or bb_list == []:
-            return not self.in_any_bbox()
+            return inside_not_in_any
 
-        for in_bb in self.inside_bboxes:
-            if in_bb in bb_list:
+        for entry in bb_list:
+            if entry is None or entry == "~":
+                if inside_not_in_any:
+                    return True
+            elif isinstance(entry, str) and entry.startswith("~"):
+                slot = self._kml_slot_for(entry[1:])
+                if slot == -1:
+                    raise ValueError(f"transition_regions: KML file not found: {entry[1:]!r}")
+                if inside[slot] is None:
+                    return True
+            elif entry.lower() in inside:
                 return True
         return False
+
+    def is_in_bboxes(self, bb_list: list):
+        return self._matches_bb_list(bb_list, self.inside_bboxes)
 
     def was_in_bboxes(self, bb_list: list):
-        """Was the flight in any of the bboxes specified in bb_list?
-        if no boxes are specified on bb_list (None, [None], []), the flight 
-        must have been in no boxes to match."""
         if not self.prev_inside_bboxes_valid:
-            return bb_list == [None]
-
-        if bb_list is None or bb_list == []:
-            return not self.was_in_any_bbox()
-
-        for prev_bb in self.prev_inside_bboxes:
-            if prev_bb in bb_list:
-                return True
-        return False
+            # no prior state: flight was in no regions, synthesize an all-None inside
+            return self._matches_bb_list(bb_list, [None] * len(self.inside_bboxes))
+        return self._matches_bb_list(bb_list, self.prev_inside_bboxes)
 
     def track_alt(self, alt: int) -> int:
         """Update a running tally and average of recent altitudes.
@@ -185,6 +199,7 @@ class Flight:
         if not bbox_list:
             return
 
+        # iterate over kml files
         for i, bbox in enumerate(bbox_list):
             self.inside_bboxes[i] = None
             self.inside_bboxes_indices[i] = None

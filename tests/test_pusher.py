@@ -44,7 +44,7 @@ def test_pusher():
     time.sleep(1) # delay for gc loop
     assert Stats.los_finalize == 1
 
-    # test non-local landing
+    logging.info("** test local landing (popup takeoff)")
     Stats.reset()
     adsb_actions.loop(JSON_STRING_PLANE2_NEAR)
     adsb_actions.loop(JSON_STRING_PLANE2_LAND)

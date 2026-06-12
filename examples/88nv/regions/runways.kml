@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>runways.kml</name>
+	<open>1</open>
+	<StyleMap id="msn_ylw-pushpin2610">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#sn_ylw-pushpin50</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#sh_ylw-pushpin211</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="sh_ylw-pushpin211">
+		<IconStyle>
+			<scale>1.3</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
+			</Icon>
+			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<LineStyle>
+			<color>ff000000</color>
+			<width>0</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>7d0880fd</color>
+		</PolyStyle>
+	</Style>
+	<Style id="sn_ylw-pushpin50">
+		<IconStyle>
+			<scale>1.1</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
+			</Icon>
+			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<LineStyle>
+			<color>ff000000</color>
+			<width>0</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>7d0880fd</color>
+		</PolyStyle>
+	</Style>
+	<Folder>
+		<name>runways</name>
+		<open>1</open>
+		<Placemark>
+			<name>23L ground: 0-4500 0-360</name>
+			<styleUrl>#msn_ylw-pushpin2610</styleUrl>
+			<Polygon>
+				<tessellate>1</tessellate>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+-119.204652446636,40.76203771425443,0 -119.204367553364,40.76124228574557,0 -119.184767553364,40.76826228574557,0 -119.185052446636,40.76905771425442,0 -119.204652446636,40.76203771425443,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark>
+			<name>23R ground: 0-4500 0-360</name>
+			<styleUrl>#msn_ylw-pushpin2610</styleUrl>
+			<Polygon>
+				<tessellate>1</tessellate>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+-119.2307423918753,40.75635772287405,0 -119.2304576081247,40.75556227712595,0 -119.2124976081247,40.76199227712596,0 -119.2127823918753,40.76278772287405,0 -119.2307423918753,40.75635772287405,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+	</Folder>
+</Document>
+</kml>

@@ -47,6 +47,7 @@ class Bboxes:
         RHV apporach: 500-1500 280-320
     """
     def __init__(self, fn):
+        self.filename = fn
         self.boxes: list[Bbox] = []
 
         try:
@@ -77,7 +78,7 @@ class Bboxes:
                 if not re_result:
                     raise ValueError("KML feature name parse error: " +
                         feature.name)
-                name = re_result.group(1)
+                name = re_result.group(1).lower()
                 minalt = int(re_result.group(2))
                 maxalt = int(re_result.group(3))
                 starthdg = int(re_result.group(4))

@@ -39,7 +39,7 @@ from .adsb_logger import Logger
 from adsb_actions.flights import MIN_PROX_FRESH
 
 logger = logging.getLogger(__name__)
-logger.level = logging.WARNING
+logger.level = logging.INFO
 LOGGER = Logger()
 
 def _log_loop_stats(last_read_time: float, flights: int,
@@ -59,7 +59,6 @@ def _log_loop_stats(last_read_time: float, flights: int,
     time_str = datetime.datetime.utcfromtimestamp(last_read_time).strftime('%m/%d %H:%MZ')
     logger.info("Main loop at: %s ts: %s flights=%d pts/s=%.0f",
                 time_str, int(last_read_time), flights, pts_per_sec)
-    logger.info(f"*** USING MIN_PROX_FRESH={MIN_PROX_FRESH} sec for proximity checks")
 
     if logger.isEnabledFor(logging.DEBUG):
         import gc
@@ -123,10 +122,14 @@ class AdsbActions:
         self.pedantic = pedantic
         self.enable_resample = resample
 
+        logger.info(
+            f"AdsbActions init. *** USING MIN_PROX_FRESH={MIN_PROX_FRESH} sec for proximity checks")
+
         # Initialize location history for resampling
         # Pass bboxes/latlongrings to resampler for spatial filtering (memory optimization)
         # only if explicitly requested via resample_bbox_filter
         if resample:
+            logger.info(f"Resampling enabled.")
             resampler_bboxes = self.flights.bboxes if resample_bbox_filter else None
             resampler_latlongrings = self._extract_latlongrings(yaml_data) if resample_bbox_filter else None
             min_alt, max_alt = self._extract_altitude_limits(yaml_data)
@@ -234,7 +237,8 @@ class AdsbActions:
             if delay:
                 time.sleep(delay)
 
-        logger.info("Exiting main loop, parsed %s points.", Stats.json_readlines)
+        logger.info("Exiting main loop, parsed %s points so far in this instance.",
+                    Stats.json_readlines)
         self.rules.print_final_report()
 
     def register_callback(self, name: str, fn: Callable) -> None:
@@ -379,7 +383,7 @@ class AdsbActions:
         Stats.json_readlines += 1
 
         if jsondict and 'alt_baro' in jsondict:
-            # We got some valid data, process it. (points with no altitude
+            # We got some valid data, process it and run rules. (points with no altitude
             # are ignored, they are likely to be dummy entries anyway)
             loc_update = Location.from_dict(jsondict)
 

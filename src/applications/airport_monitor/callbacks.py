@@ -38,11 +38,17 @@ def los_cb(flight1, flight2):
     logger.info("LOS detected! %s", flight1.flight_id)
     process_los_launch(flight1, flight2)
 
+def play_vehicle_on_runway_audio(flight):
+    logger.info("Vehicle on runway detected, playing audio... %s", flight.flight_id)
+    # do something
+
 def register_callbacks(adsb_actions):
     adsb_actions.register_callback("landing", landing_cb)
     adsb_actions.register_callback("takeoff", takeoff_cb)
     adsb_actions.register_callback("popup_takeoff", popup_takeoff_cb)
     adsb_actions.register_callback("los_update_cb", los_cb)
+    adsb_actions.register_callback("vehicle_on_runway_audio_cb",
+                                    play_vehicle_on_runway_audio)
 
 def enter_db_fake_mode():
     get_database().enter_fake_mode()

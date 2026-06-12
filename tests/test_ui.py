@@ -37,14 +37,17 @@ YAML_STRING = """
 aircraft_update_ctr = aircraft_remove_ctr = los_update_ctr = 0
 def aircraft_update_cb(flight):
     global aircraft_update_ctr
+    print(f"UI update callback fired for flight {flight.flight_id}")
     aircraft_update_ctr += 1
 
 def aircraft_remove_cb(flight):
     global aircraft_remove_ctr
+    print(f"UI remove callback fired for flight {flight.flight_id}")
     aircraft_remove_ctr += 1
 
 def los_update_cb(flight1, flight2):
     global los_update_ctr
+    print(f"LOS update callback fired for flights {flight1.flight_id} and {flight2.flight_id}")
     los_update_ctr += 1
 
 JSON_STRING_3000 = '{"now": 1661692178, "alt_baro": 3000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9"} \n'
