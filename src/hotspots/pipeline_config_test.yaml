@@ -1,0 +1,44 @@
+# TEST config — points data_root at .test_data/v2/ on LOCAL disk (a sandbox
+# seeded with copies of just the WVI cell) so verification runs never touch the
+# real data/v2/ outputs AND aren't subject to the network-mount drops that hit
+# data/ (which is a symlink to the network share).
+# Pass via: cli.py --config src/hotspots/pipeline_config_test.yaml ...
+
+paths:
+  data_root: .test_data/v2
+  conus_dir: data
+  traffic_tiles_local: ../../../tiles/traffic
+  traffic_tiles_url: https://airbornehotspots.org/tiles
+
+deploy:
+  remote: hotspots-initial:hotspots
+  maps_dir: .test_data/v2/maps
+
+runtime:
+  workers: 1
+  alt_ceiling_ft: 18000
+  remount_cmd: ""
+  retry_attempts: 2
+  retry_pause_s: 1
+
+dates:
+  default_start: "20250601"
+  default_end:   "20250602"
+
+regions:
+  wvi:   {lat_min: 36, lat_max: 37, lon_min: -122, lon_max: -121}
+  conus: {lat_min: 24, lat_max: 50, lon_min: -125, lon_max: -65}
+
+profiles:
+  visualize:
+    stages: [5]
+    pmtiles: false
+  aggregate-viz:
+    stages: [4, 5]
+    pmtiles: false
+  analyze:
+    stages: [3, 4, 5]
+    pmtiles: false
+  full:
+    stages: [2, 3, 4, 5]
+    pmtiles: false

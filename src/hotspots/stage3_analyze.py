@@ -36,10 +36,9 @@ for _p in [str(_ROOT / "src"), str(_ROOT)]:
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-V2_DATA_ROOT = Path("data/v2")
-GRID_DIR = V2_DATA_ROOT / "grid"
-EVENTS_DIR = V2_DATA_ROOT / "events"
-ANIMATIONS_DIR = V2_DATA_ROOT / "animations"
+# Output dirs — single source of truth in hotspots.config (honors
+# $ADSB_V2_DATA_ROOT so a test sandbox can redirect all reads/writes).
+from hotspots.config import GRID_DIR, EVENTS_DIR, ANIMATIONS_DIR
 
 
 def shard_stem(shard_path: Path) -> str:

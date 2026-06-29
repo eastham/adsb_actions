@@ -21,11 +21,15 @@ stable URL (e.g. /v2/conus.html). The source map must have been generated
 with `stage5_visualize.py --asset-stem <name>` so its inlined .pmtiles /
 _tracks references already point at the stable filenames.
 
+Use --traffic-tiles-dir to also push a traffic tile tree (e.g. tiles/traffic/)
+to {remote}/tiles/traffic/.
+
 Examples:
     python src/tools/deploy_v2
     python src/tools/deploy_v2 --remote hotspots-initial:hotspots --dry-run
     python src/tools/deploy_v2 --publish-as conus \\
         --source-stem 24_50_-125_-65_20250601_20250831
+    python src/tools/deploy_v2 --traffic-tiles-dir tiles/traffic
 """
 
 import argparse
@@ -44,6 +48,9 @@ INCLUDE_PATTERNS = [
     "*.pmtiles",
     "*_tracks/tracks.ndjson",
     "*_tracks/tracks.index.json.gz",
+    # Airport-quality sidecar JSONs written by stage5_visualize.py in
+    # PMTiles mode (one per HTML, named <stem>_quality.json).
+    "*_quality.json",
 ]
 
 
@@ -84,6 +91,9 @@ def main():
     parser.add_argument("--source-stem", metavar="STEM", default=None,
                         help="Filename stem (no extension) of the dated map to "
                              "promote, e.g. 24_50_-125_-65_20250601_20250831")
+    parser.add_argument("--traffic-tiles-dir", metavar="DIR", default=None,
+                        help="Also push this local directory to {remote}/tiles/traffic/ "
+                             "(e.g. tiles/traffic)")
     args = parser.parse_args()
 
     if not os.path.isdir(args.maps_dir):
@@ -92,6 +102,10 @@ def main():
 
     if args.publish_as and not args.source_stem:
         print("ERROR: --publish-as requires --source-stem", file=sys.stderr)
+        sys.exit(1)
+
+    if args.traffic_tiles_dir and not os.path.isdir(args.traffic_tiles_dir):
+        print(f"ERROR: traffic tiles directory not found: {args.traffic_tiles_dir}", file=sys.stderr)
         sys.exit(1)
 
     if args.publish_as:
@@ -114,6 +128,16 @@ def main():
         "--metadata-set", CACHE_CONTROL,
         *_include_args(INCLUDE_PATTERNS),
     ], args.dry_run)
+
+    # 1b. Optionally push traffic tiles.
+    if args.traffic_tiles_dir:
+        tiles_dst = f"{args.remote}/tiles/traffic"
+        print(f"\nDeploying {args.traffic_tiles_dir}/ → {tiles_dst}/", file=sys.stderr)
+        _run([
+            "rclone", "copy", args.traffic_tiles_dir, tiles_dst,
+            "--progress",
+            "--metadata-set", CACHE_CONTROL,
+        ], args.dry_run)
 
     # 2. Optionally promote a dated map to a stable name.
     if args.publish_as:
@@ -144,6 +168,18 @@ def main():
             "--include", "tracks.ndjson",
             "--include", "tracks.index.json.gz",
         ], args.dry_run)
+
+        # Airport-quality sidecar (optional — only present if stage5 was run
+        # with --airport-quality). Promote to <name>_quality.json so the
+        # stable HTML can fetch it.
+        src_quality = os.path.join(args.maps_dir, f"{stem}_quality.json")
+        if os.path.exists(src_quality):
+            _run([
+                "rclone", "copyto",
+                src_quality,
+                f"{dst}/{name}_quality.json",
+                "--metadata-set", CACHE_CONTROL,
+            ], args.dry_run)
 
     print("Done.", file=sys.stderr)
 

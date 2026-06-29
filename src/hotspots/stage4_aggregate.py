@@ -37,19 +37,18 @@ for _p in [str(_ROOT / "src"), str(_ROOT)]:
 
 import pandas as pd
 
-V2_DATA_ROOT = Path("data/v2")
-EVENTS_DIR = V2_DATA_ROOT / "events"
-REGIONAL_DIR = V2_DATA_ROOT / "regional"
+# Output dirs + named regions — single source of truth in hotspots.config
+# (paths honor $ADSB_V2_DATA_ROOT; REGIONS comes from pipeline_config.yaml so it
+# can't drift from the CLI's region table).
+from hotspots.config import EVENTS_DIR, REGIONAL_DIR, load_config
 
-# Named regions: map to lat/lon bounding boxes
-REGIONS = {
-    "CA":  {"lat_min": 32, "lat_max": 42, "lon_min": -124, "lon_max": -114},
-    "NV":  {"lat_min": 35, "lat_max": 42, "lon_min": -120, "lon_max": -114},
-    "OR":  {"lat_min": 42, "lat_max": 47, "lon_min": -124, "lon_max": -116},
-    "WA":  {"lat_min": 45, "lat_max": 49, "lon_min": -125, "lon_max": -117},
-    "AZ":  {"lat_min": 31, "lat_max": 37, "lon_min": -115, "lon_max": -109},
-    "CONUS": {"lat_min": 24, "lat_max": 50, "lon_min": -125, "lon_max": -65},
-}
+# Loaded at import time. If the config is missing/broken we fall back to an empty
+# region table rather than crashing the import (this module's bounding-box CLI
+# path still works; only named --region lookups would be unavailable).
+try:
+    REGIONS = load_config().regions_dict()
+except Exception:  # pylint: disable=broad-except
+    REGIONS = {}
 
 
 def parquet_stem_to_date_cell(stem: str):

@@ -1,0 +1,68 @@
+# v2 LOS Pipeline configuration — single source of truth for the run/status CLI.
+#
+# This file is read by src/hotspots/config.py and drives src/hotspots/cli.py.
+
+
+paths:
+  data_root: data/v2          # all v2 outputs live under here (grid/, events/,
+                              # regional/, maps/). config.py derives the stage
+                              # path constants from this; override per-run with
+                              # --config (or $ADSB_V2_DATA_ROOT) to redirect.
+  conus_dir: data             # source CONUS_*.gz files (network mount)
+  traffic_tiles_local: ../../../tiles/traffic
+  traffic_tiles_url: https://airbornehotspots.org/tiles
+
+# Where `deploy_v2` pushes rendered maps. NOTE: deploy_v2 is still standalone
+# (it does not read this file yet — see its own --remote/--maps-dir defaults).
+# These keys are here so it can be wired up later; changing them has no effect
+# today. maps_dir intentionally mirrors data_root/maps (the stage-5 output dir).
+deploy:
+  remote: hotspots-initial:hotspots         # UNUSED. rclone remote:bucket
+  maps_dir: data/v2/maps                    # UNUSED.
+
+runtime:
+  workers: 8
+  alt_ceiling_ft: 18000       # Class A floor; included in the provenance config hash
+  # Command run to recover the network mount before retrying a failed day.
+  # PLACEHOLDER — fill in your remount line (e.g. the mount_smbfs command from
+  # src/tools/COMMANDS). Empty string = no remount attempted, just pause + retry.
+  remount_cmd: "mount_smbfs //pi@raspi5/data ~/raspi5-data"
+  retry_attempts: 3           # per-day attempts before the orchestrator stops
+  retry_pause_s: 30           # seconds to wait after a remount before retrying
+
+# Default date window. --start-date / --end-date on the CLI override per run.
+dates:
+  default_start: "20250601"
+  default_end:   "20250831"
+
+# Geography: named bounding boxes. Integer degrees, inclusive min / exclusive max
+# (matches the existing cell-membership convention: lat_min <= lat < lat_max).
+# regions and profiles are independent — combine them: run <profile> --region <name>.
+regions:
+  wvi:    {lat_min: 36, lat_max: 37, lon_min: -122, lon_max: -121}  # cheap test shard
+  conus:  {lat_min: 24, lat_max: 50, lon_min: -125, lon_max: -65}
+  # Legacy state presets, carried over so stage4_aggregate's --region keeps working:
+  CA:     {lat_min: 32, lat_max: 42, lon_min: -124, lon_max: -114}
+  NV:     {lat_min: 35, lat_max: 42, lon_min: -120, lon_max: -114}
+  OR:     {lat_min: 42, lat_max: 47, lon_min: -124, lon_max: -116}
+  WA:     {lat_min: 45, lat_max: 49, lon_min: -125, lon_max: -117}
+  AZ:     {lat_min: 31, lat_max: 37, lon_min: -115, lon_max: -109}
+  CONUS:  {lat_min: 24, lat_max: 50, lon_min: -125, lon_max: -65}
+  # europe: {lat_min: 35, lat_max: 60, lon_min: -10, lon_max: 30}   # future
+
+# Workflow profiles: the name says WHICH stages run; the comment says intent/cost.
+# Invoke as: cli.py run <profile> --region <name>
+# (Or skip profiles entirely: cli.py run --from N [--to M] --region <name>.)
+profiles:
+  visualize:      # stage 5 only — re-render map from existing regional parquet (MOST COMMON)
+    stages: [5]
+    pmtiles: true
+  aggregate-viz:  # stages 4-5 — re-aggregate per-cell events, then render
+    stages: [4, 5]
+    pmtiles: true
+  analyze:        # stages 3-5 — re-run LOS detection (rare; hours)
+    stages: [3, 4, 5]
+    pmtiles: true
+  full:           # stages 2-5 — shard from CONUS gz up (rare; weeks)
+    stages: [2, 3, 4, 5]
+    pmtiles: true

@@ -40,8 +40,9 @@ for _p in [str(_ROOT / "src"), str(_ROOT)]:
 
 import pandas as pd
 
-V2_DATA_ROOT = Path("data/v2")
-MAPS_DIR = V2_DATA_ROOT / "maps"
+# Output dir — single source of truth in hotspots.config (honors
+# $ADSB_V2_DATA_ROOT so a test sandbox can redirect all writes).
+from hotspots.config import MAPS_DIR
 
 # Quality -> CSS color
 QUALITY_COLORS = {

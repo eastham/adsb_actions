@@ -17,10 +17,18 @@ import argparse
 import gzip
 import json
 import math
+import sys
 import collections
 from pathlib import Path
 
-V2_GRID = Path("data/v2/grid")
+# Allow running from project root (so `from hotspots.config import ...` resolves).
+_ROOT = Path(__file__).resolve().parents[2]
+for _p in [str(_ROOT / "src"), str(_ROOT)]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+# Grid dir — single source of truth in hotspots.config (honors $ADSB_V2_DATA_ROOT).
+from hotspots.config import GRID_DIR as V2_GRID
 
 # Thin to one point per this many seconds per aircraft
 THIN_SECONDS = 10

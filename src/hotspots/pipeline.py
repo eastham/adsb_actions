@@ -146,6 +146,11 @@ def run_stages_23(
     """
     Run Stage 2 (shard) + Stage 3 (analyze) for one date.
 
+    Stages 2 and 3 are coupled per-date: Stage 2 produces per-cell shard files
+    that Stage 3 immediately consumes, so callers can iterate dates in a simple
+    loop without collecting intermediate state. Use skip_shard=True to skip
+    Stage 2 when shards are already on disk.
+
     Returns stats dict: {date_tag, shard_s, shard_kb, analyze_s, events, errors}
     """
     conus_gz = _conus_path(date, conus_dir)

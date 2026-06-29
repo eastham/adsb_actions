@@ -29,6 +29,12 @@ import sys
 import time
 from pathlib import Path
 
+# Allow running from project root (so `from hotspots.config import ...` resolves).
+_ROOT = Path(__file__).resolve().parents[2]
+for _p in [str(_ROOT / "src"), str(_ROOT)]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 # macOS caps open file descriptors at 256 by default even when ulimit shows
 # unlimited. Raise to the hard limit so we can hold 1500+ shard handles open.
 def _raise_fd_limit():
@@ -47,9 +53,9 @@ except ImportError:
     def _json_loads(s):
         return json.loads(s)
 
-# v2 data root — all outputs go here, never to data/ directly
-V2_DATA_ROOT = Path("data/v2")
-GRID_DIR = V2_DATA_ROOT / "grid"
+# v2 data root + output dirs — single source of truth in hotspots.config
+# (honors $ADSB_V2_DATA_ROOT so a test sandbox can redirect all writes).
+from hotspots.config import GRID_DIR
 
 # Altitude ceiling for sharding (Class A floor)
 ALT_CEILING_FT = 18_000
