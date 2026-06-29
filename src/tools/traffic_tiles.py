@@ -193,6 +193,13 @@ def lookup_airport_by_icao(icao):
 def precompute_tile_elevations(zoom, airports, bounds=None):
     """Precompute nearest-airport elevation for tiles within bounds at given zoom.
 
+    Each tile is assigned the field elevation of its single nearest airport
+    (Voronoi-style partition — no blending). The resulting elevation map looks
+    like a stepped terrain: flat plateaus centered on each airport, with abrupt
+    jumps at the midpoint between neighboring airports. Mountain airports (e.g.
+    DEN at ~5400 ft) produce a high-elevation island surrounded by lower-elevation
+    tiles belonging to nearer plains airports.
+
     Args:
         bounds: (min_lat, max_lat, min_lon, max_lon); defaults to CONUS.
     Returns dict mapping (tx, ty) -> field_elev_ft.
@@ -891,6 +898,60 @@ def generate_tiles(output_dir, global_files, zoom=DEFAULT_ZOOM,
           f"{total_filtered:,} altitude-filtered, {total_renders} renders")
 
 
+def _tile_tuning() -> dict:
+    """The heatmap tuning constants that get hand-tweaked between tile builds —
+    captured in provenance so a build is reproducible even when these were
+    changed without a commit (which then shows up as git_dirty)."""
+    return {
+        "low_zoom_gamma": LOW_ZOOM_GAMMA,
+        "low_zoom_noise_floor": LOW_ZOOM_NOISE_FLOOR,
+        "density_for_full_brightness": DENSITY_FOR_FULL_BRIGHTNESS,
+        "color_vibrancy": COLOR_VIBRANCY,
+        "track_width": TRACK_WIDTH,
+        "num_bands": NUM_BANDS,
+        "max_gap_seconds": MAX_GAP_SECONDS,
+    }
+
+
+def write_tile_provenance(output_dir, args, mode: str) -> None:
+    """Record git SHA/dirty + the heatmap tuning + key build args into
+    <output_dir>/_provenance.json, so 'which version/settings made these tiles?'
+    is answerable later. Best-effort: never let a provenance failure fail a build.
+    """
+    try:
+        from datetime import datetime, timezone
+        # hotspots lives under src/; add it to the path defensively.
+        _src = Path(__file__).resolve().parents[1]
+        if str(_src) not in sys.path:
+            sys.path.insert(0, str(_src))
+        from hotspots import provenance as prov
+
+        record = {
+            "tool": "traffic_tiles",
+            "mode": mode,  # "generate" or "downsample-only"
+            "git_sha": prov.git_sha(),
+            "git_dirty": prov.git_dirty(),
+            "built_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "tuning": _tile_tuning(),
+            "args": {
+                "start_date": getattr(args, "start_date", None) and str(args.start_date),
+                "end_date": getattr(args, "end_date", None) and str(args.end_date),
+                "zoom": args.zoom,
+                "day_filter": getattr(args, "day_filter", None),
+                "airport": getattr(args, "airport", None),
+                "max_alt_agl": getattr(args, "max_alt_agl", None),
+                "flat_color": getattr(args, "flat_color", None),
+                "output_dir": args.output_dir,
+            },
+        }
+        prov.write_provenance(output_dir, record)
+        dirty = " (DIRTY)" if record["git_dirty"] else ""
+        print(f"Wrote provenance: {Path(output_dir) / '_provenance.json'}  "
+              f"[{record['git_sha']}{dirty}]")
+    except Exception as e:  # pragma: no cover - never block a tile build
+        print(f"Warning: could not write tile provenance: {e}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Generate traffic track tiles from global ADS-B data")
@@ -933,6 +994,7 @@ if __name__ == "__main__":
     if args.downsample_only:
         logging.basicConfig(level=logging.INFO)
         downsample_to_low_zooms(args.output_dir, args.zoom)
+        write_tile_provenance(args.output_dir, args, mode="downsample-only")
         sys.exit(0)
 
     if not args.start_date or not args.end_date:
@@ -980,3 +1042,4 @@ if __name__ == "__main__":
                    skip_geo_filter=skip_geo_filter,
                    alpha_per_track=args.alpha_per_track,
                    fresh=args.fresh)
+    write_tile_provenance(args.output_dir, args, mode="generate")

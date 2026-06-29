@@ -61,6 +61,22 @@ heatmap/
 /tiles*
 /data*
 /output/
+local/
+
+# local test sandbox for the v2 CLI (copies of cell data; never commit)
+.test_data/
+
+# v2 pipeline test fixtures are real ADS-B shards (.gz) — keep them despite the
+# global *.gz ignore above, so the end-to-end pipeline tests can run from a clone.
+!tests/fixtures/v2_pipeline/
+!tests/fixtures/v2_pipeline/**
 
 # notes
 COMMANDS
+
+# Cloudflare worker local dev cache
+cloudflare-worker/.wrangler/
+
+# text files (tracked examples/*.txt files are exempt by virtue of already being in the index)
+*.txt
+!airport_lists/*.txt
