@@ -1,5 +1,3 @@
-
-# 160 Busiest Untowered Airports in the US
 DWA
 DVO
 LSN
@@ -160,37 +158,3 @@ RZT
 HII
 5R4
 AKR
-
-
-# SF Bay Area Untowered Airports
-WVI
-CVH
-C83
-HAF
-TCY
-O27
-VCB
-EDU
-E16
-
-
-# Busiest GA Airports with towers (note: LOS events in a controlled environment may not be unsafe)
-#MYF 5
-#LGB
-#DVT
-#FFZ 8 
-#HWO
-#TMB
-#VNY
-#APA
-
-# Airports with a history of LOS concerns (some towered)
-#DCA
-#GIF
-#VGT 6
-#WVI
-#SAN
-#BUR
-#PDK
-#RHV
-

@@ -1,0 +1,37 @@
+# manual requests as of 2/23/25
+KFRG
+KTRK
+KJPX
+KHTO
+KPRB
+KSQL 7
+KEFT
+KPAE
+KRNT 7
+KOFF
+C29
+
+# next batch
+KEDC
+KT74
+KBMQ
+KTPL
+KPAO 
+KDKB
+KLVK
+W28
+
+JAQ
+AVX
+SBP
+L52
+BFI
+FIT
+SMO 7
+HWY
+HWD 8
+TVL
+FHR
+W55
+CON
+
