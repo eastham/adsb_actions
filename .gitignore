@@ -75,7 +75,7 @@ local/
 COMMANDS
 
 # Cloudflare worker local dev cache
-cloudflare-worker/.wrangler/
+examples/airbornehotspots/cloudflare-worker/.wrangler/
 
 # text files (tracked examples/*.txt files are exempt by virtue of already being in the index)
 *.txt

@@ -15,8 +15,7 @@ from pathlib import Path
 import generate_airport_config
 from batch_helpers import faa_to_icao, CSV_EVENT_MARKER
 
-# html/ directory at project root (two levels up from src/tools/)
-_HTML_DIR = Path(__file__).resolve().parent.parent.parent / "html"
+_HTML_DIR = Path(__file__).resolve().parent.parent.parent / "examples" / "airbornehotspots" / "html"
 
 
 def _render_template(template_name, replacements):

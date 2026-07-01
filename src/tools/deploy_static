@@ -16,7 +16,7 @@ import subprocess
 import argparse
 
 DEFAULT_REMOTE = "hotspots-initial:hotspots"
-HTML_DIR = "html"
+HTML_DIR = "examples/airbornehotspots/html"
 GENERATED_DIR = "examples/generated"
 
 # Files in HTML_DIR to skip (templates not meant for direct deployment)
