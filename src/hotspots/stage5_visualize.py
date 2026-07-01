@@ -1725,10 +1725,17 @@ def main():
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(html)
 
-        print(f"\nDone (PMTiles mode). Output: {output_path}")
-        print(f"  NOTE: Requires HTTP serving from project root — open via:")
-        print(f"    python src/hotspots/serve.py . 8080")
-        print(f"    Then: http://localhost:8080/{output_path}")
+        sep = "─" * 60
+        size_mb = os.path.getsize(output_path) / 1024 / 1024
+        pmtiles_path_rel = Path(output_path).with_suffix(".pmtiles")
+        sidecar_dir_rel = output_path.replace(".html", "_tracks")
+        print(f"\n{sep}")
+        print(f"  Map (PMTiles):  {output_path}  ({size_mb:.1f} MB)")
+        print(f"  PMTiles file:   {pmtiles_path_rel}")
+        print(f"  Track sidecars: {sidecar_dir_rel}/")
+        print(f"  Serve: python src/hotspots/serve.py . 8080")
+        print(f"  Open:  http://localhost:8080/{output_path}")
+        print(sep)
     else:
         # Self-contained mode: all data embedded in HTML (practical up to ~500 events)
         html = generate_html(df, center_lat, center_lon, zoom,
@@ -1744,9 +1751,12 @@ def main():
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(html)
 
+        sep = "─" * 60
         size_mb = os.path.getsize(output_path) / 1024 / 1024
-        print(f"\nDone. Output: {output_path} ({size_mb:.1f} MB)")
-        print(f"  Open in browser: file://{os.path.abspath(output_path)}")
+        print(f"\n{sep}")
+        print(f"  Map (self-contained): {output_path}  ({size_mb:.1f} MB)")
+        print(f"  Open: file://{os.path.abspath(output_path)}")
+        print(sep)
 
 
 if __name__ == "__main__":

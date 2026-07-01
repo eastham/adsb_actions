@@ -225,6 +225,8 @@ def run_stage5(
     asset_stem: str | None = None,
     airport_quality: dict | None = None,
     html_only: bool = False,
+    foreflight_output: str | None = None,
+    print_summary: bool = True,
 ) -> None:
     """Generate map HTML (self-contained or PMTiles) from a DataFrame of events.
     `zoom=None` means auto-fit to data bounds on load (whole region visible);
@@ -233,6 +235,10 @@ def run_stage5(
     `html_only=True` (PMTiles mode only) skips tippecanoe and sidecar
     regeneration, reusing the existing `.pmtiles` and `_tracks/` next to
     `output_path`. Useful when only the embedded JS/CSS/HTML changed.
+
+    `foreflight_output`: path for the ForeFlight Content Pack .zip. Always
+    generated when provided. If `traffic_tile_dir` is a local path (not a URL),
+    traffic tiles are packed too.
     """
     MAPS_DIR.mkdir(parents=True, exist_ok=True)
     if df.empty:
@@ -305,12 +311,48 @@ def run_stage5(
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
     size_mb = os.path.getsize(output_path) / 1024 / 1024
-    print(f"  Map: {output_path}  ({size_mb:.1f} MB)")
+
+    # --- ForeFlight Content Pack ---
+    if foreflight_output:
+        try:
+            from tools.export_foreflight import export_pack
+            local_tiles = Path(traffic_tile_dir) if (
+                traffic_tile_dir and not traffic_tile_dir.startswith("http")
+            ) else None
+            export_pack(
+                output_zip=Path(foreflight_output),
+                traffic_tile_dir=local_tiles,
+                events_df=df,
+            )
+        except Exception as e:
+            print(f"  [WARN] ForeFlight export failed: {e}")
+
+    if not print_summary:
+        return
+
+    # --- Output summary ---
+    sep = "─" * 60
+    print(f"\n{sep}")
     if pmtiles:
+        print(f"  Map (PMTiles):  {output_path}  ({size_mb:.1f} MB)")
+        print(f"  PMTiles file:   {Path(output_path).with_suffix('.pmtiles')}")
+        print(f"  Track sidecars: {output_path.replace('.html', '_tracks')}/")
         print(f"  Serve: python src/hotspots/serve.py . 8080")
         print(f"  Open:  http://localhost:8080/{output_path}")
     else:
-        print(f"  Open:  file://{os.path.abspath(output_path)}")
+        print(f"  Map (self-contained): {output_path}  ({size_mb:.1f} MB)")
+        print(f"  Open: file://{os.path.abspath(output_path)}")
+    if foreflight_output and Path(foreflight_output).exists():
+        ff_size_mb = Path(foreflight_output).stat().st_size / 1e6
+        print(f"  ForeFlight pack: {foreflight_output}  ({ff_size_mb:.1f} MB)")
+        preview_cmd = f"python src/tools/preview_mbtiles.py --zip '{foreflight_output}'"
+        local_tiles = (traffic_tile_dir
+                       if traffic_tile_dir and not traffic_tile_dir.startswith("http")
+                       else None)
+        if local_tiles:
+            preview_cmd += f" --traffic-tiles '{local_tiles}'"
+        print(f"  Preview: {preview_cmd}")
+    print(sep)
 
 
 # ---------------------------------------------------------------------------
@@ -485,8 +527,10 @@ def main():
 
     n_cells = (lat_max - lat_min) * (lon_max - lon_min)
     n_days  = (end_date - start_date).days + 1
-    regional_parquet = str(REGIONAL_DIR / f"{region_label}_{args.start_date}_{args.end_date}.parquet")
-    output_html      = str(MAPS_DIR     / f"{region_label}_{args.start_date}_{args.end_date}.html")
+    regional_parquet  = str(REGIONAL_DIR / f"{region_label}_{args.start_date}_{args.end_date}.parquet")
+    output_html       = str(MAPS_DIR     / f"{region_label}_{args.start_date}_{args.end_date}.html")
+    foreflight_output = str(_ROOT / "data" / "v2" / "foreflight" /
+                            f"{region_label}_{args.start_date}_{args.end_date}.zip")
 
     print(f"v2 LOS Pipeline")
     print(f"  Dates:   {args.start_date} – {args.end_date}  ({n_days} day(s))")
@@ -629,7 +673,8 @@ def main():
                    traffic_tile_dir=args.traffic_tiles,
                    asset_stem=args.asset_stem,
                    airport_quality=airport_quality,
-                   html_only=args.html_only)
+                   html_only=args.html_only,
+                   foreflight_output=foreflight_output)
         print(f"  Stage 5 done in {time.time()-t5:.0f}s")
 
     # Summary

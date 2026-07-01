@@ -232,13 +232,31 @@ def cmd_run(config, args) -> None:
               f" — loaded {len(df):,} events from {regional.name}")
 
     # Stage 5: visualize.
+    ff_out = str(config.data_root / "foreflight" /
+                 f"{region_label}_{start_tag}_{end_tag}.zip")
     if 5 in stages:
         print(_stage(f"\nStage 5: map "
                      f"({'PMTiles' if pmtiles else 'self-contained HTML'})"))
         runners.run_stage5(df, str(out_html), pmtiles=pmtiles, zoom=args.zoom,
-                           traffic_tile_dir=traffic, html_only=args.html_only)
+                           traffic_tile_dir=traffic, html_only=args.html_only,
+                           foreflight_output=ff_out, print_summary=False)
         print(_ok(f"map written: {out_html.name}"))
 
+    # Always print actionable next-step commands.
+    local_tiles = traffic if (traffic and not traffic.startswith("http")) else None
+    print()
+    if pmtiles:
+        print(f"  Serve: python src/hotspots/serve.py . 8080")
+        print(f"  Open:  http://localhost:8080/{out_html}")
+    else:
+        print(f"  Open:  file://{out_html.resolve()}")
+    if Path(ff_out).exists():
+        preview_cmd = f"python src/tools/preview_mbtiles.py --zip '{ff_out}'"
+        if local_tiles:
+            preview_cmd += f" --traffic-tiles '{local_tiles}'"
+        print(f"  ForeFlight: {ff_out}")
+        print(f"  Preview:    {preview_cmd}")
+    print()
     print(_ok("Done."))
 
 
