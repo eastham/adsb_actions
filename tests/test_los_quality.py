@@ -25,13 +25,25 @@ def _make_los(create_time, last_time, min_latdist=0.5, min_altdist=500,
     los.min_latdist = min_latdist
     los.min_altdist = min_altdist
     los.cpa_time = cpa_time if cpa_time is not None else create_time
-    los.event_locations = event_locations if event_locations is not None else {}
+    loc_history = event_locations if event_locations is not None else {}
+    los.location_history = loc_history
+    # first_loc_1/2 are needed by heuristic A's meanloc call when loc_history is non-empty
+    if loc_history:
+        # Both first_locs at locs1's position so meanloc(cpa) = (37.0, -122.0),
+        # keeping locs1 within the 0.5nm spatial window for heuristic A.
+        los.first_loc_1 = Location(lat=37.0, lon=-122.0, alt_baro=2000)
+        los.first_loc_2 = Location(lat=37.0, lon=-122.0, alt_baro=2000)
     return los
 
 
-def _make_locations(flight_id, start, end, interval=1):
-    """Create a list of real Location objects at regular intervals."""
-    return [Location(lat=37.0, lon=-122.0, alt_baro=2000,
+def _make_locations(flight_id, start, end, interval=1, lat_offset=0.0):
+    """Create a list of real Location objects at regular intervals.
+
+    lat_offset: nudge latitude so two flights can be placed > 1nm apart to avoid
+    triggering the formation-flight heuristic (1nm ≈ 0.017 deg; use 0.04+ to exceed
+    the FORMATION_MAX_INITIAL_SEPARATION_NM = 1.0nm threshold).
+    """
+    return [Location(lat=37.0 + lat_offset, lon=-122.0, alt_baro=2000,
                      now=start + i * interval, flight=flight_id)
             for i in range(int((end - start) / interval) + 1)]
 
@@ -40,8 +52,8 @@ class TestEventQuality:
     """Test the event quality calculation logic."""
 
     def test_low_quality_long_duration(self):
-        """Event duration > 120 seconds should be low quality."""
-        los = _make_los(100.0, 250.0)  # 150 second duration (> 120)
+        """Event duration > 60 seconds (without real location data to rule out formation) is low quality."""
+        los = _make_los(100.0, 250.0)  # 150 second duration (> 60)
 
         flight1 = _make_flight('N123AB', 50.0, 300.0)
         flight2 = _make_flight('N456CD', 50.0, 300.0)
@@ -62,8 +74,8 @@ class TestEventQuality:
         assert 'short track' in explanation.lower() or 'insufficient data' in explanation.lower()
 
     def test_medium_quality_moderate_duration(self):
-        """Event duration 60-120 seconds should be medium quality."""
-        los = _make_los(100.0, 190.0)  # 90 second duration
+        """Event duration 30-60 seconds should be medium quality."""
+        los = _make_los(100.0, 150.0)  # 50 second duration
 
         flight1 = _make_flight('N123AB', 50.0, 300.0)
         flight2 = _make_flight('N456CD', 50.0, 300.0)
@@ -73,25 +85,25 @@ class TestEventQuality:
         assert 'moderate duration' in explanation.lower()
 
     def test_medium_quality_helicopter(self):
-        """Helicopter involvement (category A7) should be medium quality."""
+        """Helicopter involvement (category A7) should be low quality."""
         los = _make_los(100.0, 130.0)  # 30 second duration
 
         flight1 = _make_flight('N123AB', 50.0, 300.0, category='A7')
         flight2 = _make_flight('N456CD', 50.0, 300.0)
 
         quality, explanation = calculate_event_quality(los, flight1, flight2)
-        assert quality == 'medium'
+        assert quality == 'low'
         assert 'helicopter' in explanation.lower()
 
     def test_medium_quality_helicopter_flight2(self):
-        """Helicopter as flight2 should also be medium quality."""
+        """Helicopter as flight2 should also be low quality."""
         los = _make_los(100.0, 130.0)
 
         flight1 = _make_flight('N123AB', 50.0, 300.0)
         flight2 = _make_flight('N456CD', 50.0, 300.0, category='A7')
 
         quality, explanation = calculate_event_quality(los, flight1, flight2)
-        assert quality == 'medium'
+        assert quality == 'low'
         assert 'helicopter' in explanation.lower()
 
     def test_high_quality(self):
@@ -105,9 +117,9 @@ class TestEventQuality:
         assert quality == 'high'
         assert 'brief' in explanation.lower() or 'good' in explanation.lower()
 
-    def test_boundary_duration_2min(self):
-        """Event duration exactly 120 seconds is NOT low quality (> not >=)."""
-        los = _make_los(100.0, 220.0)  # Exactly 120 second duration
+    def test_boundary_duration_60sec(self):
+        """Event duration exactly 60 seconds is NOT low quality (> not >=)."""
+        los = _make_los(100.0, 160.0)  # Exactly 60 second duration
 
         flight1 = _make_flight('N123AB', 50.0, 300.0)
         flight2 = _make_flight('N456CD', 50.0, 300.0)
@@ -115,9 +127,9 @@ class TestEventQuality:
         quality, _ = calculate_event_quality(los, flight1, flight2)
         assert quality == 'medium'
 
-    def test_boundary_duration_40sec(self):
-        """Event duration exactly 40 seconds is NOT medium (> not >=)."""
-        los = _make_los(100.0, 140.0)  # Exactly 40 second duration
+    def test_boundary_duration_30sec(self):
+        """Event duration exactly 30 seconds is NOT medium (> not >=)."""
+        los = _make_los(100.0, 130.0)  # Exactly 30 second duration
 
         flight1 = _make_flight('N123AB', 50.0, 300.0)
         flight2 = _make_flight('N456CD', 50.0, 300.0)
@@ -201,7 +213,7 @@ class TestResampledDataQuality:
         """No real reports within ±10s of CPA → low quality."""
         # CPA at t=115, but real reports only at t=100-103 (far from CPA)
         locs1 = _make_locations('N123AB_1', 100, 103)
-        locs2 = _make_locations('N456CD_1', 100, 103)
+        locs2 = _make_locations('N456CD_1', 100, 103, lat_offset=0.04)
 
         los = _make_los(100.0, 130.0, cpa_time=115.0,
                         event_locations={'N123AB_1': locs1, 'N456CD_1': locs2})
@@ -211,13 +223,13 @@ class TestResampledDataQuality:
 
         quality, explanation = calculate_event_quality(los, flight1, flight2)
         assert quality == 'low'
-        assert 'no real data near cpa' in explanation.lower()
+        assert 'no sane data near cpa' in explanation.lower()
 
     def test_no_real_data_near_cpa_one_aircraft(self):
         """No real reports near CPA for just one aircraft → low quality."""
         # Flight 1 has good data, flight 2 has gap near CPA
         locs1 = _make_locations('N123AB_1', 100, 130)  # every second
-        locs2 = _make_locations('N456CD_1', 100, 103)   # only far from CPA at 115
+        locs2 = _make_locations('N456CD_1', 100, 103, lat_offset=0.04)   # only far from CPA at 115
 
         los = _make_los(100.0, 130.0, cpa_time=115.0,
                         event_locations={'N123AB_1': locs1, 'N456CD_1': locs2})
@@ -230,13 +242,13 @@ class TestResampledDataQuality:
         assert 'N456CD_1' in explanation
 
     def test_sparse_data_caps_at_medium(self):
-        """<75% real reports during LOS → high/vhigh capped to medium."""
-        # 30s LOS event, but only ~5 real reports (way below 75%)
-        locs1 = _make_locations('N123AB_1', 100, 130, interval=6)  # ~5 reports
-        locs2 = _make_locations('N456CD_1', 100, 130, interval=6)
+        """<10% real reports during LOS → high/vhigh capped to medium."""
+        # Single-flight location history avoids heuristic D (formation) which needs 2 fids.
+        # 30s event, 2 real reports → 2/30 = 6.7% < SPARSE_DATA_THRESHOLD (10%)
+        locs1 = _make_locations('N123AB_1', 100, 130, interval=20)  # t=100,120: 2 reports
 
         los = _make_los(100.0, 130.0, cpa_time=115.0,
-                        event_locations={'N123AB_1': locs1, 'N456CD_1': locs2})
+                        event_locations={'N123AB_1': locs1})
 
         flight1 = _make_flight('N123AB', 50.0, 300.0)
         flight2 = _make_flight('N456CD', 50.0, 300.0)
@@ -247,12 +259,11 @@ class TestResampledDataQuality:
 
     def test_sparse_data_does_not_affect_already_low(self):
         """Sparse data heuristic should not override already-low quality."""
-        # Long event (>120s) → already low; sparse data doesn't change that
-        locs1 = _make_locations('N123AB_1', 100, 260, interval=10)
-        locs2 = _make_locations('N456CD_1', 100, 260, interval=10)
+        # Long event (>60s without location data to rule out formation) → already low
+        locs1 = _make_locations('N123AB_1', 100, 260, interval=20)
 
         los = _make_los(100.0, 260.0, cpa_time=180.0,  # 160s duration → low
-                        event_locations={'N123AB_1': locs1, 'N456CD_1': locs2})
+                        event_locations={'N123AB_1': locs1})
 
         flight1 = _make_flight('N123AB', 50.0, 300.0)
         flight2 = _make_flight('N456CD', 50.0, 300.0)
@@ -262,12 +273,11 @@ class TestResampledDataQuality:
 
     def test_good_data_no_downgrade(self):
         """Dense real reports during LOS → quality unchanged."""
-        # Every second for both flights throughout the LOS
+        # Single-flight history: every second throughout the LOS
         locs1 = _make_locations('N123AB_1', 100, 130)
-        locs2 = _make_locations('N456CD_1', 100, 130)
 
         los = _make_los(100.0, 130.0, cpa_time=115.0,
-                        event_locations={'N123AB_1': locs1, 'N456CD_1': locs2})
+                        event_locations={'N123AB_1': locs1})
 
         flight1 = _make_flight('N123AB', 50.0, 300.0)
         flight2 = _make_flight('N456CD', 50.0, 300.0)
@@ -289,13 +299,12 @@ class TestResampledDataQuality:
 
     def test_vhigh_downgraded_to_medium_by_sparse_data(self):
         """vhigh event with sparse data should be capped at medium."""
-        # Would be vhigh (close CPA) but sparse data
-        locs1 = _make_locations('N123AB_1', 100, 130, interval=6)
-        locs2 = _make_locations('N456CD_1', 100, 130, interval=6)
+        # Single-flight history: would be vhigh (close CPA) but sparse data caps it
+        locs1 = _make_locations('N123AB_1', 100, 130, interval=20)
 
         los = _make_los(100.0, 130.0, min_latdist=0.15, min_altdist=150,
                         cpa_time=115.0,
-                        event_locations={'N123AB_1': locs1, 'N456CD_1': locs2})
+                        event_locations={'N123AB_1': locs1})
 
         flight1 = _make_flight('N123AB', 50.0, 300.0)
         flight2 = _make_flight('N456CD', 50.0, 300.0)

@@ -87,25 +87,22 @@ class TestRulesSpatialGridIntegration:
         # Should see log message about grid building
         assert any('Built spatial grid' in record.message for record in caplog.records)
 
-    def test_no_latlongring_rules_warning(self, caplog):
-        """Should warn if spatial grid enabled but no latlongring rules."""
-        import logging
-        caplog.set_level(logging.WARNING)
-
+    def test_no_latlongring_rules_empty_grid(self):
+        """Optimizations with no latlongring rules should build an empty spatial grid."""
         yaml_data = {
             'rules': {
                 'altitude_only': {
                     'conditions': {'min_alt': 1000},
-                    'actions': {'emit_jsonl': '/tmp/test.gz'}  # Use valid action
+                    'actions': {'emit_jsonl': '/tmp/test.gz'}
                 }
             }
         }
 
-        Rules(yaml_data, use_optimizations=True)
+        rules = Rules(yaml_data, use_optimizations=True)
 
-        # Should see warning about no latlongring rules
-        assert any('no latlongring rules' in record.message.lower()
-                  for record in caplog.records)
+        # No latlongring rules → empty spatial grid, and the lone rule has no bbox.
+        assert rules._spatial_grid == {}
+        assert all(bbox is None for bbox, _, _ in rules._rule_list)
 
     def test_grid_size_parameter_respected(self, sample_yaml_data):
         """Grid size is now configured in rules_optimizations, not Rules.__init__."""
