@@ -47,7 +47,7 @@ from hotspots import provenance as prov
 from hotspots import status as status_mod
 
 
-from hotspots.term import stage as _stage, ok as _ok, fail as _fail, ARROW
+from hotspots.term import stage as _stage, ok as _ok, fail as _fail, warn as _warn, ARROW
 
 
 def _parse_date(s: str) -> datetime.date:
@@ -191,6 +191,8 @@ def cmd_run(config, args) -> None:
     start_tag, end_tag = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
     regional = config.regional_dir / f"{region_label}_{start_tag}_{end_tag}.parquet"
     out_html = config.maps_dir / f"{region_label}_{start_tag}_{end_tag}.html"
+    ff_out = str(config.data_root / "foreflight" /
+                 f"{region_label}_{start_tag}_{end_tag}.zip")
 
     print(_stage("v2 LOS Pipeline (cli)"))
     print(f"  Profile/stages: {args.profile or '(explicit)'} {ARROW} {stages}")
@@ -198,6 +200,11 @@ def cmd_run(config, args) -> None:
           f"({n_cells} cells/day)")
     print(f"  Dates:  {start_tag}–{end_tag}  ({n_days} day(s))")
     print(f"  Workers: {workers} | PMTiles: {pmtiles}")
+
+    if args.dry_run:
+        _print_dry_run(config, args, stages, bounds, start, end,
+                       regional, out_html, Path(ff_out), pmtiles)
+        return
 
     # Stages 2/3: day-at-a-time with verify + remount/retry gate. Provenance is
     # written per-day right after the gate passes, so if a later day aborts the
@@ -232,8 +239,6 @@ def cmd_run(config, args) -> None:
               f" — loaded {len(df):,} events from {regional.name}")
 
     # Stage 5: visualize.
-    ff_out = str(config.data_root / "foreflight" /
-                 f"{region_label}_{start_tag}_{end_tag}.zip")
     if 5 in stages:
         print(_stage(f"\nStage 5: map "
                      f"({'PMTiles' if pmtiles else 'self-contained HTML'})"))
@@ -246,8 +251,24 @@ def cmd_run(config, args) -> None:
     local_tiles = traffic if (traffic and not traffic.startswith("http")) else None
     print()
     if pmtiles:
-        print(f"  Serve: python src/hotspots/serve.py . 8080")
-        print(f"  Open:  http://localhost:8080/{out_html}")
+        # Local test: serve over HTTP (search/track sidecars are fetched, so
+        # file:// won't work — the Range-capable server is required). The URL
+        # path must be relative to the served dir. Serve from cwd when the map
+        # lives under it (production layout); otherwise serve the map's own
+        # parent dir so the sidecars resolve (e.g. absolute test maps_dir).
+        try:
+            url_path = out_html.resolve().relative_to(Path.cwd().resolve())
+            serve_dir = "."
+        except ValueError:
+            url_path = out_html.name
+            serve_dir = str(out_html.resolve().parent)
+        base_url = f"http://localhost:8080/{url_path}"
+        print(f"  Serve:  python src/hotspots/serve.py {serve_dir} 8080")
+        print(f"  Open:   {base_url}")
+        print(f"  Search: {base_url}?tail=N12345"
+              f"   (tail-number deep-link; replace with a real tail)")
+        print(f"  Deploy: python src/tools/deploy_v2 --publish-as conus "
+              f"--source-stem {out_html.stem}")
     else:
         print(f"  Open:  file://{out_html.resolve()}")
     if Path(ff_out).exists():
@@ -258,6 +279,52 @@ def cmd_run(config, args) -> None:
         print(f"  Preview:    {preview_cmd}")
     print()
     print(_ok("Done."))
+
+
+def _print_dry_run(config, args, stages, bounds, start, end,
+                   regional, out_html, ff_out, pmtiles) -> None:
+    """Describe what a real run with these exact args WOULD do, without touching
+    anything. Stage 2/3 use verify_day (existence-only, per-day counts); stages
+    4/5 are single-file outputs. WRITE = output absent; SKIP = present and
+    --skip-existing; OVERWRITE = present and not skipping."""
+    skip = args.skip_existing
+
+    def _verb(exists: bool, skippable: bool) -> str:
+        if not exists:
+            return _ok("WRITE (new)")
+        return (_stage("SKIP (exists)") if (skippable and skip)
+                else _warn("OVERWRITE (exists)"))
+
+    print(_stage("\nDRY RUN — nothing will be written"))
+    if not skip:
+        print("  (no --skip-existing: existing outputs would be OVERWRITTEN)")
+
+    # Stages 2/3: per-day present/missing counts. Present cells are skippable
+    # (the runners honor --skip-existing per cell); missing cells are new writes.
+    for st in (2, 3):
+        if st not in stages:
+            continue
+        would_write = would_touch = 0
+        for d in _date_range(start, end):
+            rpt = verify_day(st, d.strftime("%Y%m%d"), bounds,
+                             config.grid_dir, config.events_dir, sanity=False)
+            would_write += len(rpt.missing)
+            would_touch += rpt.accounted
+        touch_verb = "skip" if skip else "overwrite"
+        print(f"  Stage {st}: {would_write} cell-day(s) to WRITE, "
+              f"{would_touch} existing to {touch_verb.upper()}")
+
+    # Stages 4/5: single-file outputs. These runners do NOT honor --skip-existing,
+    # so an existing file is always an overwrite regardless of the flag.
+    if 4 in stages:
+        print(f"  Stage 4: {regional.name}  {_verb(regional.exists(), skippable=False)}")
+    if 5 in stages:
+        print(f"  Stage 5: {out_html.name}  {_verb(out_html.exists(), skippable=False)}")
+        if ff_out:
+            print(f"  Stage 5 ForeFlight: {ff_out.name}  "
+                  f"{_verb(ff_out.exists(), skippable=False)}")
+
+    print(_ok("\nDry run complete — re-run without --dry-run to execute."))
 
 
 def _resolve_pmtiles(config, args) -> bool:
@@ -361,6 +428,9 @@ def build_parser(config) -> argparse.ArgumentParser:
     pr.add_argument("--traffic-tiles", help="Traffic tile URL or local path prefix")
     pr.add_argument("--skip-existing", action="store_true",
                     help="Skip cells/dates whose outputs already exist")
+    pr.add_argument("--dry-run", action="store_true",
+                    help="Report what each stage WOULD write/overwrite/skip "
+                         "(honoring --skip-existing) without running anything")
     pr.add_argument("--html-only", action="store_true",
                     help="Stage 5: reuse existing .pmtiles/_tracks (PMTiles only)")
     pr.set_defaults(func=cmd_run)

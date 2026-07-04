@@ -171,11 +171,30 @@ def _date_range_header_html(date_range: tuple[str, str] | None) -> str:
     )
 
 
-def _airport_jump_panel_html() -> str:
+def _airport_jump_panel_html(with_search: bool = False) -> str:
     """Upper-left panel: airport-code jump input + small acknowledgement footer.
     The 0.8rem font matches v1's `.stat-label` (smallest acknowledgement-style
     font in v1, see html/index_template.html).
+
+    When `with_search` is True (PMTiles mode only, where the search JS exists),
+    a tail-number search field + results list is added below the airport-jump
+    field.
     """
+    # Tail-number search field + (initially hidden) results list. Only emitted
+    # when the page has the search JS wired up (PMTiles mode).
+    search_html = (
+        (
+            '<label style="display:flex; align-items:center; justify-content:center; gap:6px; margin-top:6px;">\n'
+            '  Aircraft ID / Tail&nbsp;#:\n'
+            '  <input type="text" id="tail-search" maxlength="10" autocomplete="off"\n'
+            '         placeholder="e.g. N12345"\n'
+            '         style="width:80px; padding:2px 4px;">\n'
+            '  <button onclick="searchTail()" style="padding:2px 8px;">Go</button>\n'
+            '</label>\n'
+            '<div id="tail-results" style="display:none; margin-top:6px;'
+            ' max-height:40vh; overflow:auto; font-size:11px;"></div>\n'
+        ) if with_search else ''
+    )
     return (
         '<div id="airport-jump-box">\n'
         '<div style="color:#ff0; text-align:center;">\n'
@@ -189,6 +208,7 @@ def _airport_jump_panel_html() -> str:
         '         style="width:60px; padding:2px 4px;">\n'
         '  <button onclick="jumpToAirport()" style="padding:2px 8px;">Go</button>\n'
         '</label>\n'
+        + search_html +
         '<hr style="border:0; border-top:1px solid #555; margin:8px 0;">\n'
         '<div style="font-size:10px; line-height:1.3;">\n'
         'Data courtesy <a href="https://adsb.lol" target="_blank"'
@@ -1034,6 +1054,48 @@ def write_event_sidecars(df: pd.DataFrame, sidecar_dir: str) -> None:
     print(f"  tracks.ndjson: {ndjson_mb:.1f} MB  index: {index_kb:.0f} KB", flush=True)
 
 
+# Column order of each row in search_index.json.gz. Kept in one place so the
+# writer here and the JS reader in generate_pmtiles_html() stay in sync.
+SEARCH_INDEX_FIELDS = ["event_id", "flight1", "flight2", "lon", "lat",
+                       "quality", "datetime_utc"]
+
+
+def write_search_index(df: pd.DataFrame, sidecar_dir: str) -> None:
+    """
+    Write search_index.json.gz: a compact array of [event_id, flight1, flight2,
+    lon, lat, quality, datetime_utc] rows (positional, not objects, to keep the
+    payload small). The page fetches this once on first search and does a
+    client-side substring match on flight1/flight2 — needed because PMTiles
+    events live in vector tiles and can't be enumerated client-side.
+
+    event_id is str(df index) to match the `event_id` baked into the PMTiles
+    features by _build_geojson_for_tiles(), so a clicked result can reuse the
+    existing startAnimation() track-fetch path keyed on event_id.
+    """
+    import gzip
+    os.makedirs(sidecar_dir, exist_ok=True)
+
+    rows = []
+    for idx, row in df.iterrows():
+        rows.append([
+            str(idx),
+            str(row.get("flight1", "")).strip(),
+            str(row.get("flight2", "")).strip(),
+            round(float(row["lon"]), 5),
+            round(float(row["lat"]), 5),
+            str(row.get("quality", "")).lower(),
+            str(row.get("datetime_utc", "")),
+        ])
+
+    index_path = os.path.join(sidecar_dir, "search_index.json.gz")
+    with gzip.open(index_path, "wt", encoding="utf-8") as f:
+        json.dump({"fields": SEARCH_INDEX_FIELDS, "rows": rows}, f)
+
+    index_kb = os.path.getsize(index_path) / 1024
+    print(f"  search_index.json.gz: {index_kb:.0f} KB ({len(rows):,} events)",
+          flush=True)
+
+
 def generate_pmtiles(df: pd.DataFrame, output_path: str) -> str:
     """
     Convert event DataFrame to a .pmtiles file via tippecanoe.
@@ -1387,6 +1449,160 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '});\n'
     )
 
+    # Tail-number search JS. Fetches search_index.json.gz once (same sidecar
+    # dir + gzip-fallback pattern as the tracks index), does a client-side
+    # substring match on flight1/flight2, and renders a results list. Clicking
+    # a result — like clicking a dot — routes through focusEvent(), which flies
+    # to the event, replays it, and writes a shareable ?event=<id> URL.
+    quality_colors_json = json.dumps(QUALITY_COLORS)
+    default_color_json = json.dumps(DEFAULT_COLOR)
+    search_js = (
+        'var QUALITY_COLORS = ' + quality_colors_json + ';\n'
+        'var DEFAULT_COLOR = ' + default_color_json + ';\n'
+        'var _searchIndex = null, _searchPromise = null;\n'
+        '\n'
+        '// Fetch + decode the gzipped search index once. Mirrors\n'
+        '// loadTracksIndex() incl. the Cloudflare gzip-passthrough fallback.\n'
+        'function loadSearchIndex() {\n'
+        '  if (_searchIndex) return Promise.resolve(_searchIndex);\n'
+        '  if (_searchPromise) return _searchPromise;\n'
+        '  _searchPromise = fetch("' + sidecar_rel + '/search_index.json.gz")\n'
+        '    .then(function(r) {\n'
+        '      return r.arrayBuffer().then(function(buf) {\n'
+        '        var bytes = new Uint8Array(buf);\n'
+        '        if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {\n'
+        '          var ds = new DecompressionStream("gzip");\n'
+        '          return new Response(new Blob([buf]).stream().pipeThrough(ds)).json();\n'
+        '        }\n'
+        '        return new Response(buf).json();\n'
+        '      });\n'
+        '    })\n'
+        '    .then(function(data) {\n'
+        '      // Normalize positional rows into objects keyed by field name.\n'
+        '      var fields = data.fields, rows = data.rows;\n'
+        '      _searchIndex = rows.map(function(row) {\n'
+        '        var o = {};\n'
+        '        for (var i = 0; i < fields.length; i++) o[fields[i]] = row[i];\n'
+        '        return o;\n'
+        '      });\n'
+        '      return _searchIndex;\n'
+        '    })\n'
+        '    .catch(function(e) { console.warn("search index fetch failed:", e); _searchPromise = null; throw e; });\n'
+        '  return _searchPromise;\n'
+        '}\n'
+        '\n'
+        '// Build the tooltip HTML for a search-index event (no track data yet).\n'
+        'function _searchTooltipHtml(ev) {\n'
+        '  var color = QUALITY_COLORS[ev.quality] || DEFAULT_COLOR;\n'
+        '  var dot = \'<span style="display:inline-block;width:10px;height:10px;\'\n'
+        '    + \'border-radius:50%;background:\' + color + \';margin-right:4px;\'\n'
+        '    + \'vertical-align:middle;"></span>\';\n'
+        '  // Strip any trailing " UTC" before re-appending so we never double it\n'
+        '  // (stored datetime_utc may or may not already carry the suffix).\n'
+        '  var dt = String(ev.datetime_utc || "").replace("T", " ")\n'
+        '    .replace(/\\s*UTC\\s*$/i, "") + " UTC";\n'
+        '  return dt + "<br><b>" + (ev.flight1 || "?") + " / " + (ev.flight2 || "?")\n'
+        '    + "</b><br><br>Quality: " + dot + (ev.quality || "?");\n'
+        '}\n'
+        '\n'
+        '// Single focus path shared by search results and dot clicks: fly to\n'
+        '// the event, replay it, and write a shareable ?event=<id> URL once the\n'
+        '// camera settles (no visible "share" button — the address bar is it).\n'
+        'function focusEvent(props, doFly) {\n'
+        '  function replay() { startAnimation(props); }\n'
+        '  if (doFly && props.lon != null && props.lat != null) {\n'
+        '    map.once("moveend", replay);\n'
+        '    map.flyTo({center: [Number(props.lon), Number(props.lat)], zoom: 12});\n'
+        '  } else {\n'
+        '    replay();\n'
+        '  }\n'
+        '  if (props.event_id != null) {\n'
+        '    try {\n'
+        '      var u = new URL(window.location);\n'
+        '      u.searchParams.set("event", props.event_id);\n'
+        '      u.searchParams.delete("airport");\n'
+        '      history.replaceState(null, "", u);\n'
+        '    } catch (e) {}\n'
+        '  }\n'
+        '}\n'
+        '\n'
+        'function renderTailResults(matches, query) {\n'
+        '  var box = document.getElementById("tail-results");\n'
+        '  if (!box) return;\n'
+        '  if (!matches.length) {\n'
+        '    box.innerHTML = \'<div style="color:#aaa">No events for "\' + query + \'".</div>\';\n'
+        '    box.style.display = "block";\n'
+        '    return;\n'
+        '  }\n'
+        '  var html = \'<div style="color:#aaa;margin-bottom:4px">\' + matches.length\n'
+        '    + \' event\' + (matches.length === 1 ? "" : "s") + \'</div>\';\n'
+        '  matches.forEach(function(ev) {\n'
+        '    var color = QUALITY_COLORS[ev.quality] || DEFAULT_COLOR;\n'
+        '    var dot = \'<span style="display:inline-block;width:8px;height:8px;\'\n'
+        '      + \'border-radius:50%;background:\' + color + \';margin-right:5px;\'\n'
+        '      + \'vertical-align:middle;"></span>\';\n'
+        '    var date = String(ev.datetime_utc || "").replace("T", " ")\n'
+        '      .replace(/\\s*UTC\\s*$/i, "").slice(0, 16);\n'
+        '    html += \'<div class="tail-result" data-eid="\' + ev.event_id + \'"\'\n'
+        '      + \' style="cursor:pointer;padding:3px 2px;border-top:1px solid #444">\'\n'
+        '      + dot + "<b>" + (ev.flight1 || "?") + " / " + (ev.flight2 || "?") + "</b>"\n'
+        '      + \'<br><span style="color:#aaa">\' + date + " UTC</span></div>";\n'
+        '  });\n'
+        '  box.innerHTML = html;\n'
+        '  box.style.display = "block";\n'
+        '  // event_id -> event object, so a click can focus without re-searching.\n'
+        '  var byId = {};\n'
+        '  matches.forEach(function(ev) { byId[String(ev.event_id)] = ev; });\n'
+        '  box.querySelectorAll(".tail-result").forEach(function(el) {\n'
+        '    el.addEventListener("click", function() {\n'
+        '      var ev = byId[el.getAttribute("data-eid")];\n'
+        '      if (!ev) return;\n'
+        '      focusEvent({event_id: ev.event_id, flight1: ev.flight1,\n'
+        '                  flight2: ev.flight2, lon: ev.lon, lat: ev.lat,\n'
+        '                  html: _searchTooltipHtml(ev)}, true);\n'
+        '    });\n'
+        '  });\n'
+        '}\n'
+        '\n'
+        'function searchTail(query) {\n'
+        '  var input = document.getElementById("tail-search");\n'
+        '  query = (query != null ? query : (input ? input.value : "")).trim();\n'
+        '  var box = document.getElementById("tail-results");\n'
+        '  if (!query) { if (box) box.style.display = "none"; clearAnimation(); return; }\n'
+        '  if (box) { box.innerHTML = \'<div style="color:#aaa">Searching\\u2026</div>\'; box.style.display = "block"; }\n'
+        '  var q = query.toUpperCase();\n'
+        '  loadSearchIndex().then(function(idx) {\n'
+        '    var matches = idx.filter(function(ev) {\n'
+        '      return (ev.flight1 && ev.flight1.toUpperCase().indexOf(q) !== -1) ||\n'
+        '             (ev.flight2 && ev.flight2.toUpperCase().indexOf(q) !== -1);\n'
+        '    });\n'
+        '    renderTailResults(matches, query);\n'
+        '  }).catch(function() {\n'
+        '    if (box) box.innerHTML = \'<div style="color:#e88">Search unavailable.</div>\';\n'
+        '  });\n'
+        '}\n'
+        '\n'
+        '// ?event=<id> deep-link: fly to that specific event and replay it.\n'
+        'function focusEventById(eid) {\n'
+        '  loadSearchIndex().then(function(idx) {\n'
+        '    var ev = idx.find(function(e) { return String(e.event_id) === String(eid); });\n'
+        '    if (!ev) { console.warn("no event", eid); return; }\n'
+        '    focusEvent({event_id: ev.event_id, flight1: ev.flight1,\n'
+        '                flight2: ev.flight2, lon: ev.lon, lat: ev.lat,\n'
+        '                html: _searchTooltipHtml(ev)}, true);\n'
+        '  }).catch(function() {});\n'
+        '}\n'
+        '\n'
+        'document.addEventListener("DOMContentLoaded", function() {\n'
+        '  var input = document.getElementById("tail-search");\n'
+        '  if (input) {\n'
+        '    input.addEventListener("keydown", function(e) {\n'
+        '      if (e.key === "Enter") searchTail();\n'
+        '    });\n'
+        '  }\n'
+        '});\n'
+    )
+
     html = (
         '<!DOCTYPE html>\n'
         '<html>\n'
@@ -1415,7 +1631,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '</head>\n'
         '<body>\n'
         '<div id="map"></div>\n'
-        + _airport_jump_panel_html()
+        + _airport_jump_panel_html(with_search=True)
     )
 
     date_header_html = _date_range_header_html(date_range)
@@ -1480,6 +1696,8 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '\n'
         + animation_js +
         '\n'
+        + search_js +
+        '\n'
         'map.on("load", function() {\n'
         '  // Warm the tracks index in the background so the first event\n'
         '  // click doesn\'t pay the cold-fetch cost.\n'
@@ -1532,7 +1750,9 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '  map.on("click", "events-hit", function(e) {\n'
         '    if (!e.features || !e.features.length) return;\n'
         '    _justClickedDot = true;\n'
-        '    startAnimation(e.features[0].properties);\n'
+        '    // Route through focusEvent (no fly — the dot is already on screen)\n'
+        '    // so the shareable ?event=<id> URL is written for dot clicks too.\n'
+        '    focusEvent(e.features[0].properties, false);\n'
         '  });\n'
         '\n'
         '  map.on("click", function(e) {\n'
@@ -1586,12 +1806,26 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
            + _airport_quality_js(None, sidecar_url=airport_quality_url)
            if airport_quality_url else '') +
         '\n'
-        '  // Initial viewport: ?airport=ICAO wins (zooms in tight); otherwise\n'
-        '  // fit the data bounds so the whole region is in view.\n'
+        '  // Initial viewport / deep-links. Precedence:\n'
+        '  //   ?event=<id> (fly + replay a specific event) >\n'
+        '  //   ?tail=<id>  (run the tail search) >\n'
+        '  //   ?airport=<ICAO> (fly to airport) >\n'
+        '  //   auto-fit data bounds.\n'
         '  var _params = new URLSearchParams(window.location.search);\n'
-        '  var _initial = _params.get("airport");\n'
-        '  if (_initial) {\n'
-        '    jumpToAirport(_initial);\n'
+        '  var _event = _params.get("event");\n'
+        '  var _tail = _params.get("tail");\n'
+        '  var _airport = _params.get("airport");\n'
+        '  if (_event) {\n'
+        '    focusEventById(_event);\n'
+        '  } else if (_tail) {\n'
+        '    var _ti = document.getElementById("tail-search");\n'
+        '    if (_ti) _ti.value = _tail;\n'
+        '    searchTail(_tail);\n'
+        '    if (typeof DATA_BOUNDS !== "undefined" && DATA_BOUNDS && AUTO_FIT) {\n'
+        '      map.fitBounds(DATA_BOUNDS, {padding: 30, animate: false, duration: 0});\n'
+        '    }\n'
+        '  } else if (_airport) {\n'
+        '    jumpToAirport(_airport);\n'
         '  } else if (typeof DATA_BOUNDS !== "undefined" && DATA_BOUNDS && AUTO_FIT) {\n'
         '    map.fitBounds(DATA_BOUNDS, {padding: 30, animate: false, duration: 0});\n'
         '  }\n'
@@ -1699,6 +1933,9 @@ def main():
         sidecar_dir = output_path.replace(".html", "_tracks")
         print(f"  Writing {len(df):,} event track sidecars to {sidecar_dir}/...", flush=True)
         write_event_sidecars(df, sidecar_dir)
+        # Tail-number search index (same sidecar dir, keyed on the same
+        # event_id as the PMTiles features).
+        write_search_index(df, sidecar_dir)
 
         # Copy airport-quality JSON next to the HTML so it's fetchable.
         if airport_quality is not None:

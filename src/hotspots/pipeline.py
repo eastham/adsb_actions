@@ -66,6 +66,7 @@ from hotspots.stage5_visualize import (
     generate_pmtiles,
     generate_pmtiles_html,
     write_event_sidecars,
+    write_search_index,
     load_events,
     MAPS_DIR,
     build_us_airports_lookup,
@@ -289,6 +290,8 @@ def run_stage5(
             generate_pmtiles(df, pmtiles_path)
             print(f"  Writing {len(df):,} event track sidecars...")
             write_event_sidecars(df, sidecar_dir)
+            # Tail-number search index (same sidecar dir, same event_id keys).
+            write_search_index(df, sidecar_dir)
         alt_bands = sorted(df["alt_band"].dropna().unique().tolist()) if "alt_band" in df.columns else []
         html = generate_pmtiles_html(pmtiles_path, sidecar_dir,
                                      center_lat, center_lon, static_zoom, alt_bands,

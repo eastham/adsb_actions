@@ -6,7 +6,8 @@ Uploads data/v2/maps/ (HTML, PMTiles, and per-event track sidecars)
 to {remote}/v2/, preserving the flat layout that the HTML files expect.
 
 By default only the assets the live HTML actually needs are pushed:
-  *.html, *.pmtiles, */tracks.ndjson, */tracks.index.json.gz
+  *.html, *.pmtiles, */tracks.ndjson, */tracks.index.json.gz,
+  */search_index.json.gz
 Legacy/uncompressed sidecar artifacts (tracks.json, tracks.json.gz) are
 filtered out — they roughly double the upload size and aren't referenced.
 
@@ -48,6 +49,8 @@ INCLUDE_PATTERNS = [
     "*.pmtiles",
     "*_tracks/tracks.ndjson",
     "*_tracks/tracks.index.json.gz",
+    # Tail-number search index (one per map, in the same _tracks sidecar dir).
+    "*_tracks/search_index.json.gz",
     # Airport-quality sidecar JSONs written by stage5_visualize.py in
     # PMTiles mode (one per HTML, named <stem>_quality.json).
     "*_quality.json",
@@ -167,6 +170,7 @@ def main():
             "--metadata-set", CACHE_CONTROL,
             "--include", "tracks.ndjson",
             "--include", "tracks.index.json.gz",
+            "--include", "search_index.json.gz",
         ], args.dry_run)
 
         # Airport-quality sidecar (optional — only present if stage5 was run

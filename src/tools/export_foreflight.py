@@ -32,7 +32,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-from PIL import Image, ImageFilter
+from PIL import Image
 
 # CONUS bounding box — matches traffic_tiles.py constants
 CONUS_BOUNDS = (-125.0, 24.5, -66.0, 49.5)  # minlon, minlat, maxlon, maxlat
@@ -41,22 +41,20 @@ CONUS_BOUNDS = (-125.0, 24.5, -66.0, 49.5)  # minlon, minlat, maxlon, maxlat
 LOS_MIN_ZOOM = 7
 LOS_MAX_ZOOM = 11
 
-# Heatmap blob radius in pixels at each zoom level (doubles per zoom, matching
-# the MapLibre heatmap-radius in stage5_visualize.py: z8→20, z9→40, z10→80…)
-# We start at z7 with 2px and double upward.
-LOS_RADIUS_PX = {7: 2, 8: 4, 9: 8, 10: 16, 11: 32}
+# Circle radius in pixels at each zoom level sized to ~1/8 mile on the ground.
+# At mid-CONUS (~37°N), one 256px tile at zoom z covers ~(20000/2^z) km wide,
+# so 1/8 mile (0.2 km) works out to roughly: z7=1, z8=1, z9=2, z10=3, z11=6.
+LOS_RADIUS_PX = {7: 1, 8: 1, 9: 2, 10: 3, 11: 6}
 
-# Quality weights — higher = more opaque blob. 'low' excluded (matches browser).
-QUALITY_WEIGHT = {"vhigh": 1.0, "high": 0.7, "medium": 0.4}
+# Supersampling factor: render at this multiple then downsample for smoother circles.
+SUPERSAMPLE = 4
 
-# LOS heatmap color: yellow → orange → deep red (warm, distinct from traffic blue)
-# Interpolated by per-pixel accumulated weight [0..1].
-LOS_COLOR_LOW  = (255, 220,   0)   # yellow  (sparse)
-LOS_COLOR_MID  = (255, 100,   0)   # orange
-LOS_COLOR_HIGH = (200,   0,   0)   # deep red (dense)
-
-# Max alpha for LOS tiles (keeps aeronautical chart readable underneath)
-LOS_MAX_ALPHA = 180
+# Quality → color: vhigh=red, high=orange, medium=yellow. 'low' excluded.
+QUALITY_COLOR = {
+    "vhigh": (200,   0,   0, 255),  # deep red
+    "high":  (255, 100,   0, 255),  # orange
+    "medium":(255, 220,   0, 255),  # yellow
+}
 
 # Tile size (must match traffic_tiles.py)
 TILE_SIZE = 256
@@ -151,15 +149,44 @@ def png_bytes(img: Image.Image) -> bytes:
     return buf.getvalue()
 
 
+def jpeg_bytes(img: Image.Image, quality: int = 60) -> bytes:
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, format="JPEG", quality=quality, optimize=True)
+    return buf.getvalue()
+
+
 # ---------------------------------------------------------------------------
 # Layer 1: Traffic tiles (pack existing PNG tree)
 # ---------------------------------------------------------------------------
+
+TRAFFIC_MAX_ZOOM = 10  # zoom 11 adds ~25k tiles for minimal visual benefit in ForeFlight
+# Alpha threshold: pixels below this are zeroed out, keeping only the busiest regions.
+# p75 of the alpha distribution across tiles; removes sparse light-blue noise.
+TRAFFIC_ALPHA_THRESHOLD = 55
+
+def threshold_traffic_tile(img: Image.Image) -> Image.Image | None:
+    """Keep only high-density pixels (above alpha threshold), return as red-channel grayscale.
+
+    Using just the red channel: purple (high density) has high R, light blue (low
+    density) has low R, so R naturally encodes busyness as a grayscale intensity.
+    Returns None if no pixels survive the threshold.
+    """
+    import numpy as np
+    arr = np.array(img.convert("RGBA"))
+    mask = arr[:, :, 3] < TRAFFIC_ALPHA_THRESHOLD
+    red = arr[:, :, 0].copy()
+    red[mask] = 0
+    if red.max() == 0:
+        return None
+    return Image.fromarray(red, "L")
+
 
 def pack_traffic_tiles(tile_dir: Path, conn: sqlite3.Connection) -> int:
     """Walk the slippy-map tile tree and insert all PNGs into MBTiles."""
     total = 0
     zoom_dirs = sorted(
-        (d for d in tile_dir.iterdir() if d.is_dir() and d.name.isdigit()),
+        (d for d in tile_dir.iterdir() if d.is_dir() and d.name.isdigit()
+         and int(d.name) <= TRAFFIC_MAX_ZOOM),
         key=lambda d: int(d.name),
     )
     for zoom_dir in zoom_dirs:
@@ -170,7 +197,9 @@ def pack_traffic_tiles(tile_dir: Path, conn: sqlite3.Connection) -> int:
             tx = int(x_dir.name)
             for tile_file in sorted(x_dir.glob("*.png"), key=lambda f: int(f.stem)):
                 ty = int(tile_file.stem)
-                insert_tile(conn, zoom, tx, ty, tile_file.read_bytes())
+                img = threshold_traffic_tile(Image.open(tile_file))
+                if img is not None:
+                    insert_tile(conn, zoom, tx, ty, jpeg_bytes(img))
                 total += 1
     conn.commit()
     return total
@@ -180,184 +209,74 @@ def pack_traffic_tiles(tile_dir: Path, conn: sqlite3.Connection) -> int:
 # Layer 2: LOS event heatmap (rasterize event points to PNG tiles)
 # ---------------------------------------------------------------------------
 
-def _lerp_color(c1, c2, t):
-    return tuple(int(a + (b - a) * t) for a, b in zip(c1, c2))
 
+def render_los_tile(events_in_tile, radius_px):
+    """Render LOS events as opaque filled circles, color-coded by quality.
 
-def _weight_to_color_alpha(w_norm):
-    """Map normalized weight [0..1] to (R,G,B,A)."""
-    if w_norm <= 0.5:
-        rgb = _lerp_color(LOS_COLOR_LOW, LOS_COLOR_MID, w_norm * 2)
-    else:
-        rgb = _lerp_color(LOS_COLOR_MID, LOS_COLOR_HIGH, (w_norm - 0.5) * 2)
-    alpha = int(LOS_MAX_ALPHA * w_norm)
-    return rgb + (alpha,)
-
-
-def render_los_tile(events_in_tile, zoom, tx, ty, radius_px):
-    """Render one LOS heatmap tile from a list of (px, py, weight) tuples.
-
-    Uses a Gaussian blur over weight-painted pixels to produce smooth blobs.
-    Returns RGBA PIL Image or None if no events.
+    events_in_tile: list of (px, py, rgba) where px/py may be outside [0, TILE_SIZE).
+    Renders at SUPERSAMPLE× resolution then downsamples for smooth antialiased edges.
+    Returns RGBA PIL Image or None if no events touch this tile.
     """
     if not events_in_tile:
         return None
 
-    import numpy as np
-
-    # Accumulate weights on a float32 canvas (larger to accommodate blob radius)
-    pad = radius_px
-    canvas_size = TILE_SIZE + 2 * pad
-    weight_canvas = np.zeros((canvas_size, canvas_size), dtype=np.float32)
-
-    for px, py, weight in events_in_tile:
-        # Place weight at padded pixel
-        cpx, cpy = px + pad, py + pad
-        # Paint a circular weight blob using a distance-falloff mask
-        y_min = max(0, cpy - radius_px)
-        y_max = min(canvas_size, cpy + radius_px + 1)
-        x_min = max(0, cpx - radius_px)
-        x_max = min(canvas_size, cpx + radius_px + 1)
-        ys = np.arange(y_min, y_max)[:, None]
-        xs = np.arange(x_min, x_max)[None, :]
-        dist2 = (ys - cpy) ** 2 + (xs - cpx) ** 2
-        r2 = radius_px ** 2
-        mask = dist2 <= r2
-        # Gaussian falloff within circle
-        falloff = np.exp(-dist2 / (2 * (radius_px / 2.5) ** 2)) * mask
-        weight_canvas[y_min:y_max, x_min:x_max] += falloff * weight
-
-    # Crop to tile area (strip padding)
-    tile_weights = weight_canvas[pad:pad + TILE_SIZE, pad:pad + TILE_SIZE]
-
-    max_w = tile_weights.max()
-    if max_w == 0:
-        return None
-
-    # Normalize and map to RGBA
-    norm = np.clip(tile_weights / max_w, 0, 1)
-    rgba = np.zeros((TILE_SIZE, TILE_SIZE, 4), dtype=np.uint8)
-    for row in range(TILE_SIZE):
-        for col in range(TILE_SIZE):
-            w = norm[row, col]
-            if w > 0.01:
-                rgba[row, col] = _weight_to_color_alpha(float(w))
-
-    return Image.fromarray(rgba, mode="RGBA")
-
-
-def render_los_tile_fast(events_in_tile, zoom, tx, ty, radius_px):
-    """Vectorized version using PIL GaussianBlur — faster for dense tiles."""
-    if not events_in_tile:
-        return None
-
-    import numpy as np
-
-    # Paint weight points onto a float canvas, then blur
-    weight_img = Image.new("F", (TILE_SIZE, TILE_SIZE), 0.0)
     from PIL import ImageDraw
-    draw = ImageDraw.Draw(weight_img)
-    for px, py, weight in events_in_tile:
-        # Small dot; blur will expand it
-        r = max(1, radius_px // 8)
-        draw.ellipse([px - r, py - r, px + r, py + r], fill=weight)
 
-    # Blur to create smooth blob (GaussianBlur requires "L" mode, not "F")
-    sigma = radius_px / 2.5
-    raw = np.array(weight_img, dtype=np.float32)
-    raw_norm = np.clip(raw / max(raw.max(), 1e-6), 0, 1)
-    weight_l = Image.fromarray((raw_norm * 255).astype(np.uint8), mode="L")
-    blurred_l = weight_l.filter(ImageFilter.GaussianBlur(radius=sigma))
-    w_arr = np.array(blurred_l, dtype=np.float32) / 255.0
+    s = SUPERSAMPLE
+    r = radius_px * s
+    # Padded canvas so circles near tile edges aren't clipped differently on
+    # adjacent tiles — paint at shifted coords, then crop back to TILE_SIZE.
+    pad = r
+    canvas = TILE_SIZE * s + 2 * pad
+    img = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    for px, py, color in events_in_tile:
+        cx, cy = px * s + pad, py * s + pad
+        draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=color)
 
-    max_w = w_arr.max()
-    if max_w < 1e-6:
-        return None
-
-    norm = np.clip(w_arr / max_w, 0, 1)
-    rgba = np.zeros((TILE_SIZE, TILE_SIZE, 4), dtype=np.uint8)
-
-    # Vectorized color mapping (piecewise linear between 3 anchor colors)
-    lo = np.array(LOS_COLOR_LOW,  dtype=np.float32)
-    mi = np.array(LOS_COLOR_MID,  dtype=np.float32)
-    hi = np.array(LOS_COLOR_HIGH, dtype=np.float32)
-
-    lower_half = norm <= 0.5
-    t_lo = np.clip(norm * 2, 0, 1)
-    t_hi = np.clip((norm - 0.5) * 2, 0, 1)
-
-    rgb = np.where(
-        lower_half[:, :, None],
-        lo + (mi - lo) * t_lo[:, :, None],
-        mi + (hi - mi) * t_hi[:, :, None],
-    ).astype(np.uint8)
-
-    alpha = (norm * LOS_MAX_ALPHA).astype(np.uint8)
-    mask = norm > 0.01
-    rgba[:, :, :3] = rgb
-    rgba[:, :, 3] = np.where(mask, alpha, 0)
-
-    return Image.fromarray(rgba, mode="RGBA")
+    tile_hires = img.crop((pad, pad, pad + TILE_SIZE * s, pad + TILE_SIZE * s))
+    return tile_hires.resize((TILE_SIZE, TILE_SIZE), Image.LANCZOS) if tile_hires.getbbox() else None
 
 
 def pack_los_heatmap(df, conn: sqlite3.Connection) -> int:
     """Rasterize LOS events from a DataFrame into MBTiles tiles."""
     import numpy as np
 
-    # Keep only quality levels that appear in the browser heatmap
-    df = df[df["quality"].isin(QUALITY_WEIGHT)].copy()
-    df["weight"] = df["quality"].map(QUALITY_WEIGHT)
+    # Keep only quality levels with a defined color
+    df = df[df["quality"].isin(QUALITY_COLOR)].copy()
     lats = df["lat"].to_numpy(dtype=np.float64)
     lons = df["lon"].to_numpy(dtype=np.float64)
-    weights = df["weight"].to_numpy(dtype=np.float64)
+    colors = [QUALITY_COLOR[q] for q in df["quality"]]
 
     total = 0
     for zoom in range(LOS_MIN_ZOOM, LOS_MAX_ZOOM + 1):
         radius_px = LOS_RADIUS_PX[zoom]
         tx_min, tx_max, ty_min, ty_max = conus_tile_range(zoom)
 
-        # Map every event to its tile + pixel at this zoom
-        event_tiles: dict[tuple, list] = {}
-        for i in range(len(lats)):
-            etx, ety, epx, epy = latlon_to_tile_pixel(lats[i], lons[i], zoom)
-            if tx_min <= etx <= tx_max and ty_min <= ety <= ty_max:
-                key = (etx, ety)
-                event_tiles.setdefault(key, []).append((epx, epy, weights[i]))
-
-        # For each occupied tile, also include events from neighboring tiles whose
-        # blobs may bleed in (within radius_px of the tile edge)
-        # Build a quick lookup: tile → events that touch it (including neighbors)
+        # Map every event to its home tile, then spread to neighbors whose
+        # boundary is within radius_px so circles aren't clipped at tile edges.
         padded: dict[tuple, list] = {}
-        # Degrees-per-pixel at this zoom (approximate at mid-CONUS lat ~37°N)
-        deg_per_px = 360.0 / (TILE_SIZE * 2 ** zoom)
-        pad_deg = radius_px * deg_per_px * 1.5  # generous padding
-
         for i in range(len(lats)):
             etx, ety, epx, epy = latlon_to_tile_pixel(lats[i], lons[i], zoom)
-            # Find which tiles this event's blob could touch
-            lat, lon, w = lats[i], lons[i], weights[i]
+            global_px = etx * TILE_SIZE + epx
+            global_py = ety * TILE_SIZE + epy
+            color = colors[i]
             for dtx in range(-1, 2):
                 for dty in range(-1, 2):
                     ntx, nty = etx + dtx, ety + dty
                     if tx_min <= ntx <= tx_max and ty_min <= nty <= ty_max:
-                        # Compute pixel position relative to neighbor tile
-                        ntx2, nty2, npx, npy = latlon_to_tile_pixel(lat, lon, zoom)
-                        # Pixel offset: event pixel in global pixel space
-                        global_px = etx * TILE_SIZE + epx
-                        global_py = ety * TILE_SIZE + epy
                         tile_px = global_px - ntx * TILE_SIZE
                         tile_py = global_py - nty * TILE_SIZE
-                        # Only include if blob could reach this tile
                         if (-radius_px <= tile_px <= TILE_SIZE + radius_px and
                                 -radius_px <= tile_py <= TILE_SIZE + radius_px):
                             padded.setdefault((ntx, nty), []).append(
-                                (tile_px, tile_py, w))
+                                (tile_px, tile_py, color))
 
         n_tiles = len(padded)
         print(f"  zoom {zoom}: {n_tiles} tiles, {len(lats)} events", flush=True)
 
         for (tx, ty), pts in padded.items():
-            img = render_los_tile_fast(pts, zoom, tx, ty, radius_px)
+            img = render_los_tile(pts, radius_px)
             if img is not None:
                 insert_tile(conn, zoom, tx, ty, png_bytes(img))
                 total += 1
@@ -420,12 +339,12 @@ def export_pack(
         tile_dir = Path(traffic_tile_dir)
         zoom_levels = sorted(
             int(d.name) for d in tile_dir.iterdir()
-            if d.is_dir() and d.name.isdigit()
+            if d.is_dir() and d.name.isdigit() and int(d.name) <= TRAFFIC_MAX_ZOOM
         )
         if zoom_levels:
             out_path = tmp_dir / "Traffic Density.mbtiles"
             print(f"  ForeFlight: packing traffic tiles (zoom {zoom_levels[0]}–{zoom_levels[-1]})…")
-            conn = open_mbtiles(out_path, "Traffic Density",
+            conn = open_mbtiles(out_path, "Traffic Density", fmt="jpg",
                                 minzoom=zoom_levels[0], maxzoom=zoom_levels[-1])
             n = pack_traffic_tiles(tile_dir, conn)
             conn.close()
