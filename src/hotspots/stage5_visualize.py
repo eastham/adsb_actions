@@ -328,7 +328,11 @@ def _airport_quality_js(airport_quality: dict | None,
         '          color:colors[s] || "#888",\n'
         '          lostRate:q.lostRate, medianGapS:q.medianGapS,\n'
         '          completionRate:q.completionRate, numDates:q.numDates,\n'
-        '          totalLowAltTracks:q.totalLowAltTracks}});\n'
+        '          totalLowAltTracks:q.totalLowAltTracks,\n'
+        '          // MapLibre flattens feature properties, so nested arrays do\n'
+        '          // not survive as JS arrays. Stringify runwayUsage here and\n'
+        '          // JSON.parse it back in the hover handler.\n'
+        '          runwayUsage: JSON.stringify(q.runwayUsage || [])}});\n'
         '    }\n'
         '    if (!qFeatures.length) return;\n'
         '    map.addSource("airport-quality", {type:"geojson",\n'
@@ -397,6 +401,12 @@ def _airport_quality_js(airport_quality: dict | None,
         '            + " low-altitude tracks)</span></div>"\n'
         '            + "<div><b>Median gap between reports:</b> " + num(p.medianGapS, " s")\n'
         '            + " <span style=\\"color:#aaa\\">(lower = better)</span></div>";\n'
+        '      // Runway usage: runwayUsage arrives JSON-stringified (see above).\n'
+        '      var ru = []; try { ru = JSON.parse(p.runwayUsage || "[]"); } catch(e) {}\n'
+        '      if (ru.length) {\n'
+        '        var parts = ru.map(function(u){ return u.runway + ": " + u.pct + "%"; });\n'
+        '        html += "<div><b>Approaches by runway:</b> " + parts.join(", ") + "</div>";\n'
+        '      }\n'
         '    }\n'
         '    html += "<div style=\\"color:#aaa;margin-top:4px\\">"\n'
         '          +   "Based on " + (p.numDates || 0) + " day(s) of data."\n'
@@ -1057,7 +1067,8 @@ def write_event_sidecars(df: pd.DataFrame, sidecar_dir: str) -> None:
 # Column order of each row in search_index.json.gz. Kept in one place so the
 # writer here and the JS reader in generate_pmtiles_html() stay in sync.
 SEARCH_INDEX_FIELDS = ["event_id", "flight1", "flight2", "lon", "lat",
-                       "quality", "datetime_utc"]
+                       "quality", "datetime_utc", "lateral_nm", "alt_sep_ft",
+                       "quality_explanation"]
 
 
 def write_search_index(df: pd.DataFrame, sidecar_dir: str) -> None:
@@ -1085,6 +1096,9 @@ def write_search_index(df: pd.DataFrame, sidecar_dir: str) -> None:
             round(float(row["lat"]), 5),
             str(row.get("quality", "")).lower(),
             str(row.get("datetime_utc", "")),
+            round(float(row.get("lateral_nm", 0)), 3),
+            round(float(row.get("alt_sep_ft", 0)), 0),
+            str(row.get("quality_explanation", "")),
         ])
 
     index_path = os.path.join(sidecar_dir, "search_index.json.gz")
@@ -1219,6 +1233,22 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
     animation_js = (
         'var _animRaf = null, _animT = 0, _tooltip = null, _animSpeed = 1;\n'
         'var _trackSources = [], _fetchGen = 0, _tracksIndex = null;\n'
+        'var _focusMarker = null;\n'
+        '\n'
+        '// Drop a temporary marker at a focused event so it is visible even when\n'
+        '// the PMTiles dot is hidden by the quality/altitude filters (e.g. a green\n'
+        '// event reached via search while "show low-quality" is off). Cleared by\n'
+        '// clearAnimation(), so it does not disturb the global filter state.\n'
+        'function setFocusMarker(lon, lat, quality) {\n'
+        '  if (_focusMarker) { _focusMarker.remove(); _focusMarker = null; }\n'
+        '  if (lon == null || lat == null) return;\n'
+        '  var color = QUALITY_COLORS[quality] || DEFAULT_COLOR;\n'
+        '  var el = document.createElement("div");\n'
+        '  el.style.cssText = "width:16px;height:16px;border-radius:50%;background:"\n'
+        '    + color + ";border:2px solid #fff;box-shadow:0 0 6px rgba(0,0,0,0.6);";\n'
+        '  _focusMarker = new maplibregl.Marker({element: el})\n'
+        '    .setLngLat([Number(lon), Number(lat)]).addTo(map);\n'
+        '}\n'
         '\n'
         'function clearAnimation() {\n'
         '  _fetchGen++;\n'
@@ -1228,6 +1258,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    if (map.getSource(id)) map.removeSource(id);\n'
         '  });\n'
         '  _trackSources = [];\n'
+        '  if (_focusMarker) { _focusMarker.remove(); _focusMarker = null; }\n'
         '  if (_tooltip) _tooltip.style.display = "none";\n'
         '}\n'
         '\n'
@@ -1414,6 +1445,9 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         # On click: ensure index is loaded, then Range-fetch this event's track line
         'function startAnimation(props) {\n'
         '  clearAnimation();\n'
+        '  // After clearAnimation() (which removes the previous marker) so the\n'
+        '  // focus marker survives; shows the event even when its dot is filtered.\n'
+        '  setFocusMarker(props.lon, props.lat, props.quality);\n'
         '  _animSpeed = 1;\n'
         '  var baseHtml = props.html || "";\n'
         '  if (baseHtml) showTooltip(baseHtml);\n'
@@ -1501,8 +1535,12 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '  // (stored datetime_utc may or may not already carry the suffix).\n'
         '  var dt = String(ev.datetime_utc || "").replace("T", " ")\n'
         '    .replace(/\\s*UTC\\s*$/i, "") + " UTC";\n'
+        '  var lat = (ev.lateral_nm != null ? Number(ev.lateral_nm).toFixed(3) : "?");\n'
+        '  var alt = (ev.alt_sep_ft != null ? Number(ev.alt_sep_ft).toFixed(0) : "?");\n'
+        '  var expl = ev.quality_explanation ? " (" + ev.quality_explanation + ")" : "";\n'
         '  return dt + "<br><b>" + (ev.flight1 || "?") + " / " + (ev.flight2 || "?")\n'
-        '    + "</b><br><br>Quality: " + dot + (ev.quality || "?");\n'
+        '    + "</b><br><br>Quality: " + dot + (ev.quality || "?") + expl\n'
+        '    + "<br><br>Min lateral sep: " + lat + " nm | Min alt sep: " + alt + " ft";\n'
         '}\n'
         '\n'
         '// Single focus path shared by search results and dot clicks: fly to\n'
@@ -1534,9 +1572,18 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    box.style.display = "block";\n'
         '    return;\n'
         '  }\n'
-        '  var html = \'<div style="color:#aaa;margin-bottom:4px">\' + matches.length\n'
-        '    + \' event\' + (matches.length === 1 ? "" : "s") + \'</div>\';\n'
-        '  matches.forEach(function(ev) {\n'
+        '  // Sort newest-first (datetime_utc is ISO 8601, so lexical == chrono),\n'
+        '  // then cap the rendered rows so a broad query cannot build a huge DOM.\n'
+        '  var MAX_RESULTS = 200;\n'
+        '  var total = matches.length;\n'
+        '  var sorted = matches.slice().sort(function(a, b) {\n'
+        '    return String(b.datetime_utc || "").localeCompare(String(a.datetime_utc || ""));\n'
+        '  });\n'
+        '  var shown = sorted.slice(0, MAX_RESULTS);\n'
+        '  var html = \'<div style="color:#aaa;margin-bottom:4px">\'\n'
+        '    + (total > shown.length ? "showing " + shown.length + " of " + total : total)\n'
+        '    + \' event\' + (total === 1 ? "" : "s") + \'</div>\';\n'
+        '  shown.forEach(function(ev) {\n'
         '    var color = QUALITY_COLORS[ev.quality] || DEFAULT_COLOR;\n'
         '    var dot = \'<span style="display:inline-block;width:8px;height:8px;\'\n'
         '      + \'border-radius:50%;background:\' + color + \';margin-right:5px;\'\n'
@@ -1552,14 +1599,14 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '  box.style.display = "block";\n'
         '  // event_id -> event object, so a click can focus without re-searching.\n'
         '  var byId = {};\n'
-        '  matches.forEach(function(ev) { byId[String(ev.event_id)] = ev; });\n'
+        '  shown.forEach(function(ev) { byId[String(ev.event_id)] = ev; });\n'
         '  box.querySelectorAll(".tail-result").forEach(function(el) {\n'
         '    el.addEventListener("click", function() {\n'
         '      var ev = byId[el.getAttribute("data-eid")];\n'
         '      if (!ev) return;\n'
         '      focusEvent({event_id: ev.event_id, flight1: ev.flight1,\n'
         '                  flight2: ev.flight2, lon: ev.lon, lat: ev.lat,\n'
-        '                  html: _searchTooltipHtml(ev)}, true);\n'
+        '                  quality: ev.quality, html: _searchTooltipHtml(ev)}, true);\n'
         '    });\n'
         '  });\n'
         '}\n'
@@ -1569,6 +1616,11 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '  query = (query != null ? query : (input ? input.value : "")).trim();\n'
         '  var box = document.getElementById("tail-results");\n'
         '  if (!query) { if (box) box.style.display = "none"; clearAnimation(); return; }\n'
+        '  // A 1-char query (e.g. "N") matches nearly every tail; require >=2.\n'
+        '  if (query.length < 2) {\n'
+        '    if (box) { box.innerHTML = \'<div style="color:#aaa">Enter at least 2 characters.</div>\'; box.style.display = "block"; }\n'
+        '    return;\n'
+        '  }\n'
         '  if (box) { box.innerHTML = \'<div style="color:#aaa">Searching\\u2026</div>\'; box.style.display = "block"; }\n'
         '  var q = query.toUpperCase();\n'
         '  loadSearchIndex().then(function(idx) {\n'
@@ -1589,7 +1641,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    if (!ev) { console.warn("no event", eid); return; }\n'
         '    focusEvent({event_id: ev.event_id, flight1: ev.flight1,\n'
         '                flight2: ev.flight2, lon: ev.lon, lat: ev.lat,\n'
-        '                html: _searchTooltipHtml(ev)}, true);\n'
+        '                quality: ev.quality, html: _searchTooltipHtml(ev)}, true);\n'
         '  }).catch(function() {});\n'
         '}\n'
         '\n'
