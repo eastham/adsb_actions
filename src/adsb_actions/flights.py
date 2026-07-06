@@ -15,7 +15,9 @@ logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
 LOGGER = Logger()
 
-MIN_PROX_FRESH = 10  # seconds; older locations not evaluated in proximity checks
+# Empirically, 5s seems better for global analysis, 10s for more detailed work
+# to avoid dropping anything at all
+MIN_PROX_FRESH = 5  # seconds; older locations not evaluated in proximity checks
 
 class Flights:
     """all Flight objects in the system, indexed by flight_id"""
