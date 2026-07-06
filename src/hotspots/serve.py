@@ -4,7 +4,9 @@ Usage: python src/hotspots/serve.py [directory] [port]
 """
 import http.server
 import os
+import signal
 import sys
+import threading
 
 
 class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -90,7 +92,16 @@ if __name__ == "__main__":
     os.chdir(directory)
     print(f"Serving {os.getcwd()} on http://localhost:{port}")
     server = http.server.HTTPServer(("", port), RangeHTTPRequestHandler)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
+
+    # Explicitly shut down on SIGINT/SIGTERM. Relying on KeyboardInterrupt
+    # bubbling out of serve_forever() is unreliable: a Ctrl-C arriving while
+    # blocked in the poll loop often gets lost, so the first ^C does nothing.
+    # A handler that calls shutdown() from another thread stops it cleanly.
+    def _stop(signum, frame):
         print("\nStopped.")
+        threading.Thread(target=server.shutdown, daemon=True).start()
+
+    signal.signal(signal.SIGINT, _stop)
+    signal.signal(signal.SIGTERM, _stop)
+
+    server.serve_forever()
