@@ -208,22 +208,37 @@ SPARSE_DATA_THRESHOLD = 0.10  # require 20% real data during LOS
 FORMATION_PROXIMITY_NM = 0.6   # distance threshold for sustained-proximity check
 FORMATION_RATIO_THRESHOLD = 0.5  # fraction of co-observed samples within threshold to flag formation
 FORMATION_MATCH_TOLERANCE_S = 5  # max timestamp gap to consider two samples co-observed
-FORMATION_MAX_INITIAL_SEPARATION_NM = 1.0  # if aircraft start farther apart than this, can't be formation
+FORMATION_MAX_INITIAL_SEPARATION_NM = 1  # if aircraft start farther apart than this, can't be formation
+# How far before CPA the map/animation window begins (see los_detector._extract_track).
+# The initial-separation heuristic is clamped to this same window so the "started
+# separated" label never references a moment the map doesn't show.
+PRE_CPA_WINDOW_S = 120
 
-def _initial_separation_nm(locs1, locs2, event_start, match_tolerance_s):
-    """Lateral distance (nm) between the two flights at the start of the event.
-    Picks the real report from each flight nearest to event_start (within
-    match_tolerance_s on both sides) and returns the distance between them.
-    Returns None if no co-observed pair exists near event_start."""
+def _initial_separation_nm(locs1, locs2, match_tolerance_s, window_start=None):
+    """Lateral distance (nm) between the two flights at the start of their
+    co-observed tracks (not at LOS onset, when they are already close).
+
+    The track-overlap start is the later of the two first-report times; before
+    it, only one flight is being observed.  When window_start is given, the
+    measurement point is clamped forward to it, so the separation is only ever
+    read from within the window the map displays.  Picks the real report from
+    each flight nearest that time (within match_tolerance_s on both sides) and
+    returns the distance between them.  Returns None if no co-observed pair
+    exists near the measurement point."""
     if not locs1 or not locs2:
         return None
+
+    # Start of the window where both flights are observed.
+    overlap_start = max(min(l.now for l in locs1), min(l.now for l in locs2))
+    if window_start is not None:
+        overlap_start = max(overlap_start, window_start)
 
     def nearest(locs, t):
         best = min(locs, key=lambda l: abs(l.now - t))
         return best if abs(best.now - t) <= match_tolerance_s else None
 
-    n1 = nearest(locs1, event_start)
-    n2 = nearest(locs2, event_start)
+    n1 = nearest(locs1, overlap_start)
+    n2 = nearest(locs2, overlap_start)
     if n1 is None or n2 is None:
         return None
     return n1 - n2
@@ -298,24 +313,34 @@ def calculate_event_quality(los, flight1, flight2):
     min_track_duration_min = min_track_duration / 60.0
 
     # Pre-compute initial separation for formation heuristics (D and long-duration).
-    # Formation flights are close from the start; if aircraft were > 1nm apart at
-    # event start they cannot be formation regardless of how the event unfolds.
+    # Formation flights are close from the start; if aircraft were far apart at the
+    # start of the observed window they cannot be formation regardless of how the
+    # event unfolds.  Measured at track-overlap start, NOT at los.create_time --
+    # by LOS onset the aircraft are already close, so create_time would report a
+    # small separation for everything.  Clamped to the map/animation window
+    # (cpa_time - PRE_CPA_WINDOW_S) so the "started separated" label never cites a
+    # moment the map does not draw.
     loc_history = getattr(los, 'location_history', {})
     fids = list(loc_history.keys())
     initial_sep = None
     if len(fids) == 2:
+        window_start = getattr(los, 'cpa_time', None)
+        if window_start is not None:
+            window_start -= PRE_CPA_WINDOW_S
         initial_sep = _initial_separation_nm(
             loc_history[fids[0]], loc_history[fids[1]],
-            los.create_time, FORMATION_MATCH_TOLERANCE_S)
+            FORMATION_MATCH_TOLERANCE_S, window_start=window_start)
     formation_possible = initial_sep is None or initial_sep <= FORMATION_MAX_INITIAL_SEPARATION_NM
 
     # Apply quality criteria with explanations
-    if event_duration > 60 and formation_possible:
+
+    if event_duration > 90 and formation_possible:
         reasons.append(f"long duration {event_duration_min:.1f}min - likely formation flight")
         quality = 'low'
-    elif event_duration > 60:
+    elif event_duration > 90:
         # Long but aircraft started far apart — not formation, downgrade to medium
-        reasons.append(f"long duration {event_duration_min:.1f}min but started separated")
+        reasons.append(
+            f"long duration {event_duration_min:.1f}min but started separated ({initial_sep:.1f} nm)")
         quality = 'medium'
     elif is_helicopter:
         reasons.append("helicopter involved")
