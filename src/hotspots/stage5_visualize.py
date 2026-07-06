@@ -198,8 +198,15 @@ def _airport_jump_panel_html(with_search: bool = False) -> str:
     return (
         '<div id="airport-jump-box">\n'
         '<div style="color:#ff0; text-align:center;">\n'
-        '<b><a href="https://airbornehotspots.org" style="color:inherit;">airbornehotspots.org</a></b><br/>\n'
-        'Purple: low-altitude traffic patterns <br/> Colored dots: Loss Of Separation events.  \n'
+        '<b><a href="https://airbornehotspots.org" style="color:#fff; text-decoration:none;">airbornehotspots.org</a></b>\n'
+        '<div style="height:8px;"></div>\n'
+        '<span style="color:#4a90ff;">Blue</span>/<span style="color:#b060f0;">purple</span>: low-altitude traffic patterns\n'
+        '<div style="height:8px;"></div>\n'
+        'Colored dots'
+        '<span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#ff0; margin-left:4px; vertical-align:middle;"></span>'
+        '<span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#ffa500; margin-left:2px; vertical-align:middle;"></span>'
+        '<span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#f0f; margin-left:2px; vertical-align:middle;"></span>'
+        ': Loss Of Separation events.  \n'
         'Zoom in and click on a dot to replay that event.</div>\n'
         '<hr style="border:0; border-top:1px solid #555; margin:8px 0;">\n'
         '<label style="display:flex; align-items:center; justify-content:center; gap:6px;">\n'
@@ -533,7 +540,7 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
     geojson_json = json.dumps(geojson)
 
     alt_bands = set(df["alt_band"].dropna().unique().tolist()) if "alt_band" in df.columns else set()
-    all_bands_ordered = ["0k-3k", "3k-6k", "6k-10k"]
+    all_bands_ordered = ["0k-3k", "3k-6k", "6k-10k", "10k-18k"]
     # Extra bands not in canonical list (shouldn't normally occur)
     extra_bands = sorted(b for b in alt_bands if b not in all_bands_ordered)
 
@@ -600,7 +607,7 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
 
     # The JS animation code as a separate string to avoid f-string brace issues
     animation_js = (
-        'var _animRaf = null, _animT = 0, _tooltip = null, _animSpeed = 1;\n'
+        'var _animRaf = null, _animT = 0, _tooltip = null, _animSpeed = 1, _paused = false;\n'
         'var _trackSources = [], _fetchGen = 0;\n'
         '\n'
         'function clearAnimation() {\n'
@@ -628,6 +635,13 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '    var controls = document.createElement("div");\n'
         '    controls.style.cssText = "margin-top:8px;text-align:center;display:flex;justify-content:center;gap:12px";\n'
         '    var btnStyle = "cursor:pointer;font-size:18px;user-select:none;line-height:1";\n'
+        '    var lblStyle = "font-size:12px;color:#ccc;user-select:none;align-self:center";\n'
+        '    var slowerLbl = document.createElement("span");\n'
+        '    slowerLbl.textContent = "slower";\n'
+        '    slowerLbl.style.cssText = lblStyle;\n'
+        '    var fasterLbl = document.createElement("span");\n'
+        '    fasterLbl.textContent = "faster";\n'
+        '    fasterLbl.style.cssText = lblStyle;\n'
         '    var slower = document.createElement("span");\n'
         '    slower.textContent = "\\u23EA";\n'
         '    slower.title = "Slower";\n'
@@ -637,15 +651,17 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '    pauseBtn.textContent = "\\u23F8";\n'
         '    pauseBtn.title = "Pause/Resume";\n'
         '    pauseBtn.style.cssText = btnStyle;\n'
-        '    pauseBtn.onclick = function() { _animSpeed = _animSpeed ? 0 : 1; };\n'
+        '    pauseBtn.onclick = function() { _paused = !_paused; };\n'
         '    var faster = document.createElement("span");\n'
         '    faster.textContent = "\\u23E9";\n'
         '    faster.title = "Faster";\n'
         '    faster.style.cssText = btnStyle;\n'
         '    faster.onclick = function() { _animSpeed = Math.min(3, (_animSpeed || 1) * 2); };\n'
+        '    controls.appendChild(slowerLbl);\n'
         '    controls.appendChild(slower);\n'
         '    controls.appendChild(pauseBtn);\n'
         '    controls.appendChild(faster);\n'
+        '    controls.appendChild(fasterLbl);\n'
         '    _tooltip.appendChild(controls);\n'
         '    document.body.appendChild(_tooltip);\n'
         '  }\n'
@@ -656,6 +672,7 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         'function startAnimation(props) {\n'
         '  clearAnimation();\n'
         '  _animSpeed = 1;\n'
+        '  _paused = false;\n'
         '  var t1 = props.track1 ? JSON.parse(props.track1) : [];\n'
         '  var t2 = props.track2 ? JSON.parse(props.track2) : [];\n'
         '  if (!t1.length && !t2.length) return;\n'
@@ -753,7 +770,7 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
         '    });\n'
         '  }\n'
         '  function frame() {\n'
-        '    _animT += 0.5 * _animSpeed;\n'
+        '    if (!_paused) _animT += 0.5 * _animSpeed;\n'
         '    if (_animT > maxT + 5) {\n'
         '      // Both tracks finished — reset everything before restarting\n'
         '      _animT = minT;\n'
@@ -1179,7 +1196,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         pmtiles_rel = os.path.basename(pmtiles_path)
         sidecar_rel = os.path.basename(sidecar_dir)
 
-    all_bands_ordered = ["0k-3k", "3k-6k", "6k-10k"]
+    all_bands_ordered = ["0k-3k", "3k-6k", "6k-10k", "10k-18k"]
     alt_bands_set = set(alt_bands)
     extra_bands = sorted(b for b in alt_bands_set if b not in all_bands_ordered)
 
@@ -1231,7 +1248,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
 
     # Animation JS: index fetched once, then per-click Range request for just that event's track line.
     animation_js = (
-        'var _animRaf = null, _animT = 0, _tooltip = null, _animSpeed = 1;\n'
+        'var _animRaf = null, _animT = 0, _tooltip = null, _animSpeed = 1, _paused = false;\n'
         'var _trackSources = [], _fetchGen = 0, _tracksIndex = null;\n'
         'var _focusMarker = null;\n'
         '\n'
@@ -1276,6 +1293,13 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    var controls = document.createElement("div");\n'
         '    controls.style.cssText = "margin-top:8px;text-align:center;display:flex;justify-content:center;gap:12px";\n'
         '    var btnStyle = "cursor:pointer;font-size:18px;user-select:none;line-height:1";\n'
+        '    var lblStyle = "font-size:12px;color:#ccc;user-select:none;align-self:center";\n'
+        '    var slowerLbl = document.createElement("span");\n'
+        '    slowerLbl.textContent = "slower";\n'
+        '    slowerLbl.style.cssText = lblStyle;\n'
+        '    var fasterLbl = document.createElement("span");\n'
+        '    fasterLbl.textContent = "faster";\n'
+        '    fasterLbl.style.cssText = lblStyle;\n'
         '    var slower = document.createElement("span");\n'
         '    slower.textContent = "\\u23EA";\n'
         '    slower.title = "Slower";\n'
@@ -1285,15 +1309,17 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    pauseBtn.textContent = "\\u23F8";\n'
         '    pauseBtn.title = "Pause/Resume";\n'
         '    pauseBtn.style.cssText = btnStyle;\n'
-        '    pauseBtn.onclick = function() { _animSpeed = _animSpeed ? 0 : 1; };\n'
+        '    pauseBtn.onclick = function() { _paused = !_paused; };\n'
         '    var faster = document.createElement("span");\n'
         '    faster.textContent = "\\u23E9";\n'
         '    faster.title = "Faster";\n'
         '    faster.style.cssText = btnStyle;\n'
         '    faster.onclick = function() { _animSpeed = Math.min(3, (_animSpeed || 1) * 2); };\n'
+        '    controls.appendChild(slowerLbl);\n'
         '    controls.appendChild(slower);\n'
         '    controls.appendChild(pauseBtn);\n'
         '    controls.appendChild(faster);\n'
+        '    controls.appendChild(fasterLbl);\n'
         '    _tooltip.appendChild(controls);\n'
         '    document.body.appendChild(_tooltip);\n'
         '  }\n'
@@ -1391,7 +1417,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '    });\n'
         '  }\n'
         '  function frame() {\n'
-        '    _animT += 0.5 * _animSpeed;\n'
+        '    if (!_paused) _animT += 0.5 * _animSpeed;\n'
         '    if (_animT > maxT + 5) { _animT = minT; resetTracks(); }\n'
         '    tracks.forEach(function(track) {\n'
         '      var lastCoord = null, lastAlt = 0;\n'
@@ -1449,6 +1475,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '  // focus marker survives; shows the event even when its dot is filtered.\n'
         '  setFocusMarker(props.lon, props.lat, props.quality);\n'
         '  _animSpeed = 1;\n'
+        '  _paused = false;\n'
         '  var baseHtml = props.html || "";\n'
         '  if (baseHtml) showTooltip(baseHtml);\n'
         '  var gen = _fetchGen;\n'

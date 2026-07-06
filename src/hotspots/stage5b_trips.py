@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Stage 5b: Extract traffic trips from grid cell shards for animated visualization.
+CURRENTLY UNUSED, part of adeck.gl prototype.
 
 Reads one or more grid cell shard GZs, reconstructs aircraft tracks, thins them,
 normalizes timestamps to seconds-since-midnight, and writes a trips.json for use
