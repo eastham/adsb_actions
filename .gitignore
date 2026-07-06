@@ -66,6 +66,10 @@ local/
 # local test sandbox for the v2 CLI (copies of cell data; never commit)
 .test_data/
 
+# local stage-3 experiment root (copies of real grid shards; on local disk so
+# it's off the network mount and never overwrites prod data/v2). Never commit.
+data_local/
+
 # v2 pipeline test fixtures are real ADS-B shards (.gz) — keep them despite the
 # global *.gz ignore above, so the end-to-end pipeline tests can run from a clone.
 !tests/fixtures/v2_pipeline/

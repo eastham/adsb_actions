@@ -31,17 +31,18 @@ deploy:
   maps_dir: data_local/v2_exp/maps
 
 runtime:
-  workers: 4                  # local disk, no mount contention — parallelize freely
-  alt_ceiling_ft: 5000
+  workers: 1                  # single-cell so don't incur process pool overhead, which is significant
+  alt_ceiling_ft: 18000
   remount_cmd: ""             # local disk; no remount needed
   retry_attempts: 2
   retry_pause_s: 1
 
 dates:
   default_start: "20250601"   # the full seeded WVI window
-  default_end:   "20250831"
+  default_end:   "20250615"
 
 regions:
+  southbay: {lat_min: 37, lat_max: 38, lon_min: -122, lon_max: -121}
   wvi:   {lat_min: 36, lat_max: 37, lon_min: -122, lon_max: -121}  # the seeded cell
   conus: {lat_min: 24, lat_max: 50, lon_min: -125, lon_max: -65}
 

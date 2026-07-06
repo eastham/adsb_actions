@@ -227,6 +227,7 @@ def run_stage5(
     airport_quality: dict | None = None,
     html_only: bool = False,
     foreflight_output: str | None = None,
+    foreflight_name: str | None = None,
     print_summary: bool = True,
 ) -> None:
     """Generate map HTML (self-contained or PMTiles) from a DataFrame of events.
@@ -326,6 +327,8 @@ def run_stage5(
                 output_zip=Path(foreflight_output),
                 traffic_tile_dir=local_tiles,
                 events_df=df,
+                # None → export_pack's own "CONUS Safety Layers" default
+                **({"pack_name": foreflight_name} if foreflight_name else {}),
             )
         except Exception as e:
             print(f"  [WARN] ForeFlight export failed: {e}")
