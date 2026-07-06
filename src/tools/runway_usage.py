@@ -33,6 +33,7 @@ matching is done in true degrees; the ident is only a label.
 
 import logging
 import math
+from functools import lru_cache
 
 try:
     from src.tools.generate_airport_config import load_runways
@@ -127,6 +128,7 @@ def _normalize_runway_ident(ident):
     return f"{num:02d}"
 
 
+@lru_cache(maxsize=None)
 def build_runway_boxes(icao):
     """Return approach-box descriptors for each runway end of an airport.
 
@@ -139,6 +141,10 @@ def build_runway_boxes(icao):
     with no threshold coordinates, and ends with no usable heading are skipped.
     When `_degT` is blank the heading is derived from the two threshold
     coordinates (still true). Deduplicated by normalized ident.
+
+    Memoized: OurAirports data is static within a process, and v2 scores the
+    same airports across many dates. Callers MUST treat the returned list (and
+    its dicts) as read-only, since it is shared across calls.
     """
     try:
         rows = load_runways(icao)
