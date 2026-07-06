@@ -19,7 +19,7 @@ LOGGER = Logger()
 MAX_INTERPOLATE_SECS = 60 # max seconds that we'll interpolate over.
 EXPIRE_TIME = 5 # seconds to keep stale position reports around for interpolation.
 DEFAULT_MIN_ALTITUDE = 0  # default minimum altitude for resampling
-DEFAULT_MAX_ALTITUDE = 12000  # default maximum altitude for resampling
+DEFAULT_MAX_ALTITUDE = 18000  # default maximum altitude for resampling
 
 # Trace sanity thresholds
 MAX_IMPLIED_SPEED_KTS = 600  # implied speed above this = position teleport
@@ -40,7 +40,7 @@ class Resampler:
             latlongrings: Optional list of [radius_nm, lat, lon] tuples for
                 circular spatial filtering. Points within any circle are kept.
             min_altitude: Minimum altitude in feet MSL (default: 0)
-            max_altitude: Maximum altitude in feet MSL (default: 10000)
+            max_altitude: Maximum altitude in feet MSL (default: 18000)
         """
         # Mapping from flight_id to a list of location samples.
         # Resampled locations are not added here.
