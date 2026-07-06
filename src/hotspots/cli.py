@@ -251,7 +251,9 @@ def cmd_run(config, args) -> None:
                      f"({'PMTiles' if pmtiles else 'self-contained HTML'})"))
         runners.run_stage5(df, str(out_html), pmtiles=pmtiles, zoom=args.zoom,
                            traffic_tile_dir=traffic, html_only=args.html_only,
-                           foreflight_output=ff_out, print_summary=False,
+                           foreflight_output=ff_out,
+                           foreflight_name=config.foreflight_pack_name,
+                           print_summary=False,
                            airport_quality=airport_quality,
                            asset_stem=args.asset_stem)
         print(_ok(f"map written: {out_html.name}"))
