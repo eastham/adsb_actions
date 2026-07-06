@@ -53,9 +53,10 @@ PROX_ALT_FT = 400
 PROX_LAT_NM = 0.3
 
 # MSL altitude bands in feet. Upper bound matches the resampler's
-# DEFAULT_MAX_ALTITUDE (10,000 ft) — events above that are dropped upstream,
+# DEFAULT_MAX_ALTITUDE (18,000 ft) — events above that are dropped upstream,
 # so higher bands would always be empty.
-ALT_BANDS = [(0, 3000, "0k-3k"), (3000, 6000, "3k-6k"), (6000, 10001, "6k-10k")]
+ALT_BANDS = [(0, 3000, "0k-3k"), (3000, 6000, "3k-6k"),
+             (6000, 10000, "6k-10k"), (10000, 18001, "10k-18k")]
 
 # Spatial altitude filter parameters:
 # Events within AIRPORT_EXCLUSION_RADIUS_NM of an airport are required to be
@@ -76,7 +77,7 @@ def alt_band_label(alt_ft) -> str:
     for lo, hi, label in ALT_BANDS:
         if lo <= alt < hi:
             return label
-    return "10k+"
+    return "18k+"
 
 
 def _dist_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -134,9 +135,6 @@ def _load_airports_in_cell(lat_min: int, lat_max: int,
 
 def _make_yaml_content() -> str:
     """Generate minimal YAML config for grid cell proximity analysis.
-
-    No min_alt here — altitude filtering is done post-detection in
-    LOSDetector._apply_altitude_filter() using per-airport spatial logic.
     """
     return (
         "rules:\n"
@@ -201,20 +199,21 @@ class LOSDetector:
         Extract resampled track data for one flight around the CPA time window.
 
         Queries LOS.resampler.locations_by_time (includes interpolated points)
-        for the window [cpa_time - 120s, cpa_time + 60s], filtering to locations
-        whose .flight matches flight_id.
+        for the window [cpa_time - PRE_CPA_WINDOW_S, cpa_time + 60s], filtering to
+        locations whose .flight matches flight_id.  The initial-separation
+        heuristic (calculate_event_quality) is clamped to the same window start.
 
         Returns a JSON array string of [timestamp, lat, lon, alt_ft] tuples,
         or "" if no data is available.
         """
-        from applications.airport_monitor.los import LOS
+        from applications.airport_monitor.los import LOS, PRE_CPA_WINDOW_S
         import json as _json
 
         resampler = LOS.resampler
         if resampler is None:
             return ""
 
-        t_start = int(cpa_time) - 120
+        t_start = int(cpa_time) - PRE_CPA_WINDOW_S
         t_end = int(cpa_time) + 60
         points = []
         lbt = resampler.locations_by_time
