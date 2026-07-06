@@ -1,0 +1,60 @@
+# EXPERIMENT config — for iterating on the stage-3 LOS detector against the FULL
+# 3-month WVI data, WITHOUT overwriting production events.
+#
+# data_root is data_local/v2_exp/ on LOCAL disk (NOT the network mount, and NOT
+# the real data/v2). Its grid/ was seeded with copies of the real WVI (36_-122)
+# shards for 20250601–20250831; events/regional/maps are written fresh here. So
+# `run analyze --region wvi` re-runs LOS detection on real data and lands the
+# output in the experiment root — prod data/v2/events is never touched.
+#
+# Typical loop (edit los_detector.py / los.py, then):
+#   alias v2x='python src/hotspots/cli.py --config src/hotspots/pipeline_config_exp.yaml'
+#   v2x run analyze --region wvi                    # full 3 months, ~minutes
+#   python src/tools/compare_events.py \            # diff vs prod WVI events
+#       --region wvi --start-date 20250601 --end-date 20250831
+#
+# Reseed the grid if the base data changes (from repo root):
+#   for d in $(ls data/v2/grid); do \
+#     s=data/v2/grid/$d/${d}_36_-122.gz; \
+#     [ "$d" \> 20250531 ] && [ "$d" \< 20250901 ] && [ -f "$s" ] && \
+#     mkdir -p data_local/v2_exp/grid/$d && cp -p "$s" data_local/v2_exp/grid/$d/; \
+#   done
+
+paths:
+  data_root: data_local/v2_exp
+  conus_dir: data
+  traffic_tiles_local: ../../../tiles/traffic
+  traffic_tiles_url: https://airbornehotspots.org/tiles
+
+deploy:
+  remote: hotspots-initial:hotspots
+  maps_dir: data_local/v2_exp/maps
+
+runtime:
+  workers: 4                  # local disk, no mount contention — parallelize freely
+  alt_ceiling_ft: 5000
+  remount_cmd: ""             # local disk; no remount needed
+  retry_attempts: 2
+  retry_pause_s: 1
+
+dates:
+  default_start: "20250601"   # the full seeded WVI window
+  default_end:   "20250831"
+
+regions:
+  wvi:   {lat_min: 36, lat_max: 37, lon_min: -122, lon_max: -121}  # the seeded cell
+  conus: {lat_min: 24, lat_max: 50, lon_min: -125, lon_max: -65}
+
+profiles:
+  visualize:
+    stages: [5]
+    pmtiles: false
+  aggregate-viz:
+    stages: [4, 5]
+    pmtiles: false
+  analyze:
+    stages: [3, 4, 5]
+    pmtiles: false
+  full:
+    stages: [2, 3, 4, 5]
+    pmtiles: false

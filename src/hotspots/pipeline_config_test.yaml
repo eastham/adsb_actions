@@ -1,8 +1,27 @@
-# TEST config — points data_root at .test_data/v2/ on LOCAL disk (a sandbox
-# seeded with copies of just the WVI cell) so verification runs never touch the
-# real data/v2/ outputs AND aren't subject to the network-mount drops that hit
-# data/ (which is a symlink to the network share).
+# SMOKE-TEST config (tier 1 of 3) — points data_root at .test_data/v2/ on LOCAL
+# disk: a sandbox seeded with copies of just the WVI cell (36_-122) for 2 days.
+# Runs here never touch the real data/v2 and aren't subject to the network-mount
+# drops that hit data/ (a symlink to the network share).
+#
+# The three testing tiers, fastest → most real:
+#   1. SMOKE   this file            .test_data/v2   isolated, seconds — "plumbing OK?"
+#   2. LOCAL   pipeline_config_local.yaml  real data/v2, 1 worker, small regions
+#   3. PROD    pipeline_config.yaml        real data/v2, 8 workers, full CONUS
+#
+# Smoke-test scope: the fast, read-mostly paths — status + aggregate-viz/visualize
+# on the seeded WVI events. (Full `run analyze` works too but re-runs LOS
+# detection ~8s; the automated pytest suite already covers analyze end-to-end
+# with its own isolated temp configs, so it's not needed here.)
+#
+# If .test_data/v2 is missing/stale, reseed it from the committed fixtures:
+#   for d in 20250601 20250602; do
+#     mkdir -p .test_data/v2/grid/$d .test_data/v2/events/$d
+#     cp tests/fixtures/v2_pipeline/grid/$d/${d}_36_-122.gz .test_data/v2/grid/$d/
+#   done
+#   # (events are produced by `v2t run analyze`, or copy from data/v2/events/)
+#
 # Pass via: cli.py --config src/hotspots/pipeline_config_test.yaml ...
+#   alias v2t='python src/hotspots/cli.py --config src/hotspots/pipeline_config_test.yaml'
 
 paths:
   data_root: .test_data/v2
@@ -17,16 +36,16 @@ deploy:
 runtime:
   workers: 1
   alt_ceiling_ft: 18000
-  remount_cmd: ""
+  remount_cmd: ""              # sandbox is on local disk; no remount needed
   retry_attempts: 2
   retry_pause_s: 1
 
 dates:
-  default_start: "20250601"
+  default_start: "20250601"    # the 2 days seeded in the sandbox
   default_end:   "20250602"
 
 regions:
-  wvi:   {lat_min: 36, lat_max: 37, lon_min: -122, lon_max: -121}
+  wvi:   {lat_min: 36, lat_max: 37, lon_min: -122, lon_max: -121}  # the seeded cell
   conus: {lat_min: 24, lat_max: 50, lon_min: -125, lon_max: -65}
 
 profiles:
