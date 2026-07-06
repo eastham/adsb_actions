@@ -52,13 +52,15 @@ from tools.data_quality import (
     analyze_shard_quality,
     aggregate_per_date_results,
 )
+from tools.runway_usage import build_runway_boxes
 from tools.generate_airport_config import AIRPORTS_URL, download_with_cache
 
 logger = logging.getLogger(__name__)
 
-V2_GRID_DIR = Path("data/v2/grid")
-V2_AQ_DIR = Path("data/v2/aq")           # per-day raw scores live here
-DEFAULT_OUTPUT = Path("data/v2/airport_quality.json")
+# Paths come from hotspots.config (single source of truth; honors
+# $ADSB_V2_DATA_ROOT so a test sandbox / --config can redirect them).
+from hotspots.config import GRID_DIR as V2_GRID_DIR, AQ_DIR as V2_AQ_DIR, DATA_ROOT
+DEFAULT_OUTPUT = DATA_ROOT / "airport_quality.json"
 
 NM_PER_DEG_LAT = 60.0
 
@@ -246,6 +248,7 @@ def _compute_one_date(grid_dir: Path, airports: dict, airport_to_cells: dict,
                 airport_lat=info["lat"],
                 airport_lon=info["lon"],
                 records=records,
+                runway_boxes=build_runway_boxes(icao),
             )
             if verbose:
                 logger.info(f"  {icao} {date_tag}: {per_date}")
