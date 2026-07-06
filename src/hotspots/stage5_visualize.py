@@ -198,7 +198,7 @@ def _airport_jump_panel_html(with_search: bool = False) -> str:
     return (
         '<div id="airport-jump-box">\n'
         '<div style="color:#ff0; text-align:center;">\n'
-        '<b><a href="https://airbornehotspots.org" style="color:#fff; text-decoration:none;">airbornehotspots.org</a></b>\n'
+        '<b><a href="https://airbornehotspots.org" style="color:#fff; text-decoration:none; font-size:1.5em;">airbornehotspots.org</a></b>\n'
         '<div style="height:8px;"></div>\n'
         '<span style="color:#4a90ff;">Blue</span>/<span style="color:#b060f0;">purple</span>: low-altitude traffic patterns\n'
         '<div style="height:8px;"></div>\n'
