@@ -14,8 +14,10 @@ from pathlib import Path
 
 try:
     from src.tools.busyness import read_shard_records, parse_date_from_shard
+    from src.tools.runway_usage import build_runway_boxes, runway_votes_for_track
 except ImportError:
     from busyness import read_shard_records, parse_date_from_shard
+    from runway_usage import build_runway_boxes, runway_votes_for_track
 
 logger = logging.getLogger(__name__)
 
@@ -58,13 +60,31 @@ def _fast_distance_nm(lat1, lon1, lat2, lon2):
     return dist_deg * NM_PER_DEG_LAT
 
 
+def _summarize_runway_usage(runway_counts):
+    """Turn {ident: count} into a list of {"runway", "pct"} sorted by pct desc.
+
+    Percentages are whole numbers over the total votes; runways with zero
+    votes are already absent. Returns [] when there are no votes.
+    """
+    total = sum(runway_counts.values())
+    if total == 0:
+        return []
+    usage = [{"runway": ident, "pct": round(100 * n / total)}
+             for ident, n in runway_counts.items()]
+    usage.sort(key=lambda u: u["pct"], reverse=True)
+    return usage
+
+
 def analyze_shard_quality(shard_gz: Path, field_elev: int = 0,
                           airport_lat: float = 0.0,
                           airport_lon: float = 0.0,
-                          records: list[dict] | None = None) -> dict | None:
+                          records: list[dict] | None = None,
+                          runway_boxes: list | None = None) -> dict | None:
     """Analyze data quality metrics from a single gzipped JSONL shard.
 
     If records is provided, uses those instead of reading from disk.
+    If runway_boxes (from build_runway_boxes) is provided, each scored approach
+    also votes for the runway whose approach box/centerline it lined up with.
     """
     low_alt_min = field_elev + LOW_ALT_MIN_AGL
     low_alt_max = field_elev + LOW_ALT_MAX_AGL
@@ -91,6 +111,7 @@ def analyze_shard_quality(shard_gz: Path, field_elev: int = 0,
     lost = 0
     through = 0
     all_gaps = []
+    runway_counts: dict[str, int] = defaultdict(int)
 
     for hex_id, pts in by_hex.items():
         if len(pts) < 3:
@@ -129,6 +150,15 @@ def analyze_shard_quality(shard_gz: Path, field_elev: int = 0,
         reached_surface = False
         ring_transitions = 0
         prev_inside: bool | None = None
+        # Low, in-ring points fed to runway detection, ordered by time as
+        # (now, lat, lon). We keep everything at or below the corridor top
+        # (≤1500 AGL) inside the ring — pattern altitude and below, where final
+        # happens. The approach-box geometry (extended centerline, see
+        # _approach_runway) is what actually isolates final from downwind and
+        # base; it doesn't need an altitude floor. Timestamps are kept so
+        # runway_votes_for_track can split repeated pattern work into separate
+        # approaches (on time gaps and on field overpasses).
+        approach_pts = []
         for p in pts:
             alt = p["alt"]
             dist = _fast_distance_nm(airport_lat, airport_lon,
@@ -144,6 +174,8 @@ def analyze_shard_quality(shard_gz: Path, field_elev: int = 0,
                 in_corridor = True
             if inside and alt < low_alt_min:
                 descended_below_floor = True
+            if inside and alt <= low_alt_max:
+                approach_pts.append((p["now"], p["lat"], p["lon"]))
             # Surface check is generous — any point ≤ surface_alt counts,
             # not just inside-ring. ADS-B sometimes drops out at very low
             # altitude inside the ring then re-acquires on the ramp at 0 ft
@@ -151,6 +183,21 @@ def analyze_shard_quality(shard_gz: Path, field_elev: int = 0,
             # would undercount completions for those cases.
             if alt <= surface_alt:
                 reached_surface = True
+
+        # Runway usage is scored independently of the coverage classification
+        # below. The classification drops several tracks that still contain
+        # perfectly good approaches: a hex that leaves and re-enters the ring
+        # (ring_transitions >= 2 → "through") because it flew multiple approaches
+        # across the day, went around, or had an ADS-B dropout past 5nm; and a
+        # low/fast pass that never descended below 800 AGL (not
+        # descended_below_floor → "through"). Each of those approaches is exactly
+        # what we want to count.
+        # runway_votes_for_track splits the low/in-ring points into individual
+        # approaches (on time gaps and field overpasses) and votes each one via
+        # the approach-box geometry, which isolates final from downwind/base.
+        if runway_boxes:
+            for ident in runway_votes_for_track(approach_pts, runway_boxes):
+                runway_counts[ident] += 1
 
         if in_corridor:
             if ring_transitions >= 2:
@@ -184,6 +231,7 @@ def analyze_shard_quality(shard_gz: Path, field_elev: int = 0,
         "p90_gap_s": p90_gap,
         "total_tracks": len(by_hex),
         "total_gaps": len(all_gaps),
+        "runway_counts": dict(runway_counts),
     }
 
 
@@ -210,13 +258,18 @@ def build_data_quality(icao: str, airport_dir: Path,
     if not shard_files:
         return None
 
+    # Load runway geometry once for the airport; empty list -> runway usage
+    # simply isn't reported (e.g. airport not in OurAirports, or offline).
+    runway_boxes = build_runway_boxes(icao)
+
     per_date_results = []
     for shard in shard_files:
         shard_records = preloaded_shards.get(shard) if preloaded_shards else None
         result = analyze_shard_quality(shard, field_elev=field_elev,
                                        airport_lat=airport_lat,
                                        airport_lon=airport_lon,
-                                       records=shard_records)
+                                       records=shard_records,
+                                       runway_boxes=runway_boxes)
         per_date_results.append(result)
 
     return aggregate_per_date_results(per_date_results, icao,
@@ -261,6 +314,13 @@ def aggregate_per_date_results(per_date: list[dict | None], icao: str,
     gap_score = _score_gap(agg_median_gap)
     overall = _overall_score(term_score, gap_score)
 
+    # Aggregate runway-usage votes across dates into a percentage breakdown.
+    runway_counts: dict[str, int] = defaultdict(int)
+    for r in all_results:
+        for ident, n in r.get("runway_counts", {}).items():
+            runway_counts[ident] += n
+    runway_usage = _summarize_runway_usage(runway_counts)
+
     result = {
         "icao": icao,
         "score": overall,
@@ -271,6 +331,8 @@ def aggregate_per_date_results(per_date: list[dict | None], icao: str,
         "numDates": num_dates,
         "totalLowAltTracks": total_low,
         "completedTracks": total_completed,
+        "runwayUsage": runway_usage,
+        "runwayCounts": dict(runway_counts),
         "details": {
             "terminationScore": term_score,
             "gapScore": gap_score,

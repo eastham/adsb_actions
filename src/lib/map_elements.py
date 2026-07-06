@@ -294,6 +294,13 @@ def build_quality_indicator_json(data_quality):
     tooltip_lines = [comp_str]
     if gap_str:
         tooltip_lines.append(gap_str)
+
+    runway_usage = data_quality.get("runwayUsage")
+    if runway_usage:
+        parts = [f"{u['runway']}: {u['pct']}%" for u in runway_usage]
+        tooltip_lines.append("Percent of landings by runway: "
+                             + ", ".join(parts))
+
     tooltip_lines.append(f"Based on {num_dates} days of data")
     tooltip = '\n'.join(tooltip_lines)  # Actual newline - will work in title attribute
 
