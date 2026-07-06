@@ -47,7 +47,8 @@ from hotspots import provenance as prov
 from hotspots import status as status_mod
 
 
-from hotspots.term import stage as _stage, ok as _ok, fail as _fail, warn as _warn, ARROW
+from hotspots.term import (stage as _stage, ok as _ok, fail as _fail,
+                           warn as _warn, rel as _rel, ARROW)
 
 
 def _parse_date(s: str) -> datetime.date:
@@ -238,13 +239,21 @@ def cmd_run(config, args) -> None:
         print(_stage(f"\nStage 4 skipped") +
               f" — loaded {len(df):,} events from {regional.name}")
 
+    # Airport-quality / runway-usage overlay. OFF by default; enabled only by
+    # --airport-quality. When on, it runs after stage 4 and before stage 5
+    # (stage 5 renders the icons), so it's not a numbered stage of its own.
+    airport_quality = _resolve_airport_quality(config, args, start, end) \
+        if args.airport_quality else None
+
     # Stage 5: visualize.
     if 5 in stages:
         print(_stage(f"\nStage 5: map "
                      f"({'PMTiles' if pmtiles else 'self-contained HTML'})"))
         runners.run_stage5(df, str(out_html), pmtiles=pmtiles, zoom=args.zoom,
                            traffic_tile_dir=traffic, html_only=args.html_only,
-                           foreflight_output=ff_out, print_summary=False)
+                           foreflight_output=ff_out, print_summary=False,
+                           airport_quality=airport_quality,
+                           asset_stem=args.asset_stem)
         print(_ok(f"map written: {out_html.name}"))
 
     # Always print actionable next-step commands.
@@ -315,16 +324,112 @@ def _print_dry_run(config, args, stages, bounds, start, end,
               f"{would_touch} existing to {touch_verb.upper()}")
 
     # Stages 4/5: single-file outputs. These runners do NOT honor --skip-existing,
-    # so an existing file is always an overwrite regardless of the flag.
+    # so an existing file is always an overwrite regardless of the flag. Show
+    # cwd-relative paths so it's clear WHERE each artifact lands.
     if 4 in stages:
-        print(f"  Stage 4: {regional.name}  {_verb(regional.exists(), skippable=False)}")
+        print(f"  Stage 4: {_rel(regional)}  {_verb(regional.exists(), skippable=False)}")
     if 5 in stages:
-        print(f"  Stage 5: {out_html.name}  {_verb(out_html.exists(), skippable=False)}")
+        print(f"  Stage 5: {_rel(out_html)}  {_verb(out_html.exists(), skippable=False)}")
         if ff_out:
-            print(f"  Stage 5 ForeFlight: {ff_out.name}  "
+            print(f"  Stage 5 ForeFlight: {_rel(ff_out)}  "
                   f"{_verb(ff_out.exists(), skippable=False)}")
 
+    # Airport-quality overlay (opt-in): report the aq/ cache state so a stale
+    # cache (predating runway-usage) is visible before the real run.
+    if getattr(args, "airport_quality", False) and 5 in stages:
+        for line in _airport_quality_status_lines(config, start, end):
+            print(line)
+
     print(_ok("\nDry run complete — re-run without --dry-run to execute."))
+
+
+def _airport_quality_status_lines(config, start, end) -> list[str]:
+    """Lines describing the aq/ per-day cache for a date range: how many
+    day-files are present, where they live (cwd-relative), and whether any
+    predate the runway-usage feature (so the overlay would omit runway stats).
+
+    Shared by the dry-run and the real aggregate path so both surface a stale
+    cache identically.
+    """
+    from tools.v2_airport_quality import aq_day_path
+    from hotspots.status import _day_file_has_runway_data
+
+    aq_dir = config.aq_dir
+    tags = [d.strftime("%Y%m%d") for d in _date_range(start, end)]
+    present = [t for t in tags if aq_day_path(aq_dir, t).exists()]
+    lines = [f"  Airport-quality cache: {len(present)}/{len(tags)} day-file(s) "
+             f"in {_rel(aq_dir)}"]
+    if not present:
+        lines.append("    " + _warn("overlay would be skipped — compute it with:"))
+        lines.append(f"      python -m tools.v2_airport_quality --mode compute "
+                     f"--start-date {tags[0]} --end-date {tags[-1]}")
+        return lines
+    stale = [t for t in present
+             if not _day_file_has_runway_data(aq_day_path(aq_dir, t))]
+    if stale:
+        head = ", ".join(stale[:5])
+        more = f" (+{len(stale)-5} more)" if len(stale) > 5 else ""
+        lines.append("    " + _warn(
+            f"{len(stale)} day-file(s) predate runway-usage ({head}{more}) — "
+            f"airport overlay will omit runway stats. Recompute with:"))
+        lines.append(f"      python -m tools.v2_airport_quality --mode compute "
+                     f"--start-date {tags[0]} --end-date {tags[-1]} --force")
+    return lines
+
+
+def _resolve_airport_quality(config, args, start, end) -> dict | None:
+    """Build the airport-quality / runway-usage dict that stage 5 renders as icons.
+
+    This only READS pre-computed scores; it never runs the hours-long compute
+    itself (that's the standalone `v2_airport_quality --mode compute` tool). It
+    resolves in this order:
+      1. --airport-quality-path FILE  → load that pre-built aggregate JSON as-is.
+      2. else aggregate the per-day score files in <aq_dir>/ for the date range:
+         - all days present  → return the full aggregate.
+         - some days present → aggregate those and warn about the missing ones.
+         - no days present   → return None (skip), printing the compute command.
+    """
+    import json
+    from tools.v2_airport_quality import aggregate_days, aq_day_path
+
+    if args.airport_quality_path:
+        aq_path = Path(args.airport_quality_path)
+        if not aq_path.exists():
+            raise SystemExit(f"--airport-quality-path not found: {aq_path}")
+        print(_stage("\nAirport-quality: loading ") + str(aq_path))
+        with open(aq_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    aq_dir = config.aq_dir
+    requested = list(_date_range(start, end))
+    present = [d for d in requested
+               if aq_day_path(aq_dir, d.strftime("%Y%m%d")).exists()]
+    missing = [d for d in requested if d not in present]
+
+    print(_stage("\nAirport-quality: aggregate cached per-day scores"))
+    if not present:
+        print(_warn(f"no per-day files in {aq_dir} for {start:%Y%m%d}–{end:%Y%m%d} "
+                    f"— skipping airport quality"))
+        print(f"  To compute them first, run:\n"
+              f"    python -m tools.v2_airport_quality --mode compute "
+              f"--start-date {start:%Y%m%d} --end-date {end:%Y%m%d} "
+              f"--workers {args.workers if args.workers else config.workers}")
+        return None
+    if missing:
+        print(_warn(f"have {len(present)} day(s), missing {len(missing)} "
+                    f"(first: {missing[0]:%Y%m%d}) — quality reflects "
+                    f"{len(present)} day(s) only"))
+
+    # Warn if any present day-file predates the runway-usage feature: the
+    # overlay will render (coverage score is unaffected) but silently omit
+    # runway stats until the cache is recomputed. Same lines the dry-run shows.
+    for line in _airport_quality_status_lines(config, start, end):
+        print(line)
+
+    quality = aggregate_days(date_range=present, aq_dir=aq_dir)
+    print(_ok(f"airport-quality: {len(quality)} airports "
+              f"from {len(present)} day(s)"))
+    return quality
 
 
 def _resolve_pmtiles(config, args) -> bool:
@@ -433,6 +538,18 @@ def build_parser(config) -> argparse.ArgumentParser:
                          "(honoring --skip-existing) without running anything")
     pr.add_argument("--html-only", action="store_true",
                     help="Stage 5: reuse existing .pmtiles/_tracks (PMTiles only)")
+    pr.add_argument("--airport-quality", action="store_true",
+                    help="Render per-airport ADS-B coverage / runway-usage icons "
+                         "on the map (aggregates cached per-day scores from the "
+                         "aq/ dir; never computes fresh — use "
+                         "`python -m tools.v2_airport_quality --mode compute`)")
+    pr.add_argument("--airport-quality-path", default=None,
+                    help="Use this pre-built airport_quality JSON verbatim "
+                         "instead of aggregating the aq/ cache")
+    pr.add_argument("--asset-stem", default=None,
+                    help="Bake a stable filename stem (e.g. 'conus') into the "
+                         "map's inlined .pmtiles/_tracks refs, for deploy_v2 "
+                         "--publish-as. PMTiles mode only")
     pr.set_defaults(func=cmd_run)
 
     # status
