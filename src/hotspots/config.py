@@ -85,6 +85,11 @@ class Config:
         return self.data_root / "maps"
 
     @property
+    def aq_dir(self) -> Path:
+        """Per-day airport-quality / runway-usage score cache."""
+        return self.data_root / "aq"
+
+    @property
     def conus_dir(self) -> Path:
         return self._resolve(self._raw["paths"]["conus_dir"])
 
@@ -217,12 +222,17 @@ EVENTS_DIR = DATA_ROOT / "events"
 REGIONAL_DIR = DATA_ROOT / "regional"
 MAPS_DIR = DATA_ROOT / "maps"
 ANIMATIONS_DIR = DATA_ROOT / "animations"
+AQ_DIR = DATA_ROOT / "aq"          # per-day airport-quality / runway-usage scores
 
 
 # Which of this module's path constants each stage module imported by name, so
 # set_data_root() can refresh their (frozen) bindings too. `from hotspots.config
 # import GRID_DIR` copies the value at import time; re-pointing the data root has
 # to write the new value back into each module that already grabbed it.
+#
+# Left side is the target module's attribute name; when it differs from this
+# module's constant, map it via _STAGE_ALIASES (e.g. v2_airport_quality names its
+# grid dir V2_GRID_DIR).
 _STAGE_MODULE_CONSTANTS = {
     "hotspots.stage2_shard": ["GRID_DIR"],
     "hotspots.stage3_analyze": ["GRID_DIR", "EVENTS_DIR", "ANIMATIONS_DIR"],
@@ -232,8 +242,12 @@ _STAGE_MODULE_CONSTANTS = {
     # pipeline.py re-imports several of these from the stage modules, so its
     # runners (run_stage4 etc.) hold their own frozen copies too.
     "hotspots.pipeline": ["GRID_DIR", "EVENTS_DIR", "REGIONAL_DIR", "MAPS_DIR"],
+    # airport-quality tool declares its own grid/aq dir constants.
+    "tools.v2_airport_quality": ["V2_GRID_DIR", "V2_AQ_DIR"],
 }
-_STAGE_ALIASES = {"V2_GRID": "GRID_DIR"}
+# target-attr-name -> this-module constant name (when they differ)
+_STAGE_ALIASES = {"V2_GRID": "GRID_DIR", "V2_GRID_DIR": "GRID_DIR",
+                  "V2_AQ_DIR": "AQ_DIR"}
 
 
 def set_data_root(root: str | os.PathLike) -> None:
@@ -247,7 +261,7 @@ def set_data_root(root: str | os.PathLike) -> None:
     """
     import sys as _sys
 
-    global DATA_ROOT, GRID_DIR, EVENTS_DIR, REGIONAL_DIR, MAPS_DIR, ANIMATIONS_DIR
+    global DATA_ROOT, GRID_DIR, EVENTS_DIR, REGIONAL_DIR, MAPS_DIR, ANIMATIONS_DIR, AQ_DIR
     p = Path(root)
     DATA_ROOT = p if p.is_absolute() else (_PROJECT_ROOT / p)
     os.environ["ADSB_V2_DATA_ROOT"] = str(DATA_ROOT)
@@ -256,6 +270,7 @@ def set_data_root(root: str | os.PathLike) -> None:
     REGIONAL_DIR = DATA_ROOT / "regional"
     MAPS_DIR = DATA_ROOT / "maps"
     ANIMATIONS_DIR = DATA_ROOT / "animations"
+    AQ_DIR = DATA_ROOT / "aq"
 
     here = _sys.modules[__name__]
     for mod_name, names in _STAGE_MODULE_CONSTANTS.items():
