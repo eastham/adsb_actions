@@ -101,6 +101,11 @@ class Config:
     def traffic_tiles_local(self) -> str | None:
         return self._raw["paths"].get("traffic_tiles_local")
 
+    @property
+    def foreflight_pack_name(self) -> str | None:
+        """Display name for the ForeFlight Content Pack (None → export_pack default)."""
+        return self._raw.get("foreflight", {}).get("pack_name")
+
     # -- region / profile lookups -------------------------------------------
     def region_bounds(self, name: str) -> RegionBounds:
         """Return (lat_min, lat_max, lon_min, lon_max) for a named region."""
