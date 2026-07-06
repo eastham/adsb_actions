@@ -338,8 +338,7 @@ def aggregate_per_date_results(per_date: list[dict | None], icao: str,
             "gapScore": gap_score,
         },
     }
-
-    logger.info(
+   logger.debug(
         f"Data quality for {icao}: score={overall}, "
         f"lost={weighted_lost_rate}, gap={agg_median_gap}s, "
         f"{num_dates} dates, {total_low} low-alt tracks"
