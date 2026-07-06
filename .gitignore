@@ -77,6 +77,7 @@ data_local/
 
 # notes
 COMMANDS
+src/hotspots/*.md
 
 # Cloudflare worker local dev cache
 examples/airbornehotspots/cloudflare-worker/.wrangler/
