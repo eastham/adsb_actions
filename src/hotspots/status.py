@@ -17,7 +17,7 @@ from pathlib import Path
 
 from hotspots import provenance as prov
 from hotspots.verify import verify_day
-from hotspots.term import stage as _stage, warn as _warn, ok as _ok
+from hotspots.term import stage as _stage, warn as _warn, ok as _ok, rel as _rel
 
 
 def _date_tags(start: str, end: str) -> list[str]:
@@ -140,7 +140,7 @@ def report(config, region_label: str, bounds, start: str, end: str) -> list[str]
         lines.append(f"  Stage 4 regional: {regional.name}  {_mb(regional)}  "
                  f"{n_events} events  ({_mtime(regional):%Y-%m-%d %H:%M})")
     else:
-        lines.append(f"  Stage 4 regional: (none) — expected {regional.name}")
+        lines.append(f"  Stage 4 regional: (none) — expected {_rel(regional)}")
 
     # --- Stage 5: map artifacts + staleness -----------------------------------
     html = config.maps_dir / f"{region_label}_{start}_{end}.html"
@@ -159,13 +159,71 @@ def report(config, region_label: str, bounds, start: str, end: str) -> list[str]
                 "map is STALE — regional parquet is newer than the map "
                 "(re-run stage 5 to refresh)"))
     else:
-        lines.append(f"  Stage 5 map: (none) — expected {html.name}")
+        lines.append(f"  Stage 5 map: (none) — expected {_rel(html)}")
+
+    # --- Airport-quality / runway-usage cache ---------------------------------
+    lines.extend(_airport_quality_lines(config, date_tags))
 
     # --- Provenance / version-mixing check ------------------------------------
     lines.extend(_provenance_lines(config, region_label, bounds, date_tags))
 
     # --- Traffic-tile build provenance (standalone tool, not a v2 stage) -------
     lines.extend(_traffic_tile_lines(config))
+    return lines
+
+
+def _day_file_has_runway_data(day_path: Path) -> bool:
+    """True if a per-day aq file carries runway votes (the runway_counts key).
+
+    Day files written before the runway-usage feature lack runway_counts
+    entirely, so their absence is a reliable "stale cache" marker. A file where
+    no airport happened to record an approach also lacks it, but that's rare for
+    a populated day and the worst case is a spurious "may predate" note, not a
+    wrong result.
+    """
+    import json
+    try:
+        with open(day_path, "r", encoding="utf-8") as f:
+            day = json.load(f)
+    except (OSError, ValueError):
+        return False
+    return any(isinstance(v, dict) and "runway_counts" in v
+               for v in day.values())
+
+
+def _airport_quality_lines(config, date_tags: list[str]) -> list[str]:
+    """Report the per-day airport-quality cache: how many day-files exist for
+    the range, and whether they predate the runway-usage feature (so the
+    aggregate-viz overlay would silently omit runway stats until recomputed).
+
+    Only reads the aq/ cache; the overlay itself is opt-in via --airport-quality.
+    """
+    from tools.v2_airport_quality import aq_day_path
+    aq_dir = config.aq_dir
+    present = [dt for dt in date_tags if aq_day_path(aq_dir, dt).exists()]
+    if not present:
+        # Not an error — the overlay is off by default and computed separately.
+        return [f"  Airport-quality cache: none in {_rel(aq_dir)} "
+                f"(0/{len(date_tags)} day-files) — overlay would be skipped"]
+
+    without_runways = [dt for dt in present
+                       if not _day_file_has_runway_data(aq_day_path(aq_dir, dt))]
+    line = (f"  Airport-quality cache: {len(present)}/{len(date_tags)} "
+            f"day-file(s) in {_rel(aq_dir)}")
+    lines = [line]
+    if without_runways:
+        head = ", ".join(without_runways[:5])
+        more = (f" (+{len(without_runways)-5} more)"
+                if len(without_runways) > 5 else "")
+        lines.append("    " + _warn(
+            f"{len(without_runways)} day-file(s) predate runway-usage "
+            f"({head}{more}) — the aggregate-viz airport overlay will omit "
+            f"runway stats. Recompute with:"))
+        lines.append(f"      python -m tools.v2_airport_quality --mode compute "
+                     f"--start-date {date_tags[0]} --end-date {date_tags[-1]} "
+                     f"--force")
+    else:
+        lines[0] = "  " + _ok(line.strip() + " (with runway data)")
     return lines
 
 

@@ -1,10 +1,12 @@
-"""Tiny terminal-color helpers for the v2 CLI / status output.
+"""Tiny terminal display helpers for the v2 CLI / status output.
 
-Raw ANSI (matching src/adsb_actions/rules.py), auto-disabled when stdout is not a
-TTY (pipes, redirects, pytest capture) so logs and test assertions stay plain.
+Raw ANSI color (matching src/adsb_actions/rules.py), auto-disabled when stdout is
+not a TTY (pipes, redirects, pytest capture) so logs and test assertions stay
+plain. Plus a path-shortening helper so output shows WHERE artifacts land.
 """
 
 import sys
+from pathlib import Path
 
 _USE_COLOR = sys.stdout.isatty()
 _BLUE, _GREEN, _RED, _YELLOW, _RESET = (
@@ -33,3 +35,18 @@ def fail(msg: str) -> str:
 def warn(msg: str) -> str:
     """Yellow text with a leading warning sign."""
     return f"{_YELLOW}{WARN} {msg}{_RESET}"
+
+
+def rel(path) -> str:
+    """Path relative to the current directory when it's under cwd, else absolute.
+    Lets dry-run / status output show WHERE outputs land without dumping long
+    absolute paths for in-project artifacts.
+
+    Does NOT resolve symlinks: `data/` is a symlink to the network mount, and we
+    want to show 'data/v2/...' (the in-project relative path), not the resolved
+    mount location it points at."""
+    p = Path(path)
+    try:
+        return str(p.relative_to(Path.cwd()))
+    except ValueError:
+        return str(p)
