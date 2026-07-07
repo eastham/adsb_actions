@@ -150,6 +150,24 @@ def _foreflight_tile_dir(traffic_tile_dir: str | None) -> Path | None:
     return p
 
 
+def _link_stable_assets(pmtiles_path: Path, sidecar_dir: Path, asset_stem: str) -> None:
+    """Symlink the stable '<asset_stem>.pmtiles' / '<asset_stem>_tracks' names next
+    to the dated build so an --asset-stem map (whose HTML fetches the stable names)
+    is viewable locally without re-rendering. Relative link targets so the maps dir
+    stays relocatable. Replaces any existing symlink; leaves real files untouched."""
+    for target, name in ((pmtiles_path, f"{asset_stem}.pmtiles"),
+                         (sidecar_dir, f"{asset_stem}_tracks")):
+        link = target.parent / name
+        if link.resolve() == target.resolve():
+            continue  # already points here
+        if link.is_symlink() or not link.exists():
+            link.unlink(missing_ok=True)
+            link.symlink_to(target.name)  # relative to the shared parent dir
+        else:
+            print(f"  [WARN] {link} is a real file, not a symlink — "
+                  f"leaving it; the local map may show stale data")
+
+
 def _date_range(start: datetime.date, end: datetime.date):
     d = start
     while d <= end:
@@ -317,6 +335,12 @@ def run_stage5(
             write_event_sidecars(df, sidecar_dir)
             # Tail-number search index (same sidecar dir, same event_id keys).
             write_search_index(df, sidecar_dir)
+        # With --asset-stem, the HTML fetches stable '<stem>.pmtiles' / '<stem>_tracks'
+        # names (for deploy aliases) rather than the dated files just written. Create
+        # local symlinks so the same build is ALSO viewable locally without a re-run;
+        # deploy still promotes the dated files to the stable name on the remote.
+        if asset_stem:
+            _link_stable_assets(Path(pmtiles_path), Path(sidecar_dir), asset_stem)
         alt_bands = sorted(df["alt_band"].dropna().unique().tolist()) if "alt_band" in df.columns else []
         html = generate_pmtiles_html(pmtiles_path, sidecar_dir,
                                      center_lat, center_lon, static_zoom, alt_bands,
