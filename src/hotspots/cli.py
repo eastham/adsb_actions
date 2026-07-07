@@ -185,6 +185,12 @@ def cmd_run(config, args) -> None:
     # Defaults to the PRODUCTION tile URL. For local preview pass --traffic-tiles
     # (e.g. the paths.traffic_tiles_local value) — it is not used automatically.
     traffic = args.traffic_tiles or config.traffic_tiles_url
+    # ForeFlight packs a real filesystem tile tree (not the browser prefix). An
+    # explicit local --traffic-tiles wins; otherwise use the config's local path.
+    # A URL passed to --traffic-tiles is a browser value only, so ignore it here.
+    ff_tiles = (args.traffic_tiles
+                if (args.traffic_tiles and not args.traffic_tiles.startswith("http"))
+                else config.traffic_tiles_local)
     lat_min, lat_max, lon_min, lon_max = bounds
     n_cells = (lat_max - lat_min) * (lon_max - lon_min)
     n_days = (end - start).days + 1
@@ -204,7 +210,7 @@ def cmd_run(config, args) -> None:
 
     if args.dry_run:
         _print_dry_run(config, args, stages, bounds, start, end,
-                       regional, out_html, Path(ff_out), pmtiles)
+                       regional, out_html, Path(ff_out), pmtiles, ff_tiles)
         return
 
     # Stages 2/3: day-at-a-time with verify + remount/retry gate. Provenance is
@@ -253,6 +259,7 @@ def cmd_run(config, args) -> None:
                            traffic_tile_dir=traffic, html_only=args.html_only,
                            foreflight_output=ff_out,
                            foreflight_name=config.foreflight_pack_name,
+                           foreflight_tiles=ff_tiles,
                            print_summary=False,
                            airport_quality=airport_quality,
                            asset_stem=args.asset_stem)
@@ -293,7 +300,7 @@ def cmd_run(config, args) -> None:
 
 
 def _print_dry_run(config, args, stages, bounds, start, end,
-                   regional, out_html, ff_out, pmtiles) -> None:
+                   regional, out_html, ff_out, pmtiles, ff_tiles=None) -> None:
     """Describe what a real run with these exact args WOULD do, without touching
     anything. Stage 2/3 use verify_day (existence-only, per-day counts); stages
     4/5 are single-file outputs. WRITE = output absent; SKIP = present and
@@ -335,6 +342,17 @@ def _print_dry_run(config, args, stages, bounds, start, end,
         if ff_out:
             print(f"  Stage 5 ForeFlight: {_rel(ff_out)}  "
                   f"{_verb(ff_out.exists(), skippable=False)}")
+            # Will the traffic layer be packed? Resolve the same local tile tree
+            # the export uses (config.traffic_tiles_local, browser-relative) and
+            # report found/missing so a silent no-traffic pack is visible here.
+            from hotspots.pipeline import _foreflight_tile_dir
+            tiles = _foreflight_tile_dir(ff_tiles or config.traffic_tiles_local)
+            if tiles is not None:
+                print(f"    traffic layer: {_rel(tiles)}  {_ok('will pack')}")
+            else:
+                print("    traffic layer: " +
+                      _warn("NOT packed (no local tile tree found — "
+                            "LOS-events-only pack)"))
 
     # Airport-quality overlay (opt-in): report the aq/ cache state so a stale
     # cache (predating runway-usage) is visible before the real run.

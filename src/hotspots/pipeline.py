@@ -128,6 +128,28 @@ def _conus_path(date: datetime.date, conus_dir: str) -> Path:
     return Path(conus_dir) / f"CONUS_{tag}.gz"
 
 
+def _foreflight_tile_dir(traffic_tile_dir: str | None) -> Path | None:
+    """Resolve the browser tile-prefix to a real filesystem tile tree for the
+    ForeFlight export, or None to skip the traffic layer.
+
+    Returns None for a URL (http...) or empty value. For a local value, resolve
+    it against the project root — dropping leading '..' segments, so the
+    browser-relative '../../../tiles/traffic' maps to <project-root>/tiles/traffic.
+    If the resolved tree doesn't exist, warn and return None (pack still builds,
+    just without the traffic layer)."""
+    if not traffic_tile_dir or traffic_tile_dir.startswith("http"):
+        return None
+    p = Path(traffic_tile_dir)
+    if not p.is_absolute():
+        rel = Path(*[part for part in p.parts if part != ".."])
+        p = _ROOT / rel
+    if not p.is_dir():
+        print(f"  [WARN] traffic tile dir for ForeFlight not found: {p} "
+              f"— exporting pack without the traffic layer")
+        return None
+    return p
+
+
 def _date_range(start: datetime.date, end: datetime.date):
     d = start
     while d <= end:
@@ -228,6 +250,7 @@ def run_stage5(
     html_only: bool = False,
     foreflight_output: str | None = None,
     foreflight_name: str | None = None,
+    foreflight_tiles: str | None = None,
     print_summary: bool = True,
 ) -> None:
     """Generate map HTML (self-contained or PMTiles) from a DataFrame of events.
@@ -239,8 +262,9 @@ def run_stage5(
     `output_path`. Useful when only the embedded JS/CSS/HTML changed.
 
     `foreflight_output`: path for the ForeFlight Content Pack .zip. Always
-    generated when provided. If `traffic_tile_dir` is a local path (not a URL),
-    traffic tiles are packed too.
+    generated when provided. `foreflight_tiles` is the local filesystem tile
+    tree to pack (traffic layer); when omitted, falls back to `traffic_tile_dir`
+    only if that is itself a local path (not the browser URL).
     """
     MAPS_DIR.mkdir(parents=True, exist_ok=True)
     if df.empty:
@@ -320,9 +344,12 @@ def run_stage5(
     if foreflight_output:
         try:
             from tools.export_foreflight import export_pack
-            local_tiles = Path(traffic_tile_dir) if (
-                traffic_tile_dir and not traffic_tile_dir.startswith("http")
-            ) else None
+            # traffic_tile_dir is a BROWSER path prefix (for the map HTML, resolved
+            # relative to the served map). ForeFlight needs a real FILESYSTEM tile
+            # tree instead, so resolve a local (non-http) value against the project
+            # root: '../../../tiles/traffic' → <project-root>/tiles/traffic. A
+            # missing tree skips the traffic layer rather than failing the pack.
+            local_tiles = _foreflight_tile_dir(foreflight_tiles or traffic_tile_dir)
             export_pack(
                 output_zip=Path(foreflight_output),
                 traffic_tile_dir=local_tiles,

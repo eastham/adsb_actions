@@ -161,6 +161,18 @@ def report(config, region_label: str, bounds, start: str, end: str) -> list[str]
     else:
         lines.append(f"  Stage 5 map: (none) — expected {_rel(html)}")
 
+    # --- Stage 5: ForeFlight Content Pack -------------------------------------
+    ff = config.data_root / "foreflight" / f"{region_label}_{start}_{end}.zip"
+    if ff.exists():
+        lines.append(f"  Stage 5 ForeFlight: {ff.name}  {_mb(ff)}  "
+                     f"({_mtime(ff):%Y-%m-%d %H:%M})")
+        if regional.exists() and _mtime(regional) > _mtime(ff):
+            lines.append("    " + _warn(
+                "ForeFlight pack is STALE — regional parquet is newer than the "
+                "pack (re-run stage 5 to refresh)"))
+    else:
+        lines.append(f"  Stage 5 ForeFlight: (none) — expected {_rel(ff)}")
+
     # --- Airport-quality / runway-usage cache ---------------------------------
     lines.extend(_airport_quality_lines(config, date_tags))
 

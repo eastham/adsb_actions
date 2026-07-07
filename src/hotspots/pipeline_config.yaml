@@ -28,7 +28,7 @@ deploy:
   maps_dir: data/v2/maps                    # UNUSED.
 
 runtime:
-  workers: 8
+  workers: 6
   alt_ceiling_ft: 18000       # Class A floor; included in the provenance config hash
   # Command run to recover the network mount before retrying a failed day.
   # PLACEHOLDER — fill in your remount line (e.g. the mount_smbfs command from
