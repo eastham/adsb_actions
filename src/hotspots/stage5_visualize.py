@@ -28,6 +28,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -591,7 +592,7 @@ def generate_html(df: pd.DataFrame, center_lat: float, center_lon: float,
             "type": "raster",
             "tiles": [traffic_tile_dir.rstrip("/") + "/{z}/{x}/{y}.png"],
             "tileSize": 256,
-            "minzoom": 5,
+            "minzoom": 3,
             "maxzoom": 11,
             "attribution": "Traffic Density",
         }
@@ -1149,6 +1150,11 @@ def generate_pmtiles(df: pd.DataFrame, output_path: str) -> str:
             "-Z0",                # min zoom 0 — show all events at every zoom
             "--no-tile-size-limit",
             "-r1",                # rate=1: include every feature, no dropping
+            # Above ~200k events, low zooms (esp. z0) exceed tippecanoe's hard
+            # 200k-features-per-tile cap. Drop only in over-dense tiles; high
+            # zooms still keep every feature. Without this, large CONUS runs fail
+            # with "No zoom levels were successfully written" (exit 110).
+            "--drop-densest-as-needed",
             "-l", "events",       # layer name in the vector tile
             tmp_geojson,
         ]
@@ -1192,6 +1198,21 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         pmtiles_rel = os.path.basename(pmtiles_path)
         sidecar_rel = os.path.basename(sidecar_dir)
 
+    # Cache-buster for the track/search indices: a short content hash so the
+    # fetched URL changes iff the index changes. Without this, a browser (or
+    # CDN) can serve a stale, smaller index from a prior build — the event_id
+    # clicked in the current PMTiles then falls off the end of the old index and
+    # its track animation silently fails ("no index entry for event_id ...").
+    # The track and search indices are (re)written together every build, so the
+    # track index's hash is a valid version stamp for both.
+    index_path = os.path.join(sidecar_dir, "tracks.index.json.gz")
+    try:
+        with open(index_path, "rb") as _f:
+            index_ver = hashlib.md5(_f.read()).hexdigest()[:12]
+    except OSError:
+        index_ver = ""  # index not yet written (e.g. --html-only race); skip stamp
+    index_qs = f"?v={index_ver}" if index_ver else ""
+
     all_bands_ordered = ["0k-3k", "3k-6k", "6k-10k", "10k-18k"]
     alt_bands_set = set(alt_bands)
     extra_bands = sorted(b for b in alt_bands_set if b not in all_bands_ordered)
@@ -1233,7 +1254,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
             "type": "raster",
             "tiles": [traffic_tile_dir.rstrip("/") + "/{z}/{x}/{y}.png"],
             "tileSize": 256,
-            "minzoom": 5,
+            "minzoom": 3,
             "maxzoom": 11,
             "attribution": "Traffic Density",
         }
@@ -1444,7 +1465,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '  // forwards the body without Content-Encoding: gzip, so we\n'
         '  // decompress in JS using DecompressionStream (Chrome 80+,\n'
         '  // Firefox 113+, Safari 16.4+) for cross-CDN robustness.\n'
-        '  _indexPromise = fetch("' + sidecar_rel + '/tracks.index.json.gz")\n'
+        '  _indexPromise = fetch("' + sidecar_rel + '/tracks.index.json.gz' + index_qs + '")\n'
         '    .then(function(r) {\n'
         '      // If the CDN already decompressed for us, the body is\n'
         '      // plain JSON; otherwise it\\u2019s gzip bytes we have to\n'
@@ -1523,7 +1544,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         'function loadSearchIndex() {\n'
         '  if (_searchIndex) return Promise.resolve(_searchIndex);\n'
         '  if (_searchPromise) return _searchPromise;\n'
-        '  _searchPromise = fetch("' + sidecar_rel + '/search_index.json.gz")\n'
+        '  _searchPromise = fetch("' + sidecar_rel + '/search_index.json.gz' + index_qs + '")\n'
         '    .then(function(r) {\n'
         '      return r.arrayBuffer().then(function(buf) {\n'
         '        var bytes = new Uint8Array(buf);\n'
