@@ -56,7 +56,8 @@ DEFAULT_ZOOM = 11
 # pixels; the closer to 0, the more aggressive. Tuned so sparse single-airport
 # data is visible at z5 while CONUS-scale data still has density contrast.
 # Keys outside this range fall back to 1.0 (no boost).
-LOW_ZOOM_GAMMA = {10: 0.9, 9: 0.75, 8: 0.6, 7: 0.5, 6: 0.4, 5: 0.3}
+LOW_ZOOM_GAMMA = {10: 0.9, 9: 0.75, 8: 0.6, 7: 0.5, 6: 0.4, 5: 0.3,
+                  4: 0.25, 3: 0.2}
 
 # Per-zoom noise floor applied to *child* tile alpha before aggregation. Pixels
 # with alpha at or below the threshold are zeroed out, so a single flight that
@@ -67,7 +68,8 @@ LOW_ZOOM_GAMMA = {10: 0.9, 9: 0.75, 8: 0.6, 7: 0.5, 6: 0.4, 5: 0.3}
 # at near-source zooms); kicks in starting at z9 and gets stricter on the way
 # down so that residual single-track contributions from the now-averaged
 # z(N+1) input also get cleaned up.
-LOW_ZOOM_NOISE_FLOOR = {10: 0, 9: 8, 8: 12, 7: 14, 6: 15, 5: 15}
+LOW_ZOOM_NOISE_FLOOR = {10: 0, 9: 8, 8: 12, 7: 14, 6: 15, 5: 15,
+                        4: 15, 3: 15}
 
 DENSITY_FOR_FULL_BRIGHTNESS = 40  # adjust this: lower = brighter single tracks
 COLOR_VIBRANCY = 0.9  # adjust this: 1.0 = full brightness, <1.0 = dimmer, >1.0 = brighter
@@ -503,7 +505,7 @@ def flush_segments(segments_by_tile_band, tile_store):
 # --- Main tile generation ---
 
 def downsample_to_low_zooms(output_dir, source_zoom, seed_tiles=None,
-                            min_zoom=5):
+                            min_zoom=3):
     """Generate tiles at zooms (source_zoom-1) ... min_zoom by 2x2-downsampling
     each parent's four child tiles. Uses premultiplied-alpha RGB averaging so
     color stays saturated when sparse pixels neighbor transparent ones; alpha
@@ -536,7 +538,9 @@ def downsample_to_low_zooms(output_dir, source_zoom, seed_tiles=None,
     else:
         child_tiles = set(seed_tiles)
 
-    # range stop is exclusive: stop=min_zoom-1 yields lowest generated = min_zoom
+    # range stop is exclusive: stop=min_zoom-1 yields lowest generated = min_zoom.
+    # min_zoom=3 reaches the US-wide (CONUS) view so the heatmap stays visible
+    # when fully zoomed out, not just from the state level (z5) inward.
     for parent_zoom in range(source_zoom - 1, min_zoom - 1, -1):
         child_zoom = parent_zoom + 1
         gamma = LOW_ZOOM_GAMMA.get(parent_zoom, 1.0)

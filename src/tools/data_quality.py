@@ -4,6 +4,8 @@ Analyzes receiver coverage quality by detecting low-altitude tracks that
 disappear before reaching the surface, and measuring inter-point time
 gaps.  Produces a green/yellow/red score for the visualizer.
 
+Also measures runway usage (runway_votes_for_track)
+
 Used by batch_los_pipeline.py during the aggregation phase.
 """
 

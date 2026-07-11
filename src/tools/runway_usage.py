@@ -132,6 +132,11 @@ def _normalize_runway_ident(ident):
 def build_runway_boxes(icao):
     """Return approach-box descriptors for each runway end of an airport.
 
+    Despite the name, this returns the ANCHOR (threshold point + landing heading)
+    per runway end, not a rectangle. The actual approach box (extended-centerline
+    rectangle, APPROACH_BOX_LEN_NM × APPROACH_BOX_WIDTH_FT) is derived from this
+    anchor per-track at vote time — see runway_votes_for_track.
+
     Each descriptor is a dict:
         ident:    normalized runway number (e.g. "20")
         heading:  landing heading, degrees true

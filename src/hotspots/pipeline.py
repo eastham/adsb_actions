@@ -54,6 +54,7 @@ for _p in [str(_ROOT / "src"), str(_ROOT)]:
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+from hotspots.exclusions import is_excluded
 from hotspots.stage2_shard import (
     shard, date_tag_from_input,
     CONUS_LAT_MIN, CONUS_LAT_MAX, CONUS_LON_MIN, CONUS_LON_MAX,
@@ -89,14 +90,10 @@ _NAMED_REGIONS = {
 }
 
 
-# Cells to skip for known high-density events that flood the prox detector with false positives.
-# Each entry: (lat, lon, start_date_YYYYMMDD, end_date_YYYYMMDD, reason)
-CELL_EXCLUSIONS = [
-    (43, -89, "20250719", "20250727", "EAA AirVenture Oshkosh"),
-]
-
-
 def _is_excluded(path: Path, date_tag: str) -> bool:
+    """Skip cells flagged in CELL_EXCLUSIONS (known high-density events that
+    flood the prox detector with false positives). verify.py shares the same
+    predicate so a deliberately-skipped cell isn't flagged as missing output."""
     parts = path.stem.split("_")
     if len(parts) < 3:
         return False
@@ -104,11 +101,10 @@ def _is_excluded(path: Path, date_tag: str) -> bool:
         lat, lon = int(parts[1]), int(parts[2])
     except ValueError:
         return False
-    for ex_lat, ex_lon, start, end, reason in CELL_EXCLUSIONS:
-        if lat == ex_lat and lon == ex_lon and start <= date_tag <= end:
-            print(f"  [excluded] {path.stem} — {reason}")
-            return True
-    return False
+    excluded, reason = is_excluded(lat, lon, date_tag)
+    if excluded:
+        print(f"  [excluded] {path.stem} — {reason}")
+    return excluded
 
 
 def _cell_in_box(path: Path, lat_min, lat_max, lon_min, lon_max) -> bool:
@@ -744,7 +740,14 @@ def main():
     # Print deploy hint when PMTiles output is expected to exist.
     if args.pmtiles:
         stem = Path(output_html).stem
-        deploy_cmd = f"python src/tools/deploy_v2 --source-stem {stem} --traffic-tiles-dir tiles/traffic"
+        # --traffic-tiles-dir is deploy_v2's LOCAL upload dir (relative to cwd),
+        # not the HTML's tile URL (--traffic-tiles, relative to the served map).
+        # Only hint the flag when traffic tiles were used; conventional local
+        # dir is tiles/traffic.
+        tiles = args.traffic_tiles
+        traffic_flag = " --traffic-tiles-dir tiles/traffic" \
+            if (tiles and not tiles.startswith("http")) else ""
+        deploy_cmd = f"python src/tools/deploy_v2 --source-stem {stem}{traffic_flag}"
         if args.asset_stem:
             deploy_cmd += f" --publish-as {args.asset_stem}"
         print(f"\nTo deploy:\n  {deploy_cmd}")

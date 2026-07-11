@@ -102,6 +102,29 @@ def test_stage3_corrupt_parquet_flagged_under_sanity(tmp_path):
                           sanity=True).ok
 
 
+def test_stage3_excluded_cell_not_counted_missing(tmp_path):
+    """A CELL_EXCLUSIONS cell produces no stage-3 output by design; the gate
+    must treat it as excluded (not expected, not missing) so the day still
+    passes. Previously this cell was flagged missing and burned all retries."""
+    from hotspots.exclusions import CELL_EXCLUSIONS
+    ex_lat, ex_lon, start, _end, _reason = CELL_EXCLUSIONS[0]
+    bounds = (ex_lat, ex_lat + 1, ex_lon, ex_lon + 1)  # single excluded cell
+    rpt = verify_day(3, start, bounds, tmp_path / "grid", tmp_path / "events")
+    assert rpt.ok
+    assert rpt.expected == 0 and rpt.excluded == 1 and not rpt.missing
+
+
+def test_stage2_still_verifies_excluded_cell(tmp_path):
+    """Stage 2 shards excluded cells (only stage 3 skips them), so an absent
+    shard there is still a real problem the gate should catch."""
+    from hotspots.exclusions import CELL_EXCLUSIONS
+    ex_lat, ex_lon, start, _end, _reason = CELL_EXCLUSIONS[0]
+    bounds = (ex_lat, ex_lat + 1, ex_lon, ex_lon + 1)
+    rpt = verify_day(2, start, bounds, tmp_path / "grid", tmp_path / "events")
+    assert not rpt.ok
+    assert rpt.expected == 1 and rpt.missing == [f"{ex_lat}_{ex_lon}"]
+
+
 def test_summary_string_is_informative(tmp_path):
     events = tmp_path / "events"
     _write_parquet(events / "20250601" / "20250601_36_-122.parquet")

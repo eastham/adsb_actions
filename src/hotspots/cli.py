@@ -285,8 +285,13 @@ def cmd_run(config, args) -> None:
         print(f"  Open:   {base_url}")
         print(f"  Search: {base_url}?tail=N12345"
               f"   (tail-number deep-link; replace with a real tail)")
+        # deploy_v2's --traffic-tiles-dir is a LOCAL upload dir (relative to
+        # cwd), not the HTML's tile URL (which is relative to the served map and
+        # often "../../../tiles/traffic"). Only hint the flag when traffic tiles
+        # were used; the conventional local dir is tiles/traffic.
+        traffic_flag = " --traffic-tiles-dir tiles/traffic" if local_tiles else ""
         print(f"  Deploy: python src/tools/deploy_v2 --publish-as conus "
-              f"--source-stem {out_html.stem}")
+              f"--source-stem {out_html.stem}{traffic_flag}")
     else:
         print(f"  Open:  file://{out_html.resolve()}")
     if Path(ff_out).exists():

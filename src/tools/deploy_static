@@ -55,9 +55,12 @@ def main():
 
     print(f"Deploying {len(files)} files to {args.remote}")
     for f in files:
+        # --metadata is required for --metadata-set to take effect; rclone
+        # silently ignores --metadata-set without it (same gotcha as deploy_v2).
         cmd = ["rclone", "copyto", f, f"{args.remote}/{os.path.basename(f)}",
                "--progress",
                "--s3-no-check-bucket",
+               "--metadata",
                "--metadata-set", "cache-control=no-cache, must-revalidate"]
         if args.dry_run:
             cmd.append("--dry-run")

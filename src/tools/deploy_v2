@@ -22,6 +22,10 @@ stable URL (e.g. /v2/conus.html). The source map must have been generated
 with `stage5_visualize.py --asset-stem <name>` so its inlined .pmtiles /
 _tracks references already point at the stable filenames.
 
+When --source-stem is given, the bulk copy (step 1) is scoped to just that
+stem's files, so the upload matches the build you named. Without it, every
+dated artifact in the maps dir is pushed.
+
 Use --traffic-tiles-dir to also push a traffic tile tree (e.g. tiles/traffic/)
 to {remote}/tiles/traffic/.
 
@@ -124,12 +128,29 @@ def main():
     dst = f"{args.remote}/v2"
     print(f"Deploying {args.maps_dir}/ → {dst}/", file=sys.stderr)
 
-    # 1. Bulk push of every dated artifact matching the include filter.
+    # 1. Push dated artifacts. When a specific build is named (--source-stem),
+    # scope the copy to just that stem's files so the upload matches the build
+    # you asked for. Otherwise fall back to pushing every dated artifact.
+    # (Historically this always uploaded the whole maps dir, which meant a small
+    # deploy could silently push a large unrelated build's multi-GB sidecars and
+    # a later deploy of that build would then no-op — confusing to reason about.)
+    if args.source_stem:
+        stem = args.source_stem
+        include_patterns = [
+            f"{stem}.html",
+            f"{stem}.pmtiles",
+            f"{stem}_tracks/tracks.ndjson",
+            f"{stem}_tracks/tracks.index.json.gz",
+            f"{stem}_tracks/search_index.json.gz",
+            f"{stem}_quality.json",
+        ]
+    else:
+        include_patterns = INCLUDE_PATTERNS
     _run([
         "rclone", "copy", args.maps_dir, dst,
         "--progress",
         "--metadata-set", CACHE_CONTROL,
-        *_include_args(INCLUDE_PATTERNS),
+        *_include_args(include_patterns),
     ], args.dry_run)
 
     # 1b. Optionally push traffic tiles.
