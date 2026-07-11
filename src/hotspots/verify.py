@@ -17,6 +17,8 @@ import gzip
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from hotspots.exclusions import is_excluded
+
 
 def cells_in_box(lat_min, lat_max, lon_min, lon_max):
     """Yield (lat, lon) integer cell corners in the bounding box.
@@ -57,6 +59,7 @@ class DayReport:
     expected: int = 0
     present_ok: int = 0
     present_empty: int = 0
+    excluded: int = 0                             # deliberately-skipped cells (CELL_EXCLUSIONS)
     missing: list = field(default_factory=list)   # list of cell_tag strings
 
     @property
@@ -70,9 +73,10 @@ class DayReport:
     def summary(self) -> str:
         if self.stage == 2:
             return f"shards: {self.present_ok}/{self.expected} cells present"
+        excl = f", {self.excluded} excluded" if self.excluded else ""
         return (f"events: {self.accounted}/{self.expected} cells "
                 f"({self.present_ok} with events, {self.present_empty} empty, "
-                f"{len(self.missing)} missing)")
+                f"{len(self.missing)} missing{excl})")
 
 
 def verify_day(stage: int, date_tag: str, bounds, grid_dir: Path,
@@ -91,9 +95,17 @@ def verify_day(stage: int, date_tag: str, bounds, grid_dir: Path,
     rpt = DayReport(stage=stage, date_tag=date_tag)
 
     for lat, lon in cells_in_box(lat_min, lat_max, lon_min, lon_max):
-        rpt.expected += 1
         cell_tag = f"{lat}_{lon}"
         stem = f"{date_tag}_{cell_tag}"
+
+        # Stage 3 skips excluded cells (CELL_EXCLUSIONS), so no output is
+        # written for them by design — don't expect one or flag it missing.
+        # Stage 2 still shards them, so it verifies them normally.
+        if stage == 3 and is_excluded(lat, lon, date_tag)[0]:
+            rpt.excluded += 1
+            continue
+
+        rpt.expected += 1
 
         if stage == 2:
             gz = grid_dir / date_tag / f"{stem}.gz"
