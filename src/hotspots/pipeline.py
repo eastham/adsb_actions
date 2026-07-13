@@ -750,6 +750,8 @@ def main():
         deploy_cmd = f"python src/tools/deploy_v2 --source-stem {stem}{traffic_flag}"
         if args.asset_stem:
             deploy_cmd += f" --publish-as {args.asset_stem}"
+        if foreflight_output and Path(foreflight_output).exists():
+            deploy_cmd += f" --foreflight-pack {foreflight_output}"
         print(f"\nTo deploy:\n  {deploy_cmd}")
 
 

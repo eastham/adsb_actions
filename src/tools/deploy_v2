@@ -29,12 +29,16 @@ dated artifact in the maps dir is pushed.
 Use --traffic-tiles-dir to also push a traffic tile tree (e.g. tiles/traffic/)
 to {remote}/tiles/traffic/.
 
+Use --foreflight-pack to also push a ForeFlight Content Pack .zip (produced by
+export_foreflight.py) to {remote}/foreflight/.
+
 Examples:
     python src/tools/deploy_v2
     python src/tools/deploy_v2 --remote hotspots-initial:hotspots --dry-run
     python src/tools/deploy_v2 --publish-as conus \\
         --source-stem 24_50_-125_-65_20250601_20250831
     python src/tools/deploy_v2 --traffic-tiles-dir tiles/traffic
+    python src/tools/deploy_v2 --foreflight-pack data/v2/foreflight/CONUS_Jan2026.zip
 """
 
 import argparse
@@ -101,6 +105,9 @@ def main():
     parser.add_argument("--traffic-tiles-dir", metavar="DIR", default=None,
                         help="Also push this local directory to {remote}/tiles/traffic/ "
                              "(e.g. tiles/traffic)")
+    parser.add_argument("--foreflight-pack", metavar="ZIP", default=None,
+                        help="Also push this ForeFlight Content Pack .zip to "
+                             "{remote}/foreflight/ (e.g. data/v2/foreflight/CONUS_Jan2026.zip)")
     args = parser.parse_args()
 
     if not os.path.isdir(args.maps_dir):
@@ -113,6 +120,10 @@ def main():
 
     if args.traffic_tiles_dir and not os.path.isdir(args.traffic_tiles_dir):
         print(f"ERROR: traffic tiles directory not found: {args.traffic_tiles_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.foreflight_pack and not os.path.isfile(args.foreflight_pack):
+        print(f"ERROR: ForeFlight pack not found: {args.foreflight_pack}", file=sys.stderr)
         sys.exit(1)
 
     if args.publish_as:
@@ -159,6 +170,18 @@ def main():
         print(f"\nDeploying {args.traffic_tiles_dir}/ → {tiles_dst}/", file=sys.stderr)
         _run([
             "rclone", "copy", args.traffic_tiles_dir, tiles_dst,
+            "--progress",
+            "--metadata-set", CACHE_CONTROL,
+        ], args.dry_run)
+
+    # 1c. Optionally push a ForeFlight Content Pack .zip. Uses copyto so the
+    # destination filename matches the source regardless of any dir prefix.
+    if args.foreflight_pack:
+        ff_name = os.path.basename(args.foreflight_pack)
+        ff_dst = f"{args.remote}/foreflight/{ff_name}"
+        print(f"\nDeploying {args.foreflight_pack} → {ff_dst} ...", file=sys.stderr)
+        _run([
+            "rclone", "copyto", args.foreflight_pack, ff_dst,
             "--progress",
             "--metadata-set", CACHE_CONTROL,
         ], args.dry_run)

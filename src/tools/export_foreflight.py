@@ -41,10 +41,11 @@ CONUS_BOUNDS = (-125.0, 24.5, -66.0, 49.5)  # minlon, minlat, maxlon, maxlat
 LOS_MIN_ZOOM = 7
 LOS_MAX_ZOOM = 11
 
-# Circle radius in pixels at each zoom level sized to ~1/8 mile on the ground.
-# At mid-CONUS (~37°N), one 256px tile at zoom z covers ~(20000/2^z) km wide,
-# so 1/8 mile (0.2 km) works out to roughly: z7=1, z8=1, z9=2, z10=3, z11=6.
-LOS_RADIUS_PX = {7: 1, 8: 1, 9: 2, 10: 3, 11: 6}
+# Circle radius in pixels at each zoom level. Originally sized to ~1/8 mile on
+# the ground (z7=1, z8=1, z9=2, z10=3, z11=6); reduced by ~1/3 for readability
+# so dense clusters don't merge into blobs. Sub-pixel radii are fine — the
+# SUPERSAMPLE pass renders them at 4x before downsampling.
+LOS_RADIUS_PX = {7: 0.67, 8: 0.67, 9: 1.33, 10: 2.0, 11: 4.0}
 
 # Supersampling factor: render at this multiple then downsample for smoother circles.
 SUPERSAMPLE = 4
@@ -143,15 +144,9 @@ def insert_tile(conn, zoom, tx, ty_slippy, png_bytes):
     )
 
 
-def png_bytes(img: Image.Image) -> bytes:
+def png_bytes(img: Image.Image, optimize: bool = False) -> bytes:
     buf = io.BytesIO()
-    img.save(buf, format="PNG", optimize=False)
-    return buf.getvalue()
-
-
-def jpeg_bytes(img: Image.Image, quality: int = 60) -> bytes:
-    buf = io.BytesIO()
-    img.convert("RGB").save(buf, format="JPEG", quality=quality, optimize=True)
+    img.save(buf, format="PNG", optimize=optimize)
     return buf.getvalue()
 
 
@@ -164,21 +159,44 @@ TRAFFIC_MAX_ZOOM = 10  # zoom 11 adds ~25k tiles for minimal visual benefit in F
 # p75 of the alpha distribution across tiles; removes sparse light-blue noise.
 TRAFFIC_ALPHA_THRESHOLD = 55
 
-def threshold_traffic_tile(img: Image.Image) -> Image.Image | None:
-    """Keep only high-density pixels (above alpha threshold), return as red-channel grayscale.
+# Single flat color for all surviving traffic pixels (transparent-background
+# overlay for ForeFlight). Purple matches the high-density end of the source
+# density ramp in traffic_tiles.band_to_color().
+TRAFFIC_COLOR = (128, 0, 255)
 
-    Using just the red channel: purple (high density) has high R, light blue (low
-    density) has low R, so R naturally encodes busyness as a grayscale intensity.
-    Returns None if no pixels survive the threshold.
+# Round alpha to this many distinct levels. With one flat RGB color, PNG size is
+# driven almost entirely by the number of distinct RGBA values; collapsing the
+# 256-level alpha gradient to 8 buckets shrinks tiles ~2.5x while the
+# busier-is-more-opaque gradient stays visually intact.
+TRAFFIC_ALPHA_LEVELS = 8
+
+def threshold_traffic_tile(img: Image.Image) -> Image.Image | None:
+    """Keep only high-density pixels, recolor to a single flat color, keep the
+    source alpha as a transparent-background overlay.
+
+    The source tile encodes density in both color and alpha; we discard the
+    color ramp and paint every surviving pixel TRAFFIC_COLOR, preserving the
+    source alpha so busier pixels stay more opaque. Returns an RGBA image, or
+    None if no pixels survive the threshold.
     """
     import numpy as np
     arr = np.array(img.convert("RGBA"))
-    mask = arr[:, :, 3] < TRAFFIC_ALPHA_THRESHOLD
-    red = arr[:, :, 0].copy()
-    red[mask] = 0
-    if red.max() == 0:
+    alpha = arr[:, :, 3].copy()
+    alpha[alpha < TRAFFIC_ALPHA_THRESHOLD] = 0
+    if alpha.max() == 0:
         return None
-    return Image.fromarray(red, "L")
+    # Bucket alpha to a few levels so the PNG has few distinct RGBA values and
+    # compresses hard; surviving pixels keep a nonzero alpha (never rounded to 0).
+    step = 256 // TRAFFIC_ALPHA_LEVELS
+    quantized = ((alpha.astype(np.uint16) // step) * step + step - 1).clip(0, 255)
+    alpha = np.where(alpha > 0, quantized, 0).astype(np.uint8)
+    out = np.zeros_like(arr)
+    keep = alpha > 0
+    out[keep, 0] = TRAFFIC_COLOR[0]
+    out[keep, 1] = TRAFFIC_COLOR[1]
+    out[keep, 2] = TRAFFIC_COLOR[2]
+    out[:, :, 3] = alpha
+    return Image.fromarray(out, "RGBA")
 
 
 def pack_traffic_tiles(tile_dir: Path, conn: sqlite3.Connection) -> int:
@@ -199,7 +217,7 @@ def pack_traffic_tiles(tile_dir: Path, conn: sqlite3.Connection) -> int:
                 ty = int(tile_file.stem)
                 img = threshold_traffic_tile(Image.open(tile_file))
                 if img is not None:
-                    insert_tile(conn, zoom, tx, ty, jpeg_bytes(img))
+                    insert_tile(conn, zoom, tx, ty, png_bytes(img, optimize=True))
                 total += 1
     conn.commit()
     return total
@@ -223,10 +241,11 @@ def render_los_tile(events_in_tile, radius_px):
     from PIL import ImageDraw
 
     s = SUPERSAMPLE
-    r = radius_px * s
+    r = radius_px * s  # may be fractional; the ellipse honors the sub-pixel radius
     # Padded canvas so circles near tile edges aren't clipped differently on
     # adjacent tiles — paint at shifted coords, then crop back to TILE_SIZE.
-    pad = r
+    # pad must be an int (image dims / crop offsets); round up to fully contain r.
+    pad = math.ceil(r)
     canvas = TILE_SIZE * s + 2 * pad
     img = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -344,7 +363,7 @@ def export_pack(
         if zoom_levels:
             out_path = tmp_dir / "Traffic Density.mbtiles"
             print(f"  ForeFlight: packing traffic tiles (zoom {zoom_levels[0]}–{zoom_levels[-1]})…")
-            conn = open_mbtiles(out_path, "Traffic Density", fmt="jpg",
+            conn = open_mbtiles(out_path, "Traffic Density", fmt="png",
                                 minzoom=zoom_levels[0], maxzoom=zoom_levels[-1])
             n = pack_traffic_tiles(tile_dir, conn)
             conn.close()

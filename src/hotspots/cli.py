@@ -290,8 +290,10 @@ def cmd_run(config, args) -> None:
         # often "../../../tiles/traffic"). Only hint the flag when traffic tiles
         # were used; the conventional local dir is tiles/traffic.
         traffic_flag = " --traffic-tiles-dir tiles/traffic" if local_tiles else ""
+        # Push the ForeFlight Content Pack alongside the map when one was built.
+        ff_flag = f" --foreflight-pack {ff_out}" if Path(ff_out).exists() else ""
         print(f"  Deploy: python src/tools/deploy_v2 --publish-as conus "
-              f"--source-stem {out_html.stem}{traffic_flag}")
+              f"--source-stem {out_html.stem}{traffic_flag}{ff_flag}")
     else:
         print(f"  Open:  file://{out_html.resolve()}")
     if Path(ff_out).exists():
