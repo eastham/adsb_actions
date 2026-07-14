@@ -73,6 +73,16 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             f.close()
         return None
 
+    def handle_one_request(self):
+        # Browsers routinely abandon in-flight responses (panning a map cancels
+        # pending tile fetches), which surfaces as a broken pipe / reset while
+        # writing the body. Swallow it: the connection is already gone, and the
+        # default behavior is to dump a full traceback for every such request.
+        try:
+            super().handle_one_request()
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
+
     def log_error(self, format, *args):
         # Suppress broken-pipe noise from browsers closing connections early.
         if len(args) > 0 and "Broken pipe" in str(args[-1]):
@@ -84,6 +94,14 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
 
+class QuietHTTPServer(http.server.HTTPServer):
+    def handle_error(self, request, client_address):
+        # Client disconnects aren't server errors; don't print a traceback.
+        if isinstance(sys.exc_info()[1], (BrokenPipeError, ConnectionResetError)):
+            return
+        super().handle_error(request, client_address)
+
+
 if __name__ == "__main__":
     # Serve from project root (not maps subdir) so that relative paths like
     # ../../tiles/traffic in the HTML resolve correctly.
@@ -91,7 +109,7 @@ if __name__ == "__main__":
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 8080
     os.chdir(directory)
     print(f"Serving {os.getcwd()} on http://localhost:{port}")
-    server = http.server.HTTPServer(("", port), RangeHTTPRequestHandler)
+    server = QuietHTTPServer(("", port), RangeHTTPRequestHandler)
 
     # Explicitly shut down on SIGINT/SIGTERM. Relying on KeyboardInterrupt
     # bubbling out of serve_forever() is unreliable: a Ctrl-C arriving while
