@@ -66,6 +66,7 @@ from hotspots.stage5_visualize import (
     generate_html,
     generate_pmtiles,
     generate_pmtiles_html,
+    validate_pmtiles,
     write_event_sidecars,
     write_search_index,
     load_events,
@@ -324,6 +325,10 @@ def run_stage5(
                     f"--html-only requires existing assets, but missing: {missing}. "
                     f"Run once without --html-only to generate them."
                 )
+            # Existence isn't enough: an interrupted tippecanoe leaves a plausible
+            # but unusable SQLite file at the .pmtiles path, and reusing it yields
+            # a map with traffic but no events.
+            validate_pmtiles(pmtiles_path)
             print(f"  --html-only: reusing existing {Path(pmtiles_path).name} and {Path(sidecar_dir).name}/")
         else:
             generate_pmtiles(df, pmtiles_path)

@@ -1124,6 +1124,24 @@ def write_search_index(df: pd.DataFrame, sidecar_dir: str) -> None:
           flush=True)
 
 
+def validate_pmtiles(path: str) -> None:
+    """
+    Raise unless `path` is a real PMTiles archive.
+
+    tippecanoe builds tiles into a SQLite/MBTiles file and converts to PMTiles as
+    a final step, so a run killed mid-write leaves a large, plausible-looking
+    SQLite file at the .pmtiles path. Checking existence isn't enough — check the
+    magic bytes, or a dead archive gets served as a map with no events.
+    """
+    with open(path, "rb") as f:
+        magic = f.read(7)
+    if magic != b"PMTiles":
+        raise RuntimeError(
+            f"{path} is not a PMTiles archive (magic={magic!r}). "
+            f"Likely a partial/interrupted tippecanoe run — delete it and rebuild."
+        )
+
+
 def generate_pmtiles(df: pd.DataFrame, output_path: str) -> str:
     """
     Convert event DataFrame to a .pmtiles file via tippecanoe.
@@ -1165,6 +1183,7 @@ def generate_pmtiles(df: pd.DataFrame, output_path: str) -> str:
     finally:
         os.unlink(tmp_geojson)
 
+    validate_pmtiles(pmtiles_path)
     size_mb = os.path.getsize(pmtiles_path) / 1024 / 1024
     print(f"  PMTiles: {pmtiles_path} ({size_mb:.2f} MB)")
     return pmtiles_path
@@ -1491,7 +1510,7 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
         '  // After clearAnimation() (which removes the previous marker) so the\n'
         '  // focus marker survives; shows the event even when its dot is filtered.\n'
         '  setFocusMarker(props.lon, props.lat, props.quality);\n'
-        '  _animSpeed = 1;\n'
+        '  _animSpeed = .8;\n'
         '  _paused = false;\n'
         '  var baseHtml = props.html || "";\n'
         '  if (baseHtml) showTooltip(baseHtml);\n'
