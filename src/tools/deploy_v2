@@ -32,6 +32,14 @@ to {remote}/tiles/traffic/.
 Use --foreflight-pack to also push a ForeFlight Content Pack .zip (produced by
 export_foreflight.py) to {remote}/foreflight/.
 
+Add --foreflight-publish-as <name> to *publish* that pack: it is additionally
+copied to the stable {remote}/foreflight/<name>.zip that the public page's
+download buttons point at, and examples/airbornehotspots/html/foreflight.html is
+stamped with that same pack's date range and size. Doing both from one named file
+is what keeps the page's advertised range and the bytes behind conus.zip in sync
+— a pack pushed *without* this flag lands at its dated URL only and never touches
+the page, which is what you want for test builds.
+
 Examples:
     python src/tools/deploy_v2
     python src/tools/deploy_v2 --remote hotspots-initial:hotspots --dry-run
@@ -39,6 +47,9 @@ Examples:
         --source-stem 24_50_-125_-65_20250601_20250831
     python src/tools/deploy_v2 --traffic-tiles-dir tiles/traffic
     python src/tools/deploy_v2 --foreflight-pack data/v2/foreflight/CONUS_Jan2026.zip
+    python src/tools/deploy_v2 \\
+        --foreflight-pack data/v2/foreflight/conus_20250601_20250831.zip \\
+        --foreflight-publish-as conus
 """
 
 import argparse
@@ -108,6 +119,10 @@ def main():
     parser.add_argument("--foreflight-pack", metavar="ZIP", default=None,
                         help="Also push this ForeFlight Content Pack .zip to "
                              "{remote}/foreflight/ (e.g. data/v2/foreflight/CONUS_Jan2026.zip)")
+    parser.add_argument("--foreflight-publish-as", metavar="NAME", default=None,
+                        help="Publish the --foreflight-pack: also copy it to the stable "
+                             "{remote}/foreflight/<NAME>.zip the public page links to, and "
+                             "stamp foreflight.html with that pack's date range/size.")
     args = parser.parse_args()
 
     if not os.path.isdir(args.maps_dir):
@@ -124,6 +139,10 @@ def main():
 
     if args.foreflight_pack and not os.path.isfile(args.foreflight_pack):
         print(f"ERROR: ForeFlight pack not found: {args.foreflight_pack}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.foreflight_publish_as and not args.foreflight_pack:
+        print("ERROR: --foreflight-publish-as requires --foreflight-pack", file=sys.stderr)
         sys.exit(1)
 
     if args.publish_as:
@@ -185,6 +204,30 @@ def main():
             "--progress",
             "--metadata-set", CACHE_CONTROL,
         ], args.dry_run)
+
+        # Publish: promote to the stable alias the public page links to, and
+        # stamp the page from that same pack. Both halves come from one named
+        # file, so the page's advertised date range cannot drift from the bytes
+        # actually served at <name>.zip.
+        if args.foreflight_publish_as:
+            alias_dst = f"{args.remote}/foreflight/{args.foreflight_publish_as}.zip"
+            print(f"\nPublishing {ff_name} → {alias_dst} ...", file=sys.stderr)
+            _run([
+                "rclone", "copyto", args.foreflight_pack, alias_dst,
+                "--progress",
+                "--metadata-set", CACHE_CONTROL,
+            ], args.dry_run)
+
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from generate_foreflight_page import PAGE, update_foreflight_page
+            summary = update_foreflight_page(args.foreflight_pack,
+                                             dry_run=args.dry_run)
+            verb = "would stamp" if args.dry_run else "stamped"
+            print(f"\nForeFlight page {verb}: {summary}", file=sys.stderr)
+            # The pack is live now, but the page describing it isn't until the
+            # static site is redeployed — keep that window short.
+            print(f"  Commit {PAGE.name}, then: python src/tools/deploy_static",
+                  file=sys.stderr)
 
     # 2. Optionally promote a dated map to a stable name.
     if args.publish_as:

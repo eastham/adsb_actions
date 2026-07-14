@@ -12,12 +12,16 @@ paths:
   traffic_tiles_local: ../../../tiles/traffic
   traffic_tiles_url: https://airbornehotspots.org/tiles
 
-# ForeFlight Content Pack: display name shown for the overall pack in the
-# ForeFlight UI. Layers inside it keep their own names ("Traffic Density",
-# "LOS Events"). Only the cli.py entrypoint reads this; pipeline.py's own
-# main() keeps its built-in default.
+# ForeFlight Content Pack: BASE display name shown for the overall pack in the
+# ForeFlight UI. cli.py appends the run's actual date range (e.g.
+# "Airbornehotspots.org Jun 1-Aug 31, 2025") so pilots can see which vintage is
+# installed in More > Custom Content. Don't hand-write dates here — they go
+# stale silently on the next run with a different window.
+# Layers inside the pack keep their own names ("Traffic Density", "LOS Events").
+# Only the cli.py entrypoint reads this; pipeline.py's own main() keeps its
+# built-in default.
 foreflight:
-  pack_name: "Airbornehotspots.org 6/25-8/25"
+  pack_name: "Airbornehotspots.org"
 
 # Where `deploy_v2` pushes rendered maps. NOTE: deploy_v2 is still standalone
 # (it does not read this file yet — see its own --remote/--maps-dir defaults).

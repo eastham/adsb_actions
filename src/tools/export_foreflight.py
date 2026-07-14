@@ -27,6 +27,7 @@ import io
 import json
 import math
 import os
+import re
 import sqlite3
 import sys
 import zipfile
@@ -323,7 +324,12 @@ def build_content_pack(mbtiles_files: list[tuple[str, Path]],
         "version": version,
         "organizationName": org,
     }
-    folder = pack_name  # top-level folder name in zip = pack display name
+    # Top-level folder name in zip = pack display name. Sanitize first: a name
+    # carrying a date range ("... 6/25-8/25") would otherwise have its slashes
+    # read as path separators, nesting manifest.json several dirs deep instead
+    # of at the top of one flat pack folder. The manifest's own "name" keeps the
+    # unsanitized text — it's JSON, not a path.
+    folder = re.sub(r"[/\\]", "-", pack_name).strip() or "Content Pack"
     with zipfile.ZipFile(output_zip, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(f"{folder}/manifest.json",
                     json.dumps(manifest, indent=2))
@@ -344,7 +350,7 @@ def export_pack(
     """Build a ForeFlight Content Pack and return the kept .mbtiles paths.
 
     Called from pipeline.py after Stage 5. Returns a list of absolute .mbtiles
-    paths that are kept on disk alongside the zip for mbview preview.
+    paths that are kept on disk alongside the zip for preview.
     Caller is responsible for cleanup if desired.
 
     traffic_tile_dir: local slippy-map tile tree root (None → skip traffic layer)
@@ -434,10 +440,11 @@ def main():
                        version=args.version, traffic_tile_dir=tile_dir,
                        events_df=df)
 
+    # Preview from the zip, not the temp mbtiles — those are deleted just below.
+    # preview_mbtiles.py uses MapLibre + OSM, so unlike mbview it needs no
+    # Mapbox token, and it shows both layers on one map.
     if kept:
-        print("\nPreview with mbview (install: npm install -g mbview):")
-        for p in kept:
-            print(f"  mbview '{p}'")
+        print(f"\nPreview:\n  python src/tools/preview_mbtiles.py --zip '{output_zip}'")
 
     # Clean up temp mbtiles
     tmp_dir = output_zip.parent / ".foreflight_tmp"

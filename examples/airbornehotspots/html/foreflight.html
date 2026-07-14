@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-TBDC7S1GCL"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-TBDC7S1GCL');
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ForeFlight Content Pack</title>
+<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "b4e63e29656945479c5050399013db3f"}'></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    background: #f8fafc; color: #1e293b; line-height: 1.6;
+  }
+  .navbar {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+    padding: 12px 24px; background: #0f172a;
+    border-bottom: 1px solid #1e293b;
+  }
+  .navbar-brand {
+    font-size: 1.1rem; font-weight: 700; color: #fff;
+    text-decoration: none; margin-right: auto;
+  }
+  .navbar a {
+    color: #cbd5e1; text-decoration: none; font-size: 0.95rem;
+    font-weight: 500;
+  }
+  .navbar a:hover { color: #fff; }
+  .container { max-width: 960px; margin: 0 auto; padding: 40px 24px; }
+  h1 {
+    font-size: 2rem; font-weight: 700; color: #0f172a;
+    margin-bottom: 8px;
+  }
+  h2 {
+    font-size: 1.25rem; font-weight: 600; color: #0f172a;
+    margin: 32px 0 8px;
+  }
+  p { color: #475569; margin: 16px 0; }
+  ul, ol { color: #475569; margin: 12px 0 16px 24px; }
+  li { margin: 6px 0; }
+  a { color: #2563eb; text-decoration: none; font-weight: 500; }
+  a:hover { text-decoration: underline; }
+  .subtitle { color: #64748b; font-size: 1.05rem; }
+  .card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 20px 24px; margin: 24px 0;
+  }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 24px;
+    font-size: 0.9rem; color: #64748b; margin-bottom: 16px;
+  }
+  .meta b { color: #1e293b; font-weight: 600; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    display: inline-block; padding: 10px 24px; font-size: 1rem;
+    font-weight: 600; color: #fff; background: #2563eb;
+    border-radius: 8px; text-decoration: none; text-align: center;
+  }
+  .btn:hover { background: #1d4ed8; text-decoration: none; }
+  .btn-secondary { background: #f1f5f9; color: #475569; }
+  .btn-secondary:hover { background: #e2e8f0; }
+  /* Platform label under each button — the deep link only works on iOS. */
+  .btn-note {
+    display: block; font-size: 0.75rem; font-weight: 500;
+    opacity: 0.8; margin-top: 2px;
+  }
+  .hint { font-size: 0.85rem; color: #64748b; margin: 12px 0 0; }
+  .swatch {
+    display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+    margin: 0 2px 0 6px; vertical-align: middle;
+  }
+  .footer {
+    margin-top: 48px; padding-top: 20px; border-top: 1px solid #e2e8f0;
+    font-size: 0.85rem; color: #64748b;
+  }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a class="navbar-brand" href="index.html">airbornehotspots.org</a>
+  <a href="faq.html">FAQ</a>
+  <a href="casestudies.html">Case Studies</a>
+  <a href="methodology.html">Methodology</a>
+  <a href="foreflight.html">ForeFlight</a>
+  <a href="contact.html">Get in Touch</a>
+</nav>
+<div class="container">
+  <h1>ForeFlight Content Pack</h1>
+  <p class="subtitle">Traffic density and loss-of-separation events, as map layers inside ForeFlight.</p>
+
+  <div class="card">
+    <div class="meta">
+      <span>Data range: <b><!--BEGIN:date_range-->06/01/25 &ndash; 08/31/25<!--END:date_range--></b></span>
+      <span>Coverage: <b>Continental US</b></span>
+      <span>Download size: <b><!--BEGIN:pack_size-->50 MB<!--END:pack_size--></b></span>
+    </div>
+    <div class="cta-row">
+      <!-- downloadURL is left UNENCODED on purpose: that's the form ForeFlight
+           documents and uses in its own sample links. This URL is an iOS app
+           handoff, not a web page — /content 404s in any desktop browser by
+           design. Long-press on iOS is the only path that works. -->
+      <a class="btn" href="https://foreflight.com/content?downloadURL=https://airbornehotspots.org/foreflight/conus.zip">Install in ForeFlight<span class="btn-note">iPad / iPhone only</span></a>
+      <a class="btn btn-secondary" href="https://airbornehotspots.org/foreflight/conus.zip">Download .zip<span class="btn-note">Mac / PC</span></a>
+    </div>
+    <p class="hint"><b>Press and hold</b> the blue button &mdash; don't just tap it &mdash; then
+       choose <b>Open in ForeFlight</b>.</p>
+  </div>
+
+  <h2>What's in the pack</h2>
+  <p>Two map layers, built from the same data behind the rest of this site. See
+     <a href="methodology.html">Methodology</a> for how events are detected and rated.</p>
+  <ul>
+    <li><b>Traffic Density</b> (blue/purple) &mdash; where the airplanes actually are. Aggregated position
+        reports over the whole data range; the brighter the area, the busier the airspace.</li>
+    <li><b>LOS Events</b> &mdash; individual loss-of-separation events, colored by confidence:
+        <span class="swatch" style="background:#c80000"></span>very high,
+        <span class="swatch" style="background:#ff6400"></span>high,
+        <span class="swatch" style="background:#ffdc00"></span>medium.
+        Low-confidence events are excluded.</li>
+  </ul>
+
+  <h2>Installing</h2>
+  <p><b>On an iPad or iPhone</b> &mdash; press and hold the <b>Install in ForeFlight</b> button
+     above (don't just tap it), then choose <b>Open in ForeFlight</b>. ForeFlight downloads
+     and imports the pack for you. This only works on a device with ForeFlight installed:
+     the button is a handoff to the app, not a web page, so on a computer it just leads to a
+     ForeFlight error page. Use <b>Download .zip</b> there instead.</p>
+  <p><b>From a Mac</b></p>
+  <ul>
+    <li><b>AirDrop:</b> download the .zip, then in Finder right-click it &rarr; <b>Share</b>
+        &rarr; <b>AirDrop</b> &rarr; your iPad. Accept on the iPad and choose ForeFlight.</li>
+    <li><b>USB:</b> connect the iPad, open it in Finder, click <b>Files</b>, and drag the
+        .zip onto ForeFlight.</li>
+  </ul>
+  <p><b>Other ways</b></p>
+  <ul>
+    <li><b>Email:</b> mail the .zip to yourself, open it on the iPad, press and hold the
+        attachment, and choose <b>Copy to ForeFlight</b>.</li>
+    <li><b>Safari:</b> download the .zip on the iPad, open the <b>Files</b> app, press and
+        hold the file, then <b>Share</b> &rarr; <b>ForeFlight</b>.</li>
+  </ul>
+
+  <h2>Turning the layers on</h2>
+  <p>Once imported, the pack appears under <b>More &rarr; Custom Content</b>. Its two layers
+     then show up in the <b>Maps</b> layer selector, in the left-hand column &mdash; switch them
+     on there. Remove or replace the pack from the same <b>Custom Content</b> screen.</p>
+
+  <h2>Please note</h2>
+  <p>These layers are a <b>historical</b> picture of a fixed date range. They are not live
+     traffic, not a traffic advisory, and no substitute for see-and-avoid or ATC. They will
+     not update in flight. Events are inferred from crowdsourced ADS-B data and any
+     individual one may be a false positive &mdash; see <a href="methodology.html">Methodology</a>
+     for the known sources of error. </p>
+
+  <div class="footer">
+    A service of 6061 Ventures LLC &middot;
+    <a href="accessibility.html">Accessibility</a>
+  </div>
+</div>
+</body>
+</html>

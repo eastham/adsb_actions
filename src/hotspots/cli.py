@@ -200,6 +200,13 @@ def cmd_run(config, args) -> None:
     out_html = config.maps_dir / f"{region_label}_{start_tag}_{end_tag}.html"
     ff_out = str(config.data_root / "foreflight" /
                  f"{region_label}_{start_tag}_{end_tag}.zip")
+    # Append the run's date range to the pack's display name so pilots can see
+    # which vintage is installed in ForeFlight's More > Custom Content list.
+    # The config value is a BASE name; None -> export_pack's built-in default.
+    # Slash-free format on purpose: pack_name also becomes the zip folder name.
+    ff_name = config.foreflight_pack_name
+    if ff_name:
+        ff_name = f"{ff_name} {start:%b %-d}-{end:%b %-d, %Y}"
 
     print(_stage("v2 LOS Pipeline (cli)"))
     print(f"  Profile/stages: {args.profile or '(explicit)'} {ARROW} {stages}")
@@ -258,7 +265,7 @@ def cmd_run(config, args) -> None:
         runners.run_stage5(df, str(out_html), pmtiles=pmtiles, zoom=args.zoom,
                            traffic_tile_dir=traffic, html_only=args.html_only,
                            foreflight_output=ff_out,
-                           foreflight_name=config.foreflight_pack_name,
+                           foreflight_name=ff_name,
                            foreflight_tiles=ff_tiles,
                            print_summary=False,
                            airport_quality=airport_quality,
@@ -291,7 +298,10 @@ def cmd_run(config, args) -> None:
         # were used; the conventional local dir is tiles/traffic.
         traffic_flag = " --traffic-tiles-dir tiles/traffic" if local_tiles else ""
         # Push the ForeFlight Content Pack alongside the map when one was built.
-        ff_flag = f" --foreflight-pack {ff_out}" if Path(ff_out).exists() else ""
+        # --foreflight-publish-as promotes it to the stable conus.zip the public
+        # page links to, and stamps the page's date range from this same pack.
+        ff_flag = (f" --foreflight-pack {ff_out} --foreflight-publish-as conus"
+                   if Path(ff_out).exists() else "")
         print(f"  Deploy: python src/tools/deploy_v2 --publish-as conus "
               f"--source-stem {out_html.stem}{traffic_flag}{ff_flag}")
     else:
