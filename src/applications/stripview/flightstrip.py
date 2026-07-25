@@ -82,7 +82,10 @@ class FlightStrip:
         if USE_DATABASE:
             from dbinterface import DbInterface
 
-            self.db_interface = DbInterface(self.flight, self.handle_db_update)
+            # Airport-specific DB interpretation, if the controller configured
+            # one (see --db-logic).  None means generic default behavior.
+            self.db_interface = DbInterface(self.flight, self.handle_db_update,
+                getattr(self.app, 'db_logic', None))
             self.update_thread = threading.Thread(target=self.server_refresh_thread)
             self.update_thread.start()
         logger.info(f"Created strip for {self.flight.flight_id}")
@@ -181,7 +184,8 @@ class FlightStrip:
             max_chars = int(self.main_button.width / dp(char_width_estimate))
             cliplen = max_chars - len(flight.flight_id.strip()) - len(extratail) - 1
             if cliplen < 0: cliplen = 0
-            self.loc_string = bbox_2nd_level[0:cliplen] if bbox_2nd_level else ""
+            # bbox names are lowercased at KML parse time; title-case for display
+            self.loc_string = bbox_2nd_level.title()[0:cliplen] if bbox_2nd_level else ""
 
             altchangestr = flight.get_alt_change_str(location.alt_baro)
             self.alt_string = (altchangestr + " " + str(location.alt_baro) +

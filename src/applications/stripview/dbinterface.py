@@ -23,7 +23,7 @@ class DbInterface:
         ui_update_cb: Callback function(note, warning, pilot, code, extra)
         custom_logic_cb: Optional callback to interpret database results.
                         If None, uses default logic (just shows if found).
-                        Signature: fn(db_obj, pilot_lookup_fn) ->
+                        Signature: fn(db_obj, pilot_lookup_fn, flight) ->
                                    (note_str, warning, pilot_label, code_label)
     """
 
@@ -58,7 +58,7 @@ class DbInterface:
             if self.custom_logic_cb:
                 # Use custom logic to interpret the database result
                 note_string, ui_warning, pilot_label, code_label = \
-                    self.custom_logic_cb(db_obj, db.pilot_lookup)
+                    self.custom_logic_cb(db_obj, db.pilot_lookup, self.flight)
             elif isinstance(db, NullDatabase):
                 # No database configured - don't show warning (green strip)
                 note_string = ""

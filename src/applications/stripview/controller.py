@@ -45,6 +45,20 @@ from flightstrip import FlightStrip
 controllerapp = None
 
 
+def load_db_logic(path):
+    """Load a custom DB-interpretation callback from a .py file.
+
+    Convention: the module defines a function named after the file stem
+    (e.g. examples/88nv/brc_db_logic.py -> function brc_db_logic).
+    """
+    import importlib.util
+    name = os.path.splitext(os.path.basename(path))[0]
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return getattr(module, name)
+
+
 class APIPoller:
     """Polls the public ADS-B API and feeds data to adsb_actions."""
 
@@ -106,7 +120,7 @@ class APIPoller:
 
 
 class ControllerApp(MDApp):
-    def __init__(self, bboxes, focus_q, admin_q):
+    def __init__(self, bboxes, focus_q, admin_q, db_logic=None):
         logger.debug("controller init")
 
         self.strips = {}    # dict of FlightStrips by id
@@ -114,6 +128,9 @@ class ControllerApp(MDApp):
         self.bboxes = bboxes
         self.focus_q = focus_q
         self.admin_q = admin_q
+        # Optional airport-specific DB interpretation callback, read by each
+        # FlightStrip off self.app (see load_db_logic / --db-logic).
+        self.db_logic = db_logic
 
         super().__init__()
 
@@ -138,7 +155,8 @@ class ControllerApp(MDApp):
         """Set GUI title bars according to bbox/KML titles"""
         for i, bbox in enumerate(self.bboxes.boxes):
             title_button = self.get_title_button_by_index(i)
-            title_button.text = bbox.name
+            # bbox names are lowercased at KML parse time; title-case for display
+            title_button.text = bbox.name.title()
             if i >= self.MAX_SCROLLVIEWS - 1:
                 return
 
@@ -250,6 +268,12 @@ def setup(focus_q, admin_q):
     parser.add_argument('--delay', help="Seconds of delay between reads, for testing", default=0)
     parser.add_argument('--api', action='store_true',
                         help="Use public API - requires latlongring in rules")
+    parser.add_argument('--db-logic',
+                        help="path to a custom DB interpretation module, e.g. "
+                             "examples/88nv/brc_db_logic.py; also enables the "
+                             "AppSheet database backend")
+    parser.add_argument('--fake-db', action='store_true',
+                        help="use canned DB responses (no network/creds needed)")
     args = parser.parse_args()
 
     # Validate mutually exclusive data source options
@@ -263,6 +287,15 @@ def setup(focus_q, admin_q):
         sys.exit(1)
     if args.ipaddr and args.delay:
         logger.warning("--delay has no effect when ipaddr is given")
+
+    # Optional airport-specific database + interpretation logic.
+    custom_db_logic = None
+    if args.db_logic:
+        from core.database.interface import set_database
+        from core.database.appsheet import AppsheetDatabase
+        set_database(AppsheetDatabase(use_fake_calls=args.fake_db))
+        custom_db_logic = load_db_logic(args.db_logic)
+        logger.info("Loaded custom DB logic from %s", args.db_logic)
 
     # Load YAML
     with open(args.rules, 'r') as f:
@@ -318,7 +351,8 @@ def setup(focus_q, admin_q):
     signal.signal(signal.SIGQUIT, sigint_handler)
 
     global controllerapp
-    controllerapp = ControllerApp(bboxes_list[0], focus_q, admin_q)
+    controllerapp = ControllerApp(bboxes_list[0], focus_q, admin_q,
+                                  db_logic=custom_db_logic)
     assert len(bboxes_list[0].boxes) == 4, \
         "4 racks expected in first kml"  # TODO: Obviously could be generalized
 

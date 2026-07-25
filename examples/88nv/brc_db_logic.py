@@ -11,18 +11,24 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Local ring used to decide "OFF PLAYA": [radius_nm, center_lat, center_lon].
+# Kept in sync with the geofence in stripview_ui.yaml.
+OFF_PLAYA_RING = (7, 40.760786, -119.212582)
+
 
 def test_dict(d, key):
     """Returns True if key is in d and the value is not empty/N."""
     return bool(d) and d.get(key) not in (None, '', 'N')
 
 
-def brc_db_logic(db_obj, pilot_lookup_fn=None):
+def brc_db_logic(db_obj, pilot_lookup_fn=None, flight=None):
     """Interpret AppSheet database results for 88NV airport context.
 
     Args:
         db_obj: Aircraft database object from aircraft_lookup(wholeobj=True)
         pilot_lookup_fn: Optional function to look up pilot info
+        flight: Optional Flight object, used to inspect firstloc (e.g. to
+                decide whether the aircraft arrived from off the playa)
 
     Returns:
         Tuple of (note_string, ui_warning, pilot_label, code_label)
@@ -41,9 +47,6 @@ def brc_db_logic(db_obj, pilot_lookup_fn=None):
         ui_warning = True
         return note_string, ui_warning, pilot_label, code_label
 
-    # Show arrival count
-    if 'Arrivals' in db_obj:
-        note_string += "Arrivals=%s " % db_obj['Arrivals']
 
     # Check for watched aircraft
     if test_dict(db_obj, 'Ban'):
@@ -52,26 +55,41 @@ def brc_db_logic(db_obj, pilot_lookup_fn=None):
 
     # Check arrival count (only for non-BxA aircraft)
     if not test_dict(db_obj, 'IsBxA'):
+        # Flag aircraft arriving from afar.  We key off firstloc (the first
+        # position we ever saw): if we first saw it outside the local ring it's
+        # an inbound arrival.  If first seen inside the ring it's local, and
+        # stays unflagged even if it later departs across the ring.
+        if flight is not None and flight.firstloc is not None:
+            radius_nm, center_lat, center_lon = OFF_PLAYA_RING
+            first_dist = flight.firstloc.distfrom_fast(center_lat, center_lon)
+            if first_dist > radius_nm:
+                note_string += "*OFF-PLAYA "
+
         arr = db_obj.get('Arrivals', 0)
         try:
             if int(arr) > 2:
-                note_string += "* >2 arrivals "
+                note_string += "*>2 arrivals "
         except (ValueError, TypeError):
             pass
 
     # Check registration status (skip for BxA and Medevac)
     if not test_dict(db_obj, 'Registered online'):
         if not test_dict(db_obj, 'IsBxA') and not test_dict(db_obj, 'Medevac'):
-            note_string += "* No Reg "
+            note_string += "*No Reg "
             ui_warning = True
 
     # Check for related notes
     if test_dict(db_obj, 'Related Notes'):
         note_string += "*Notes "
 
+    # Show arrival count if nothing else active
+    if 'Arrivals' in db_obj and note_string is "":
+        note_string += "Arrivals=%s " % db_obj['Arrivals']
+
     # Show BxA indicator
     if test_dict(db_obj, 'IsBxA'):
         note_string += "BxA"
+
 
     # Look up pilot info if available
     if pilot_lookup_fn and test_dict(db_obj, 'lead pilot'):
