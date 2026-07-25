@@ -44,6 +44,7 @@ class FlightStrip:
         self.alt_string = ""
         self.loc_string = ""
         self.deanno_event = None
+        self.annotated = False  # true while a TRAFFIC ALERT annotation is active
         self.font_size = 12
 
         strip_height = 50
@@ -200,6 +201,10 @@ class FlightStrip:
 
     def set_normal(self):
         """Set strip to its normal color based on its state"""
+        # Don't stomp on an active annotation (e.g. periodic DB refreshes
+        # call set_normal() and would otherwise flicker away the yellow).
+        if self.annotated:
+            return
         if self.bg_color_warn:
             self.main_button.background_color = (1,0,0)
         else:
@@ -213,12 +218,16 @@ class FlightStrip:
         if self.deanno_event:
             Clock.unschedule(self.deanno_event)
         self.deanno_event = Clock.schedule_once(lambda dt: self.deannotate(), 10)
-        self.main_button.background_color = (1, 0, 0)
+        self.annotated = True
+        self.main_button.background_color = (1, 1, 0)  # yellow
+        self.main_button.color = (0, 0, 0, 1)  # black text for contrast on yellow
 
         self.update_strip_text()
 
     def deannotate(self):
         """Remove warning condition."""
         self.note_string = ""
+        self.annotated = False
+        self.main_button.color = (1, 1, 1, 1)  # restore default white text
         self.set_normal()
         self.update_strip_text()

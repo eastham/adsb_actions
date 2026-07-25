@@ -47,7 +47,7 @@
         "justMyCode": true
       },
       {
-        "name": "Stripview UI demo from saved data",
+        "name": "Stripview UI demo from saved data, localhost:8011 vis",
         "type": "debugpy",
         "request": "launch",
         "cwd": "${workspaceFolder}",
