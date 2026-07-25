@@ -240,9 +240,12 @@ class Controller(FloatLayout):
 def sigint_handler(signum, frame):
     exit(1)
 
-def shutdown_adsb_actions(_, adsb_actions, data_thread, api_poller=None):
+def shutdown_adsb_actions(_, adsb_actions, data_thread, api_poller=None,
+                          visualizer=None):
     logger.warning("Shutting down adsb_actions")
 
+    if visualizer:
+        visualizer.stop()
     if api_poller:
         api_poller.stop()
     adsb_actions.exit_loop_flag = True
@@ -274,6 +277,14 @@ def setup(focus_q, admin_q):
                              "AppSheet database backend")
     parser.add_argument('--fake-db', action='store_true',
                         help="use canned DB responses (no network/creds needed)")
+    parser.add_argument('--visualize', action='store_true',
+                        help="serve a live aircraft map (OSM basemap) on "
+                             "http://localhost:8011/; requires --center")
+    parser.add_argument('--center',
+                        help="map center for --visualize, as 'LAT,LON'")
+    parser.add_argument('--width-nm', type=float, default=20.0,
+                        help="approximate viewport width in nm for --visualize "
+                             "(default 20)")
     args = parser.parse_args()
 
     # Validate mutually exclusive data source options
@@ -287,6 +298,16 @@ def setup(focus_q, admin_q):
         sys.exit(1)
     if args.ipaddr and args.delay:
         logger.warning("--delay has no effect when ipaddr is given")
+
+    # Validate --visualize center up front so we fail before building the UI.
+    viz_center = None
+    if args.visualize:
+        try:
+            lat_str, lon_str = args.center.split(",")
+            viz_center = (float(lat_str), float(lon_str))
+        except (AttributeError, ValueError):
+            logger.fatal("--visualize requires --center 'LAT,LON'")
+            sys.exit(1)
 
     # Optional airport-specific database + interpretation logic.
     custom_db_logic = None
@@ -363,14 +384,21 @@ def setup(focus_q, admin_q):
     adsb_actions.register_callback(
         "los_update_cb", controllerapp.annotate_strip)
 
+    # Optional live aircraft map, served on a background HTTP thread.
+    visualizer = None
+    if args.visualize:
+        from lib.live_visualizer import LiveVisualizer
+        visualizer = LiveVisualizer(adsb_actions, viz_center[0], viz_center[1],
+                                    width_nm=args.width_nm)
+
     # Setup data thread (not used for API mode)
     if not args.api:
         read_thread = threading.Thread(target=adsb_actions.loop,
             kwargs={'string_data': json_data, 'delay': float(args.delay)})
 
     # Handling for orderly exit when the user closes the window manually.
-    close_callback = lambda controller, actions=adsb_actions, thread=read_thread, poller=api_poller: \
-        shutdown_adsb_actions(controller, actions, thread, poller)
+    close_callback = lambda controller, actions=adsb_actions, thread=read_thread, poller=api_poller, viz=visualizer: \
+        shutdown_adsb_actions(controller, actions, thread, poller, viz)
     controllerapp.register_close_callback(close_callback)
 
     # Don't update the UI before it's drawn...
@@ -378,6 +406,8 @@ def setup(focus_q, admin_q):
         Clock.schedule_once(lambda x: api_poller.start(), 2)
     else:
         Clock.schedule_once(lambda x: read_thread.start(), 2)
+    if visualizer:
+        Clock.schedule_once(lambda x: visualizer.start(), 2)
 
     # TODO probably cleaner to put this method+state in a class.
     # we need to return both, derivative UIs will want to play

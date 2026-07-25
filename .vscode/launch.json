@@ -52,7 +52,7 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/applications/stripview/controller.py",
-        "args": " -- --testdata tests/20minutes.json --delay .2 --rules examples/88nv/stripview_ui.yaml --db-logic examples/88nv/brc_db_logic.py",
+        "args": " -- --testdata tests/20minutes.json --delay .2 --rules examples/88nv/stripview_ui.yaml --db-logic examples/88nv/brc_db_logic.py   --visualize --center 40.79,-119.20",
         "console": "integratedTerminal",
         "justMyCode": true
       },
