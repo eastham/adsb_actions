@@ -1,6 +1,7 @@
 """This module parses rules and actions, and applies them to flight data."""
 
 import datetime
+import functools
 import gzip
 import json
 import orjson
@@ -23,6 +24,26 @@ from .rules_optimizations import (initialize_rule_optimizations,
 logger = logging.getLogger(__name__)
 logger.level = logging.WARNING
 LOGGER = Logger()
+
+
+@functools.lru_cache(maxsize=8192)
+def _normalize_flight_id(flight_id: Optional[str]) -> str:
+    """Normalize a flight_id for matching: uppercase, dashes stripped,
+    surrounding whitespace removed. Returns "" for None. Cached since the
+    same flight_ids recur across many time steps."""
+    if not flight_id:
+        return ""
+    return flight_id.replace("-", "").strip().upper()
+
+
+def flight_id_in_list(flight_id: Optional[str], ac_list) -> bool:
+    """Case-insensitive, dash-insensitive membership test of a flight_id
+    against an aircraft list. Prefer Rules._flight_id_in_named_list on hot
+    paths, which caches the normalized set per list."""
+    target = _normalize_flight_id(flight_id)
+    if not target:
+        return False
+    return any(target == _normalize_flight_id(entry) for entry in ac_list)
 
 class Rules:
     """
@@ -55,6 +76,9 @@ class Rules:
         self._emit_files: dict[str, gzip.GzipFile] = {}  # open file handles for emit_jsonl
         self._use_optimizations = use_optimizations
         self._spatial_grid: Optional[Dict[Tuple[int, int], List[int]]] = None
+        # Lazily-built cache of normalized aircraft-list membership sets,
+        # keyed by list name. Lists are static for the life of this object.
+        self._normalized_ac_lists: Dict[str, set] = {}
 
         if self.get_rules() is {}:
             logger.warning("No rules found in YAML")
@@ -137,6 +161,32 @@ class Rules:
             raise
         return True
 
+    def _normalized_ac_list(self, list_name: str) -> Optional[set]:
+        """Return the normalized membership set for a named aircraft list,
+        building and caching it on first use. Returns None if the list is
+        undefined (caller logs)."""
+        cached = self._normalized_ac_lists.get(list_name)
+        if cached is not None:
+            return cached
+        try:
+            raw = self.yaml_data['aircraft_lists'][list_name]
+        except KeyError:
+            return None
+        normalized = {_normalize_flight_id(e) for e in raw}
+        normalized.discard("")
+        self._normalized_ac_lists[list_name] = normalized
+        return normalized
+
+    def _flight_id_in_named_list(self, flight_id: Optional[str],
+                                 list_name: str) -> bool:
+        """Case/dash-insensitive membership test against a named aircraft
+        list, using the cached normalized set."""
+        ac_set = self._normalized_ac_list(list_name)
+        if not ac_set:
+            return False
+        target = _normalize_flight_id(flight_id)
+        return bool(target) and target in ac_set
+
     def conditions_match(self, flight: Flight, conditions: dict,
                          rule_name: str, other_flight: Flight = None) -> bool:
         """Determine if the given rule conditions match for the given
@@ -172,23 +222,19 @@ class Rules:
 
         if 'aircraft_list' in conditions:
             condition_value = conditions['aircraft_list']
-            try:
-                ac_list = self.yaml_data['aircraft_lists'][condition_value]
-            except KeyError:
+            if self._normalized_ac_list(condition_value) is None:
                 logger.critical("Aircraft list not found: %s", condition_value)
                 return False
-            result = flight.flight_id in ac_list
+            result = self._flight_id_in_named_list(flight.flight_id, condition_value)
             if not result:
                 return False
 
         if 'exclude_aircraft_list' in conditions:
             condition_value = conditions['exclude_aircraft_list']
-            try:
-                ac_list = self.yaml_data['aircraft_lists'][condition_value]
-            except KeyError:
+            if self._normalized_ac_list(condition_value) is None:
                 logger.critical("Aircraft list not found: %s", condition_value)
                 return False
-            result = flight.flight_id not in ac_list
+            result = not self._flight_id_in_named_list(flight.flight_id, condition_value)
             if not result:
                 return False
 
@@ -198,14 +244,12 @@ class Rules:
             # in that case we defer evaluation to the flight2 pass where other_flight
             # is always provided.
             condition_value = conditions['one_in_aircraft_list']
-            try:
-                ac_list = self.yaml_data['aircraft_lists'][condition_value]
-            except KeyError:
+            if self._normalized_ac_list(condition_value) is None:
                 logger.critical("Aircraft list not found: %s", condition_value)
                 return False
             if other_flight is not None:
-                f_in = flight.flight_id in ac_list
-                o_in = other_flight.flight_id in ac_list
+                f_in = self._flight_id_in_named_list(flight.flight_id, condition_value)
+                o_in = self._flight_id_in_named_list(other_flight.flight_id, condition_value)
                 if not (f_in ^ o_in):  # XOR: exactly one must be in the list
                     return False
 
