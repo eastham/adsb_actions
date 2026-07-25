@@ -1,583 +1,323 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
-<Document>
-	<name>88nvplaces.kml</name>
-	<StyleMap id="msn_ylw-pushpin">
+<Document id="document">
+	<name>Untitled map project</name>
+	<gx:CascadingStyle kml:id="__managed_style_0F0EC43BA840D0983C4F_highlight">
+		<styleUrl>https://earth.google.com/balloon_components/base/1.1.0.0/card_template.kml#main</styleUrl>
+		<Style>
+			<IconStyle>
+				<scale>1.32</scale>
+				<Icon>
+					<href>data:image/png;base64,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</href>
+				</Icon>
+				<hotSpot x="20" y="62" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff000000</color>
+				<width>0</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>80050505</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<gx:CascadingStyle kml:id="__managed_style_0F0EC43BA840D0983C4F_normal">
+		<styleUrl>https://earth.google.com/balloon_components/base/1.1.0.0/card_template.kml#main</styleUrl>
+		<Style>
+			<IconStyle>
+				<scale>1.1</scale>
+				<Icon>
+					<href>data:image/png;base64,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</href>
+				</Icon>
+				<hotSpot x="20" y="62" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff000000</color>
+				<width>0</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>80050505</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<gx:CascadingStyle kml:id="__managed_style_00F1CEB68C40D0980B8B_highlight">
+		<styleUrl>https://earth.google.com/balloon_components/base/1.1.0.0/card_template.kml#main</styleUrl>
+		<Style>
+			<IconStyle>
+				<scale>1.2</scale>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff2dc0fb</color>
+				<width>3</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<gx:CascadingStyle kml:id="__managed_style_00F1CEB68C40D0980B8B_normal">
+		<styleUrl>https://earth.google.com/balloon_components/base/1.1.0.0/card_template.kml#main</styleUrl>
+		<Style>
+			<IconStyle>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff2dc0fb</color>
+				<width>2</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<StyleMap id="__managed_style_0F0EC43BA840D0983C4F">
 		<Pair>
 			<key>normal</key>
-			<styleUrl>#sn_ylw-pushpin3</styleUrl>
+			<styleUrl>#__managed_style_0F0EC43BA840D0983C4F_normal</styleUrl>
 		</Pair>
 		<Pair>
 			<key>highlight</key>
-			<styleUrl>#sh_ylw-pushpin1</styleUrl>
+			<styleUrl>#__managed_style_0F0EC43BA840D0983C4F_highlight</styleUrl>
 		</Pair>
 	</StyleMap>
-	<StyleMap id="msn_ylw-pushpin0">
+	<StyleMap id="__managed_style_00F1CEB68C40D0980B8B">
 		<Pair>
 			<key>normal</key>
-			<styleUrl>#sn_ylw-pushpin0</styleUrl>
+			<styleUrl>#__managed_style_00F1CEB68C40D0980B8B_normal</styleUrl>
 		</Pair>
 		<Pair>
 			<key>highlight</key>
-			<styleUrl>#sh_ylw-pushpin3</styleUrl>
+			<styleUrl>#__managed_style_00F1CEB68C40D0980B8B_highlight</styleUrl>
 		</Pair>
 	</StyleMap>
-	<StyleMap id="msn_ylw-pushpin1">
-		<Pair>
-			<key>normal</key>
-			<styleUrl>#sn_ylw-pushpin1</styleUrl>
-		</Pair>
-		<Pair>
-			<key>highlight</key>
-			<styleUrl>#sh_ylw-pushpin0</styleUrl>
-		</Pair>
-	</StyleMap>
-	<StyleMap id="msn_ylw-pushpin2">
-		<Pair>
-			<key>normal</key>
-			<styleUrl>#sn_ylw-pushpin2</styleUrl>
-		</Pair>
-		<Pair>
-			<key>highlight</key>
-			<styleUrl>#sh_ylw-pushpin2</styleUrl>
-		</Pair>
-	</StyleMap>
-	<StyleMap id="msn_ylw-pushpin3">
-		<Pair>
-			<key>normal</key>
-			<styleUrl>#sn_ylw-pushpin</styleUrl>
-		</Pair>
-		<Pair>
-			<key>highlight</key>
-			<styleUrl>#sh_ylw-pushpin</styleUrl>
-		</Pair>
-	</StyleMap>
-	<StyleMap id="msn_ylw-pushpin00">
-		<Pair>
-			<key>normal</key>
-			<styleUrl>#sn_ylw-pushpin23</styleUrl>
-		</Pair>
-		<Pair>
-			<key>highlight</key>
-			<styleUrl>#sh_ylw-pushpin32</styleUrl>
-		</Pair>
-	</StyleMap>
-	<StyleMap id="msn_ylw-pushpin700">
-		<Pair>
-			<key>normal</key>
-			<styleUrl>#sn_ylw-pushpin220</styleUrl>
-		</Pair>
-		<Pair>
-			<key>highlight</key>
-			<styleUrl>#sh_ylw-pushpin0000</styleUrl>
-		</Pair>
-	</StyleMap>
-	<StyleMap id="msn_ylw-pushpin9">
-		<Pair>
-			<key>normal</key>
-			<styleUrl>#sn_ylw-pushpin00</styleUrl>
-		</Pair>
-		<Pair>
-			<key>highlight</key>
-			<styleUrl>#sh_ylw-pushpin001</styleUrl>
-		</Pair>
-	</StyleMap>
-	<Style id="sh_ylw-pushpin">
-		<IconStyle>
-			<scale>1.3</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<BalloonStyle>
-		</BalloonStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sh_ylw-pushpin0">
-		<IconStyle>
-			<scale>1.3</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<BalloonStyle>
-		</BalloonStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sh_ylw-pushpin1">
-		<IconStyle>
-			<scale>1.3</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<BalloonStyle>
-		</BalloonStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sh_ylw-pushpin2">
-		<IconStyle>
-			<scale>1.3</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<BalloonStyle>
-		</BalloonStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sh_ylw-pushpin3">
-		<IconStyle>
-			<scale>1.3</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<BalloonStyle>
-		</BalloonStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sh_ylw-pushpin0000">
-		<IconStyle>
-			<scale>1.3</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sh_ylw-pushpin001">
-		<IconStyle>
-			<scale>1.3</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sh_ylw-pushpin32">
-		<IconStyle>
-			<scale>1.3</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sn_ylw-pushpin">
-		<IconStyle>
-			<scale>1.1</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<BalloonStyle>
-		</BalloonStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sn_ylw-pushpin0">
-		<IconStyle>
-			<scale>1.1</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<BalloonStyle>
-		</BalloonStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sn_ylw-pushpin1">
-		<IconStyle>
-			<scale>1.1</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<BalloonStyle>
-		</BalloonStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sn_ylw-pushpin2">
-		<IconStyle>
-			<scale>1.1</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<BalloonStyle>
-		</BalloonStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sn_ylw-pushpin3">
-		<IconStyle>
-			<scale>1.1</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<BalloonStyle>
-		</BalloonStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sn_ylw-pushpin00">
-		<IconStyle>
-			<scale>1.1</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sn_ylw-pushpin220">
-		<IconStyle>
-			<scale>1.1</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Style id="sn_ylw-pushpin23">
-		<IconStyle>
-			<scale>1.1</scale>
-			<Icon>
-				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
-			</Icon>
-			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
-		</IconStyle>
-		<LineStyle>
-			<color>ff000000</color>
-			<width>0</width>
-		</LineStyle>
-		<PolyStyle>
-			<color>80050505</color>
-		</PolyStyle>
-	</Style>
-	<Folder>
-		<name>88nvplaces</name>
+	<Folder id="5DAE47982D000001">
+		<name>88nvplaces.kml</name>
 		<open>1</open>
-		<Placemark>
-			<name>At airport: 3000-4500 0-360</name>
-			<styleUrl>#msn_ylw-pushpin00</styleUrl>
-			<Polygon>
-				<tessellate>1</tessellate>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							-119.2321401548117,40.7601622480765,1250 -119.2280289612598,40.74987198214316,1250 -119.1760686183367,40.76341979213687,1250 -119.1780364670908,40.77340302209452,1250 -119.2321401548117,40.7601622480765,1250 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>Razorback: 4500-9000  0-360</name>
-			<styleUrl>#msn_ylw-pushpin9</styleUrl>
-			<Polygon>
-				<tessellate>1</tessellate>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							-119.1796240895075,40.7288630379109,0 -119.1447847445503,40.69832208622853,0 -119.0860313374723,40.75709064514093,0 -119.1017787480372,40.76751180152448,0 -119.1257930243884,40.76051015982478,0 -119.1796240895075,40.7288630379109,0 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>Empire corr: 4000-13000  0-360</name>
-			<visibility>0</visibility>
-			<styleUrl>#msn_ylw-pushpin1</styleUrl>
-			<Polygon>
-				<tessellate>1</tessellate>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							-119.236252501606,40.73635235432265,0 -119.3435395878649,40.64602421399178,0 -119.4121385462038,40.56258098806834,0 -119.3273644365441,40.52143709370836,0 -119.1923152876169,40.71309102197531,0 -119.2230236745354,40.74363867064055,0 -119.236252501606,40.73635235432265,0 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>23 upwind: 4000-6000  0-360</name>
-			<visibility>0</visibility>
-			<styleUrl>#msn_ylw-pushpin700</styleUrl>
-			<Polygon>
-				<tessellate>1</tessellate>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							-119.2744395456712,40.74711411019367,0 -119.2674797890672,40.73447592432041,0 -119.2262215647156,40.75238743994482,0 -119.2303921444435,40.75993523899467,0 -119.2744395456712,40.74711411019367,0 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>23 scenic ent: 4000-7500  0-360</name>
-			<visibility>0</visibility>
-			<styleUrl>#msn_ylw-pushpin0</styleUrl>
-			<Polygon>
-				<tessellate>1</tessellate>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							-119.2884622594746,40.76080950027058,0 -119.2741536573215,40.74681965733924,0 -119.2401018035621,40.75714348522962,0 -119.2298779260885,40.77243195667608,0 -119.2467268063853,40.78517667689445,0 -119.2884622594746,40.76080950027058,0 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>Gerlach corr: 4000-15000  0-360</name>
-			<visibility>0</visibility>
-			<styleUrl>#msn_ylw-pushpin</styleUrl>
-			<Polygon>
-				<tessellate>1</tessellate>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							-119.3391165643305,40.73076406736851,0 -119.4850882037727,40.60778517624182,0 -119.4120585540269,40.5632696875209,0 -119.3421773217986,40.64754632073289,0 -119.2564329337763,40.71729468248144,0 -119.2597384487555,40.7216955340182,0 -119.2751496808048,40.74956897577712,0 -119.3391165643305,40.73076406736851,0 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>Over City: 3900-15000  0-360</name>
-			<visibility>0</visibility>
-			<styleUrl>#msn_ylw-pushpin700</styleUrl>
-			<Polygon>
-				<tessellate>1</tessellate>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							-119.2167419745644,40.80711075585256,0 -119.2305802117588,40.78354228825584,0 -119.2072316392634,40.76348935722017,0 -119.1763716421986,40.77582660263813,0 -119.1809930331012,40.80122776823026,0 -119.2167419745644,40.80711075585256,0 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>Scenic exit: 3000-8000 0-360</name>
-			<styleUrl>#msn_ylw-pushpin2</styleUrl>
-			<Polygon>
-				<tessellate>1</tessellate>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							-119.1663423467394,40.78861484298741,0 -119.1300117626849,40.75788368986126,0 -119.0899543820102,40.77067081065996,0 -119.1558835039471,40.81487044407965,0 -119.1663423467394,40.78861484298741,0 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>Pattern: 3500-4800 0-360</name>
-			<styleUrl>#msn_ylw-pushpin700</styleUrl>
-			<Polygon>
-				<tessellate>1</tessellate>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							-119.2298326905998,40.74953111431407,0 -119.1963634489241,40.71869610234543,0 -119.1231249564996,40.7620592164544,0 -119.1504014907946,40.78181938446833,0 -119.1575996068378,40.78257648563609,0 -119.1779616890851,40.77469621605798,0 -119.2298326905998,40.74953111431407,0 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>Point 1: 3900-15000 0-360</name>
-			<styleUrl>#msn_ylw-pushpin2</styleUrl>
-			<Polygon>
-				<tessellate>1</tessellate>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							-119.2505496220834,40.78796798254738,0 -119.2298673461336,40.77153804472513,0 -119.2166667675113,40.7951956690743,0 -119.2371210607802,40.80322706321859,0 -119.2505496220834,40.78796798254738,0 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>Point 2:  3900-15000 0-360</name>
-			<styleUrl>#msn_ylw-pushpin2</styleUrl>
-			<Polygon>
-				<tessellate>1</tessellate>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							-119.2389539414496,40.80392085414799,0 -119.2159619354225,40.79425614485255,0 -119.1934453198826,40.82148613602249,0 -119.2233832434929,40.82496347741467,0 -119.2389539414496,40.80392085414799,0 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>Point 3: 3900-15000 0-360</name>
-			<styleUrl>#msn_ylw-pushpin2</styleUrl>
-			<Polygon>
-				<tessellate>1</tessellate>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							-119.1946670060207,40.82194909913377,0 -119.2096308237312,40.80247186793743,0 -119.1658553527052,40.78779131155833,0 -119.1555744434662,40.81638206777815,0 -119.1946670060207,40.82194909913377,0 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>Point 4: 4800-15000 0-360</name>
-			<styleUrl>#msn_ylw-pushpin0</styleUrl>
-			<Polygon>
-				<tessellate>1</tessellate>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							-119.1968207217131,40.77696033836816,0 -119.1779720718044,40.76398424046663,0 -119.1552790250732,40.78483079466447,0 -119.1822316389534,40.79400394705215,0 -119.1968207217131,40.77696033836816,0 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>Point 5: 4800-15000 0-360</name>
-			<visibility>0</visibility>
-			<styleUrl>#msn_ylw-pushpin0</styleUrl>
-			<Polygon>
-				<tessellate>1</tessellate>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							-119.2244443824178,40.78333167908154,0 -119.2298276197154,40.77245862329343,0 -119.2381785936925,40.76824903930449,0 -119.2104825099242,40.75103101714677,0 -119.178220385733,40.76379645257491,0 -119.1960759510132,40.77733589114494,0 -119.2244443824178,40.78333167908154,0 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>Other: 4000-15000 0-360</name>
-			<visibility>0</visibility>
-			<styleUrl>#msn_ylw-pushpin3</styleUrl>
-			<Polygon>
-				<tessellate>1</tessellate>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							-119.3316469488492,40.90427444736496,0 -119.3823228412866,40.67201575071255,0 -119.1531161130762,40.64914248175291,0 -119.0030109584972,40.8731688976887,0 -119.3316469488492,40.90427444736496,0 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
+		<styleUrl>#__managed_style_00F1CEB68C40D0980B8B</styleUrl>
+		<Folder id="5DAE47982D000002">
+			<name>88nvplaces</name>
+			<open>1</open>
+			<styleUrl>#__managed_style_00F1CEB68C40D0980B8B</styleUrl>
+			<Placemark id="5DAE47982D000003">
+				<name>At airport: 3000-4500 0-360</name>
+				<styleUrl>#__managed_style_0F0EC43BA840D0983C4F</styleUrl>
+				<Polygon>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-119.2321401548117,40.7601622480765,1250 -119.2280289612598,40.74987198214316,1250 -119.1760686183367,40.76341979213687,1250 -119.1780364670908,40.77340302209452,1250 -119.2321401548117,40.7601622480765,1250 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</Placemark>
+			<Placemark id="5DAE47982D000004">
+				<name>Razorback: 4500-9000  0-360</name>
+				<styleUrl>#__managed_style_0F0EC43BA840D0983C4F</styleUrl>
+				<Polygon>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-119.1796240895075,40.7288630379109,0 -119.1447847445503,40.69832208622853,0 -119.0860313374723,40.75709064514093,0 -119.1017787480372,40.76751180152448,0 -119.1257930243884,40.76051015982478,0 -119.1796240895075,40.7288630379109,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</Placemark>
+			<Placemark id="5DAE47982D000005">
+				<name>Empire corr: 4000-13000  0-360</name>
+				<styleUrl>#__managed_style_0F0EC43BA840D0983C4F</styleUrl>
+				<Polygon>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-119.236252501606,40.73635235432265,0 -119.3435395878649,40.64602421399178,0 -119.4121385462038,40.56258098806834,0 -119.3273644365441,40.52143709370836,0 -119.1923152876169,40.71309102197531,0 -119.2230236745354,40.74363867064055,0 -119.236252501606,40.73635235432265,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</Placemark>
+			<Placemark id="5DAE47982D000006">
+				<name>23 upwind: 4000-6000  0-360</name>
+				<styleUrl>#__managed_style_0F0EC43BA840D0983C4F</styleUrl>
+				<Polygon>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-119.2744395456712,40.74711411019367,0 -119.2674797890672,40.73447592432041,0 -119.2262215647156,40.75238743994482,0 -119.2303921444435,40.75993523899467,0 -119.2744395456712,40.74711411019367,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</Placemark>
+			<Placemark id="5DAE47982D000007">
+				<name>23 scenic ent: 4000-7500  0-360</name>
+				<styleUrl>#__managed_style_0F0EC43BA840D0983C4F</styleUrl>
+				<Polygon>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-119.2884622594746,40.76080950027058,0 -119.2741536573215,40.74681965733924,0 -119.2401018035621,40.75714348522962,0 -119.2298779260885,40.77243195667608,0 -119.2467268063853,40.78517667689445,0 -119.2884622594746,40.76080950027058,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</Placemark>
+			<Placemark id="5DAE47982D000008">
+				<name>Gerlach corr: 4000-15000  0-360</name>
+				<styleUrl>#__managed_style_0F0EC43BA840D0983C4F</styleUrl>
+				<Polygon>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-119.3391165643305,40.73076406736851,0 -119.4850882037727,40.60778517624182,0 -119.4120585540269,40.5632696875209,0 -119.3421773217986,40.64754632073289,0 -119.2564329337763,40.71729468248144,0 -119.2597384487555,40.7216955340182,0 -119.2751496808048,40.74956897577712,0 -119.3391165643305,40.73076406736851,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</Placemark>
+			<Placemark id="5DAE47982D000009">
+				<name>Over City: 3900-15000  0-360</name>
+				<styleUrl>#__managed_style_0F0EC43BA840D0983C4F</styleUrl>
+				<Polygon>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-119.221854368462,40.80310750892502,0 -119.2374489691011,40.77965326801951,0 -119.213768754225,40.76107631162844,0 -119.1811723144395,40.77209927848056,0 -119.186658527823,40.79870004154301,0 -119.221854368462,40.80310750892502,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</Placemark>
+			<Placemark id="5DAE47982D00000A">
+				<name>Scenic exit: 3000-8000 0-360</name>
+				<styleUrl>#__managed_style_0F0EC43BA840D0983C4F</styleUrl>
+				<Polygon>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-119.1663423467394,40.78861484298741,0 -119.1300117626849,40.75788368986126,0 -119.0899543820102,40.77067081065996,0 -119.1558835039471,40.81487044407965,0 -119.1663423467394,40.78861484298741,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</Placemark>
+			<Placemark id="5DAE47982D00000B">
+				<name>Pattern: 3500-4800 0-360</name>
+				<styleUrl>#__managed_style_0F0EC43BA840D0983C4F</styleUrl>
+				<Polygon>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-119.2298326905998,40.74953111431407,0 -119.1963634489241,40.71869610234543,0 -119.1231249564996,40.7620592164544,0 -119.1504014907946,40.78181938446833,0 -119.1575996068378,40.78257648563609,0 -119.1779616890851,40.77469621605798,0 -119.2298326905998,40.74953111431407,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</Placemark>
+			<Placemark id="5DAE47982D00000C">
+				<name>Point 1: 3900-15000 0-360</name>
+				<styleUrl>#__managed_style_0F0EC43BA840D0983C4F</styleUrl>
+				<Polygon>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-119.2505496220834,40.78796798254738,0 -119.2298673461336,40.77153804472513,0 -119.2166667675113,40.7951956690743,0 -119.2371210607802,40.80322706321859,0 -119.2505496220834,40.78796798254738,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</Placemark>
+			<Placemark id="5DAE47982D00000D">
+				<name>Point 2:  3900-15000 0-360</name>
+				<styleUrl>#__managed_style_0F0EC43BA840D0983C4F</styleUrl>
+				<Polygon>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-119.2389539414496,40.80392085414799,0 -119.2159619354225,40.79425614485255,0 -119.1934453198826,40.82148613602249,0 -119.2233832434929,40.82496347741467,0 -119.2389539414496,40.80392085414799,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</Placemark>
+			<Placemark id="5DAE47982D00000E">
+				<name>Point 3: 3900-15000 0-360</name>
+				<styleUrl>#__managed_style_0F0EC43BA840D0983C4F</styleUrl>
+				<Polygon>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-119.1946670060207,40.82194909913377,0 -119.2096308237312,40.80247186793743,0 -119.1658553527052,40.78779131155833,0 -119.1555744434662,40.81638206777815,0 -119.1946670060207,40.82194909913377,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</Placemark>
+			<Placemark id="5DAE47982D00000F">
+				<name>Point 4: 4800-15000 0-360</name>
+				<styleUrl>#__managed_style_0F0EC43BA840D0983C4F</styleUrl>
+				<Polygon>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-119.1968207217131,40.77696033836816,0 -119.1779720718044,40.76398424046663,0 -119.1552790250732,40.78483079466447,0 -119.1822316389534,40.79400394705215,0 -119.1968207217131,40.77696033836816,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</Placemark>
+			<Placemark id="5DAE47982D000010">
+				<name>Point 5: 4800-15000 0-360</name>
+				<styleUrl>#__managed_style_0F0EC43BA840D0983C4F</styleUrl>
+				<Polygon>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-119.2244443824178,40.78333167908154,0 -119.2298276197154,40.77245862329343,0 -119.2391970998887,40.75862429909171,0 -119.2104825099242,40.75103101714677,0 -119.178220385733,40.76379645257491,0 -119.1960759510132,40.77733589114494,0 -119.2244443824178,40.78333167908154,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</Placemark>
+			<Placemark id="5DAE47982D000011">
+				<name>Other: 4000-15000 0-360</name>
+				<visibility>0</visibility>
+				<styleUrl>#__managed_style_0F0EC43BA840D0983C4F</styleUrl>
+				<Polygon>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-119.3316469488492,40.90427444736496,0 -119.3823228412866,40.67201575071255,0 -119.1531161130762,40.64914248175291,0 -119.0030109584972,40.8731688976887,0 -119.3316469488492,40.90427444736496,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</Placemark>
+		</Folder>
 	</Folder>
 </Document>
 </kml>
