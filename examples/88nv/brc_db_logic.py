@@ -63,7 +63,7 @@ def brc_db_logic(db_obj, pilot_lookup_fn=None, flight=None):
             radius_nm, center_lat, center_lon = OFF_PLAYA_RING
             first_dist = flight.firstloc.distfrom_fast(center_lat, center_lon)
             if first_dist > radius_nm:
-                note_string += "*OFF-PLAYA "
+                note_string += "[b][color=00ffff]*OFF-PLAYA [/color][/b]"
 
         arr = db_obj.get('Arrivals', 0)
         try:
