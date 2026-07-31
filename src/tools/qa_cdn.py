@@ -34,7 +34,8 @@ DEFAULT_SAMPLE_EVENTS = 20
 DEFAULT_WORKERS = 10
 
 ROOT_FILES = [
-    "index.html",
+    "index.html",   # the live map, published by deploy_v2 --publish-root
+    "about.html",   # the landing page formerly served at the root
     "unavailable.html",
     "methodology.html",
     "faq.html",
