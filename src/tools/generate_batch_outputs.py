@@ -285,14 +285,11 @@ def generate_index_html(sections, output_stats, output_path):
     </div>"""
         section_blocks.append(section_html)
 
-    # Count totals
-    total_airports = sum(len(codes) for _, codes in sections)
-    total_events = sum(s['raw_event_count'] for s in output_stats.values())
-    airports_with_data = len(output_stats)
-
+    # The headline stats describe the published v2 map, not this v1 airport
+    # scan, so they're stamped into the template by generate_index_stats at
+    # promotion time. _render_template leaves markers it isn't given alone, so
+    # those stamped values pass through untouched.
     html = _render_template("index_template.html", {
-        "airports_with_data": airports_with_data,
-        "total_events": f"{total_events:,}",
         "section_blocks": "\n".join(section_blocks),
     })
 

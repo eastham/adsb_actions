@@ -11,6 +11,12 @@ import time
 from tools.inject_adsb import ReadsbConnection
 from tools import ADSB_Encoder
 
+# Re-send each aircraft's callsign this often (seconds). Real transponders emit
+# the identification message roughly every 5s; matching that keeps the callsign
+# populated in readsb/tar1090 even if it drops and reacquires the target.
+IDENT_RESEND_SEC = 5.0
+
+
 def inject_position(readsb, icao, lat, lon, alt):
     """Inject a position into readsb."""
 
@@ -21,6 +27,19 @@ def inject_position(readsb, icao, lat, lon, alt):
     if ret1 + ret2:
         print("Failed to send position to readsb")
     return ret1 + ret2
+
+
+def inject_ident(readsb, icao, callsign):
+    """Inject a callsign (DF17 identification) message into readsb.
+
+    The frame is a single sentence; inject() expects two, so we send it as both
+    halves, mirroring the double-send inject_position uses for rendering.
+    """
+    sentence = ADSB_Encoder.encode_ident(icao, callsign)
+    ret = readsb.inject(sentence, sentence)
+    if ret:
+        print("Failed to send ident to readsb")
+    return ret
 
 def main(file: str, readsb_connection: ReadsbConnection,
          speed_x : int):
@@ -46,6 +65,7 @@ def main(file: str, readsb_connection: ReadsbConnection,
     # Iterate through the points in time order.  One second at a time,
     # each second may contain multiple points...
     send_ctr = 0
+    last_ident_ts = {}   # icao -> wall-clock time its callsign was last sent
     for point in allpoints:
         start_work_ts = time.time()
 
@@ -56,6 +76,15 @@ def main(file: str, readsb_connection: ReadsbConnection,
         except KeyError:
             print("Skipping line: " + str(point))
             continue
+
+        # Send the callsign alongside positions, re-sending periodically so it
+        # survives a readsb dropout. Absent/blank 'flight' fields are skipped.
+        callsign = (point.get('flight') or '').strip()
+        if callsign:
+            now = time.time()
+            if now - last_ident_ts.get(icao, 0) >= IDENT_RESEND_SEC:
+                inject_ident(readsb_connection, icao, callsign)
+                last_ident_ts[icao] = now
 
         send_ctr += 1
         # slow down if needed to hit speed multiplier.

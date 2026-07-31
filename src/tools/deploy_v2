@@ -272,6 +272,20 @@ def main():
                 "--metadata-set", CACHE_CONTROL,
             ], args.dry_run)
 
+        # Stamp the landing page's headline stats from this same stem, so the
+        # numbers can't drift from the map just promoted above.
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from generate_index_stats import (PAGE, compute_headline_stats,
+                                          stamp_index_template)
+        stats = compute_headline_stats(stem, args.maps_dir)
+        summary = stamp_index_template(stats, dry_run=args.dry_run)
+        verb = "would stamp" if args.dry_run else "stamped"
+        print(f"\nIndex stats {verb}: {summary}", file=sys.stderr)
+        # The map is live now, but the page describing it isn't until the static
+        # site is redeployed — keep that window short.
+        print(f"  Commit {PAGE.name}, then re-run generate_batch_outputs.py "
+              "and: python src/tools/deploy_static", file=sys.stderr)
+
     print("Done.", file=sys.stderr)
 
 

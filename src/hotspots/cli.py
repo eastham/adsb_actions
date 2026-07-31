@@ -198,8 +198,11 @@ def cmd_run(config, args) -> None:
     start_tag, end_tag = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
     regional = config.regional_dir / f"{region_label}_{start_tag}_{end_tag}.parquet"
     out_html = config.maps_dir / f"{region_label}_{start_tag}_{end_tag}.html"
-    ff_out = str(config.data_root / "foreflight" /
-                 f"{region_label}_{start_tag}_{end_tag}.zip")
+    # --no-foreflight opts out of the (slow) Content Pack build: run_stage5
+    # skips it when foreflight_output is None.
+    ff_out = None if args.no_foreflight else str(
+        config.data_root / "foreflight" /
+        f"{region_label}_{start_tag}_{end_tag}.zip")
     # Append the run's date range to the pack's display name so pilots can see
     # which vintage is installed in ForeFlight's More > Custom Content list.
     # The config value is a BASE name; None -> export_pack's built-in default.
@@ -217,7 +220,8 @@ def cmd_run(config, args) -> None:
 
     if args.dry_run:
         _print_dry_run(config, args, stages, bounds, start, end,
-                       regional, out_html, Path(ff_out), pmtiles, ff_tiles)
+                       regional, out_html,
+                       Path(ff_out) if ff_out else None, pmtiles, ff_tiles)
         return
 
     # Stages 2/3: day-at-a-time with verify + remount/retry gate. Provenance is
@@ -301,12 +305,12 @@ def cmd_run(config, args) -> None:
         # --foreflight-publish-as promotes it to the stable conus.zip the public
         # page links to, and stamps the page's date range from this same pack.
         ff_flag = (f" --foreflight-pack {ff_out} --foreflight-publish-as conus"
-                   if Path(ff_out).exists() else "")
+                   if ff_out and Path(ff_out).exists() else "")
         print(f"  Deploy: python src/tools/deploy_v2 --publish-as conus "
               f"--source-stem {out_html.stem}{traffic_flag}{ff_flag}")
     else:
         print(f"  Open:  file://{out_html.resolve()}")
-    if Path(ff_out).exists():
+    if ff_out and Path(ff_out).exists():
         preview_cmd = f"python src/tools/preview_mbtiles.py --zip '{ff_out}'"
         if local_tiles:
             preview_cmd += f" --traffic-tiles '{local_tiles}'"
@@ -575,6 +579,9 @@ def build_parser(config) -> argparse.ArgumentParser:
                          "(honoring --skip-existing) without running anything")
     pr.add_argument("--html-only", action="store_true",
                     help="Stage 5: reuse existing .pmtiles/_tracks (PMTiles only)")
+    pr.add_argument("--no-foreflight", action="store_true",
+                    help="Stage 5: skip building the ForeFlight Content Pack "
+                         "(the tile-packing step is slow)")
     pr.add_argument("--airport-quality", action="store_true",
                     help="Render per-airport ADS-B coverage / runway-usage icons "
                          "on the map (aggregates cached per-day scores from the "

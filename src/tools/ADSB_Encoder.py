@@ -392,6 +392,63 @@ def hackrf_raw_IQ_format(ppm):
     return bytearray(signal)
 
 
+# 6-bit charset for the DF17 Aircraft Identification callsign. Index == 6-bit
+# code: 1-26 are A-Z, 48-57 are 0-9, 32 is space (used for padding); all other
+# codes are invalid and map to '#'.
+_IDENT_CHARSET = ("#ABCDEFGHIJKLMNOPQRSTUVWXYZ#####"
+                  " ###############0123456789######")
+
+
+def _callsign_to_bits(callsign: str) -> int:
+    """Encode up to 8 callsign chars into a 48-bit integer (6 bits each).
+
+    Uppercases, keeps only chars in the ADS-B ident charset, and pads to 8
+    with spaces (code 32), matching how real transponders send the field.
+    """
+    cleaned = "".join(c for c in callsign.upper() if c in _IDENT_CHARSET)
+    cleaned = cleaned[:8].ljust(8)
+    bits = 0
+    for c in cleaned:
+        bits = (bits << 6) | _IDENT_CHARSET.index(c)
+    return bits
+
+
+def df17_ident_encode(ca, icao, tc, callsign):
+    """Build a DF17 Aircraft Identification frame (14 bytes) for a callsign."""
+    category = 0
+    cs_bits = _callsign_to_bits(callsign)
+
+    # ME field is 56 bits: TC(5) | category(3) | 8 x 6-bit chars(48). Assemble
+    # it as one 56-bit integer, then slice into 7 bytes so the 6-bit chars pack
+    # across byte boundaries correctly.
+    me = (tc << 51) | (category << 48) | cs_bits
+
+    ident_bytes = []
+    ident_bytes.append((17 << 3) | ca)
+    ident_bytes.append((icao >> 16) & 0xff)
+    ident_bytes.append((icao >> 8) & 0xff)
+    ident_bytes.append((icao) & 0xff)
+    for shift in range(48, -1, -8):
+        ident_bytes.append((me >> shift) & 0xff)
+
+    ident_str = "".join(format(b, "02x") for b in ident_bytes[0:11])
+    ident_crc = bin2int(crc(ident_str + "000000", encode=True))
+
+    ident_bytes.append((ident_crc >> 16) & 0xff)
+    ident_bytes.append((ident_crc >> 8) & 0xff)
+    ident_bytes.append((ident_crc) & 0xff)
+
+    return ident_bytes
+
+
+def encode_ident(icao: int, callsign: str) -> str:
+    """Encode a callsign as a DF17 identification message (hex string)."""
+    ca = 5
+    tc = 4
+    ident_bytes = df17_ident_encode(ca, icao, tc, callsign)
+    return "".join(format(x, "02x") for x in ident_bytes)
+
+
 def encode(icao: int, lat: float, lon: float, alt: float):
     ca = 5
     tc = 11
