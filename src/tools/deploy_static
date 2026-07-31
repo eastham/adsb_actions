@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """
-deploy_static - push static html/ files and examples/generated/index.html to remote storage.
+deploy_static - push static html/ files and examples/generated/about.html to remote storage.
 
-Copies everything in html/ except excluded files, plus index.html from
+Copies everything in html/ except excluded files, plus about.html from
 examples/generated/.
+
+The site root (index.html) is the live map and is published separately by
+deploy_v2 --publish-root; this script never writes it.
 
 Example:
     python src/tools/deploy_static
@@ -22,8 +25,10 @@ GENERATED_DIR = "examples/generated"
 # Files in HTML_DIR to skip (templates not meant for direct deployment)
 HTML_EXCLUDE = ["index_template.html", "unavailable_template.html"]
 
-# Extra individual files to deploy (relative to project root)
-EXTRA_FILES = ["examples/generated/index.html", 
+# Extra individual files to deploy (relative to project root).
+# Note: root index.html is NOT deployed here — it's the live map, owned by
+# deploy_v2 --publish-root. The landing page lives at /about.html.
+EXTRA_FILES = ["examples/generated/about.html",
                "examples/generated/unavailable.html"]
 
 def main():
@@ -52,6 +57,15 @@ def main():
             files.append(path)
         else:
             print(f"WARNING: {path} not found, skipping")
+
+    # Hard guard: the root index.html is the live map (deploy_v2 --publish-root).
+    # Anything uploaded from here lands at the bucket root by basename, so a
+    # stray index.html would silently replace the map with a static page.
+    clobber = [f for f in files if os.path.basename(f) == "index.html"]
+    if clobber:
+        print(f"ERROR: refusing to deploy {clobber} — root index.html is the "
+              "live map, published by deploy_v2 --publish-root.")
+        return
 
     print(f"Deploying {len(files)} files to {args.remote}")
     for f in files:

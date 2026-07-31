@@ -306,6 +306,7 @@ def cmd_run(config, args) -> None:
         # page links to, and stamps the page's date range from this same pack.
         ff_flag = (f" --foreflight-pack {ff_out} --foreflight-publish-as conus"
                    if ff_out and Path(ff_out).exists() else "")
+        # Promoting also updates the site root; see deploy_v2 --no-publish-root.
         print(f"  Deploy: python src/tools/deploy_v2 --publish-as conus "
               f"--source-stem {out_html.stem}{traffic_flag}{ff_flag}")
     else:

@@ -63,6 +63,7 @@ from hotspots.stage2_shard import (
 from hotspots.stage3_analyze import find_shards, analyze_shards, EVENTS_DIR
 from hotspots.stage4_aggregate import aggregate, find_parquet_files, REGIONS, REGIONAL_DIR
 from hotspots.stage5_visualize import (
+    DEPLOY_ASSET_PREFIX,
     generate_html,
     generate_pmtiles,
     generate_pmtiles_html,
@@ -149,9 +150,12 @@ def _foreflight_tile_dir(traffic_tile_dir: str | None) -> Path | None:
 
 def _link_stable_assets(pmtiles_path: Path, sidecar_dir: Path, asset_stem: str) -> None:
     """Symlink the stable '<asset_stem>.pmtiles' / '<asset_stem>_tracks' names next
-    to the dated build so an --asset-stem map (whose HTML fetches the stable names)
-    is viewable locally without re-rendering. Relative link targets so the maps dir
-    stays relocatable. Replaces any existing symlink; leaves real files untouched."""
+    to the dated build, so the stable names resolve in the maps dir. Relative link
+    targets so the maps dir stays relocatable. Replaces any existing symlink; leaves
+    real files untouched.
+
+    Note this does NOT make an --asset-stem build locally viewable: its HTML uses
+    absolute '/v2/...' URLs for deployment. Omit asset_stem to preview locally."""
     for target, name in ((pmtiles_path, f"{asset_stem}.pmtiles"),
                          (sidecar_dir, f"{asset_stem}_tracks")):
         link = target.parent / name
@@ -307,13 +311,16 @@ def run_stage5(
     # PMTiles HTML and fetched at load.
     airport_quality_url: str | None = None
     if airport_quality is not None and pmtiles:
+        # The file is written next to the HTML under its bare name; an
+        # asset_stem build fetches it from the deployed location instead.
         stem_for_aq = asset_stem or Path(output_path).stem
         aq_filename = f"{stem_for_aq}_quality.json"
         aq_dest = Path(output_path).parent / aq_filename
         with open(aq_dest, "w", encoding="utf-8") as f:
             import json as _json
             _json.dump(airport_quality, f)
-        airport_quality_url = aq_filename
+        airport_quality_url = (f"{DEPLOY_ASSET_PREFIX}{aq_filename}"
+                               if asset_stem else aq_filename)
 
     if pmtiles:
         pmtiles_path = str(Path(output_path).with_suffix(".pmtiles"))

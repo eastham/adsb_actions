@@ -238,7 +238,8 @@ def generate_index_html(sections, output_stats, output_path):
 
     sections: list of (title, [icao_codes]) from parse_airport_sections
     output_stats: dict from collect_output_stats
-    output_path: Path to write index.html
+    output_path: Path to write the landing page (about.html — the site root
+        itself is the live map, published by deploy_v2 --publish-root)
     """
     section_blocks = []
     for idx, (title, icao_codes) in enumerate(sections):
@@ -337,7 +338,7 @@ def generate_batch_outputs(output_stats, base_dir, airport_list_file):
         # Single airport code — make one section
         sections = [("Airports", list(output_stats.keys()))]
 
-    generate_index_html(sections, output_stats, Path(base_dir) / "index.html")
+    generate_index_html(sections, output_stats, Path(base_dir) / "about.html")
 
 
 def main():
@@ -372,7 +373,7 @@ def main():
     airport_list = args.airport_list or ""
     if os.path.isfile(airport_list):
         sections = parse_airport_sections(airport_list)
-        generate_index_html(sections, output_stats, base_dir / "index.html")
+        generate_index_html(sections, output_stats, base_dir / "about.html")
     else:
         generate_batch_outputs(output_stats, base_dir, airport_list)
 

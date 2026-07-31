@@ -22,6 +22,17 @@ stable URL (e.g. /v2/conus.html). The source map must have been generated
 with `stage5_visualize.py --asset-stem <name>` so its inlined .pmtiles /
 _tracks references already point at the stable filenames.
 
+Promoting also serves that same map as the site's root index.html, since the live
+map is the site's primary destination (the explanatory landing page lives at
+/about.html). An --asset-stem build inlines absolute /v2/ asset URLs, so the one
+HTML file resolves its .pmtiles/_tracks/_quality.json from both / and
+/v2/<name>.html. Promoting an older map built with page-relative asset refs would
+404 all its assets at the root, so the root copy checks for that and refuses.
+
+Pass --no-publish-root to promote to /v2/<name>.html only, leaving the front page
+on the previous build. Rarely what you want: the root and /v2/<name>.html then
+serve different maps until the next full promote.
+
 When --source-stem is given, the bulk copy (step 1) is scoped to just that
 stem's files, so the upload matches the build you named. Without it, every
 dated artifact in the maps dir is pushed.
@@ -110,6 +121,11 @@ def main():
     parser.add_argument("--publish-as", metavar="NAME", default=None,
                         help="Also promote a dated map to /v2/<NAME>.html / "
                              "<NAME>.pmtiles / <NAME>_tracks/. Requires --source-stem.")
+    parser.add_argument("--no-publish-root", dest="publish_root",
+                        action="store_false", default=True,
+                        help="Don't also serve the promoted map as the site root "
+                             "index.html. By default --publish-as updates the root too, "
+                             "so the live map and the front page can't drift apart.")
     parser.add_argument("--source-stem", metavar="STEM", default=None,
                         help="Filename stem (no extension) of the dated map to "
                              "promote, e.g. 24_50_-125_-65_20250601_20250831")
@@ -133,6 +149,7 @@ def main():
         print("ERROR: --publish-as requires --source-stem", file=sys.stderr)
         sys.exit(1)
 
+
     if args.traffic_tiles_dir and not os.path.isdir(args.traffic_tiles_dir):
         print(f"ERROR: traffic tiles directory not found: {args.traffic_tiles_dir}", file=sys.stderr)
         sys.exit(1)
@@ -153,6 +170,21 @@ def main():
         for p in (src_html, src_pmt, src_trk):
             if not os.path.exists(p):
                 print(f"ERROR: source not found: {p}", file=sys.stderr)
+                sys.exit(1)
+
+        # Serving the map from the root only works if its asset URLs are
+        # absolute; page-relative refs would resolve to /<name>.pmtiles and
+        # 404. That failure is silent (a blank map), and a map built before
+        # stage 5 started emitting absolute URLs still looks promotable — so
+        # check the bytes rather than the flags.
+        if args.publish_root:
+            with open(src_html, encoding="utf-8") as f:
+                html = f.read()
+            if f'"{args.publish_as}.pmtiles"' in html:
+                print(f"ERROR: {src_html} references '{args.publish_as}.pmtiles' "
+                      "page-relative; it would 404 when served from the site root.\n"
+                      "       Rebuild stage 5 with --asset-stem, then re-run.",
+                      file=sys.stderr)
                 sys.exit(1)
 
     dst = f"{args.remote}/v2"
@@ -241,6 +273,17 @@ def main():
             f"{dst}/{name}.html",
             "--metadata-set", CACHE_CONTROL,
         ], args.dry_run)
+
+        # The live map doubles as the site's front page. Same bytes as
+        # v2/<name>.html — its asset URLs are absolute, so one file serves both.
+        if args.publish_root:
+            print(f"  ...and as the site root index.html", file=sys.stderr)
+            _run([
+                "rclone", "copyto",
+                os.path.join(args.maps_dir, f"{stem}.html"),
+                f"{args.remote}/index.html",
+                "--metadata-set", CACHE_CONTROL,
+            ], args.dry_run)
 
         _run([
             "rclone", "copyto",

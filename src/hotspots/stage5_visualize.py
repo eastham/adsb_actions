@@ -45,6 +45,13 @@ import pandas as pd
 # $ADSB_V2_DATA_ROOT so a test sandbox can redirect all writes).
 from hotspots.config import MAPS_DIR
 
+# Site path where deploy_v2 publishes map assets (.pmtiles / _tracks /
+# _quality.json). An --asset-stem build inlines this as an absolute URL prefix,
+# so the single generated page resolves its assets both at /v2/<stem>.html and
+# when promoted to the site root (deploy_v2 --publish-root). Keep in sync with
+# deploy_v2's `dst = f"{remote}/v2"`.
+DEPLOY_ASSET_PREFIX = "/v2/"
+
 # Quality -> CSS color
 QUALITY_COLORS = {
     "vhigh":  "rgba(255,0,255,0.85)",     # magenta
@@ -199,7 +206,9 @@ def _airport_jump_panel_html(with_search: bool = False) -> str:
     return (
         '<div id="airport-jump-box">\n'
         '<div style="color:#ff0; text-align:center;">\n'
-        '<b><a href="https://airbornehotspots.org" style="color:#fff; text-decoration:none; font-size:1.5em;">airbornehotspots.org</a></b>\n'
+        '<b><a href="/about.html" style="color:#fff; text-decoration:none; font-size:1.5em;">airbornehotspots.org</a></b>\n'
+        '<div style="font-size:11px; margin-top:2px;">'
+        '<a href="/about.html" style="color:#9cf; text-decoration:underline;">About this project</a></div>\n'
         '<div style="height:8px;"></div>\n'
         '<span style="color:#4a90ff;">Blue</span>/<span style="color:#b060f0;">purple</span>: low-altitude traffic patterns\n'
         '<div style="height:8px;"></div>\n'
@@ -1211,12 +1220,16 @@ def generate_pmtiles_html(pmtiles_path: str, sidecar_dir: str,
     `asset_stem` overrides the auto-derived filename for the inlined
     `.pmtiles` and `_tracks` references — used when the deployer publishes
     a stable-named alias (e.g. conus.html → conus.pmtiles + conus_tracks/).
+    Such a build is deploy-only: the URLs are absolute (DEPLOY_ASSET_PREFIX),
+    so the one page works both at /v2/<stem>.html and promoted to the site
+    root, but it is not viewable from a local server. Omit asset_stem for
+    local preview.
     """
-    # Paths relative to the HTML file (both live in MAPS_DIR)
     if asset_stem:
-        pmtiles_rel = f"{asset_stem}.pmtiles"
-        sidecar_rel = f"{asset_stem}_tracks"
+        pmtiles_rel = f"{DEPLOY_ASSET_PREFIX}{asset_stem}.pmtiles"
+        sidecar_rel = f"{DEPLOY_ASSET_PREFIX}{asset_stem}_tracks"
     else:
+        # Paths relative to the HTML file (both live in MAPS_DIR).
         pmtiles_rel = os.path.basename(pmtiles_path)
         sidecar_rel = os.path.basename(sidecar_dir)
 
@@ -2060,12 +2073,15 @@ def main():
 
         # Copy airport-quality JSON next to the HTML so it's fetchable.
         if airport_quality is not None:
+            # The file is written next to the HTML under its bare name; an
+            # --asset-stem build fetches it from the deployed location instead.
             stem_for_aq = args.asset_stem or Path(output_path).stem
             aq_filename = f"{stem_for_aq}_quality.json"
             aq_dest = Path(output_path).parent / aq_filename
             with open(aq_dest, "w", encoding="utf-8") as f:
                 json.dump(airport_quality, f)
-            airport_quality_url = aq_filename
+            airport_quality_url = (f"{DEPLOY_ASSET_PREFIX}{aq_filename}"
+                                   if args.asset_stem else aq_filename)
 
         html = generate_pmtiles_html(
             pmtiles_path, sidecar_dir,
