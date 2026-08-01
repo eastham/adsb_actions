@@ -59,6 +59,10 @@ class Config:
     def dates(self) -> dict:
         return self._raw.get("dates", {})
 
+    @property
+    def window(self) -> dict:
+        return self._raw.get("window", {})
+
     # -- path accessors (absolute, project-root-relative) -------------------
     def _resolve(self, rel: str) -> Path:
         p = Path(rel)
@@ -154,6 +158,23 @@ class Config:
     @property
     def default_end(self) -> str | None:
         return self.dates.get("default_end")
+
+    # -- sliding-window catch-up knobs --------------------------------------
+    @property
+    def window_days(self) -> int:
+        return int(self.window.get("days", 90))
+
+    @property
+    def window_prune(self) -> bool:
+        return bool(self.window.get("prune", True))
+
+    @property
+    def window_region(self) -> str:
+        return self.window.get("region", "conus")
+
+    @property
+    def window_deploy_alias(self) -> str:
+        return self.window.get("deploy_alias", "conus")
 
     # -- validation ---------------------------------------------------------
     def _validate(self) -> None:

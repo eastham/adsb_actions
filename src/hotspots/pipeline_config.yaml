@@ -46,6 +46,17 @@ dates:
   default_start: "20250601"
   default_end:   "20250831"
 
+# Sliding-window catch-up (`cli.py catchup`). The daily catch-up rebuilds the
+# last `days` days ending at the latest available source day, deploys under
+# `deploy_alias`, and (when `prune`) deletes grid/events/CONUS data older than
+# the window so disk stays bounded. Override per-run with --window-days /
+# --region / --no-prune / --no-deploy.
+window:
+  days: 90                 # sliding window length
+  prune: true              # delete grid/events/CONUS/global older than the window
+  region: conus            # region the catch-up builds + deploys
+  deploy_alias: conus      # deploy_v2 --publish-as value (stable /v2/<alias>.html)
+
 # Geography: named bounding boxes. Integer degrees, inclusive min / exclusive max
 # (matches the existing cell-membership convention: lat_min <= lat < lat_max).
 # regions and profiles are independent — combine them: run <profile> --region <name>.

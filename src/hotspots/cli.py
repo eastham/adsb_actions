@@ -526,6 +526,202 @@ def _write_regional_provenance(config, regional, bounds, date_tags) -> None:
 
 
 # ---------------------------------------------------------------------------
+# catchup — sliding-window daily refresh (+ chunked initial backfill)
+# ---------------------------------------------------------------------------
+
+def _resolve_window(config, args):
+    """Resolve the (start, end) dates for a catch-up run.
+
+    Precedence:
+      - explicit --start-date/--end-date are used verbatim (backfill chunks);
+      - else end = yesterday UTC (today's source release usually isn't up yet),
+        start = end − (window_days − 1).
+    The true leading edge is discovered at fetch time (ensure_conus → None), so a
+    too-recent end just stops early at the last published day.
+    """
+    days = args.window_days or config.window_days
+    if args.end_date:
+        end = _parse_date(args.end_date)
+    else:
+        end = datetime.date.today() - datetime.timedelta(days=1)
+    if args.start_date:
+        start = _parse_date(args.start_date)
+    else:
+        start = end - datetime.timedelta(days=days - 1)
+    return start, end
+
+
+def _prune_window(config, keep_start, bounds, dry_run) -> None:
+    """Delete v2 data for days strictly before keep_start (out of the window):
+    grid/<YYYYMMDD>/ and events/<YYYYMMDD>/ (v2-pipeline-owned), plus regional/
+    and maps/ artifacts whose date-stem ends before the window.
+
+    Deliberately does NOT touch source CONUS_/global_ gz files: they live in the
+    shared data/ mount and may be used by v1 tooling or downloaded by hand, so
+    catch-up never deletes them. Clean data/ by hand if the gz pile up.
+
+    Every removal is printed; --dry-run lists without deleting."""
+    import re
+    import shutil
+
+    keep_tag = keep_start.strftime("%Y%m%d")
+    verb = "would remove" if dry_run else "removing"
+
+    def _rm(path: Path) -> None:
+        print(f"  [prune] {verb} {_rel(path)}")
+        if dry_run:
+            return
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+        else:
+            path.unlink(missing_ok=True)
+
+    # Per-day grid/events dirs named YYYYMMDD (owned by the v2 pipeline).
+    for base in (config.grid_dir, config.events_dir):
+        if not base.exists():
+            continue
+        for day_dir in base.iterdir():
+            if day_dir.is_dir() and day_dir.name.isdigit() \
+                    and len(day_dir.name) == 8 and day_dir.name < keep_tag:
+                _rm(day_dir)
+
+    # Regional/map artifacts whose trailing _<end> date is before the window.
+    stem_end = re.compile(r"_(\d{8})_(\d{8})(?:_.*)?$")
+    for base in (config.regional_dir, config.maps_dir):
+        if not base.exists():
+            continue
+        for p in base.iterdir():
+            m = stem_end.search(p.stem if p.is_file() else p.name)
+            if m and m.group(2) < keep_tag:
+                _rm(p)
+
+
+def cmd_catchup(config, args) -> None:
+    import hotspots.pipeline as runners
+    import pandas as pd
+    from hotspots.fetch_source import ensure_conus
+
+    run_start = time.time()
+    region_label = args.region or config.window_region
+    bounds = config.region_bounds(region_label)
+    lat_min, lat_max, lon_min, lon_max = bounds
+    alias = config.window_deploy_alias
+    workers = args.workers if args.workers is not None else config.workers
+    # stages-only stops after stage 3 → aggregate/visualize/deploy/prune all off.
+    do_prune = config.window_prune and not args.no_prune and not args.stages_only
+    do_deploy = not args.no_deploy and not args.stages_only
+
+    start, end = _resolve_window(config, args)
+    if end < start:
+        raise SystemExit("--end-date must be >= --start-date")
+
+    print(_stage("v2 catch-up"))
+    print(f"  Region: {region_label}  window {start:%Y%m%d}–{end:%Y%m%d}")
+    print(f"  stages-only: {args.stages_only} | deploy: {do_deploy} "
+          f"(alias '{alias}') | prune: {do_prune}")
+
+    # --- Fetch + stages 2/3 per day (leading edge stops when unpublished) ---
+    last_available = end
+    for d in _date_range(start, end):
+        # Skip days already fully processed unless a rebuild is requested.
+        if not args.rebuild:
+            r2 = verify_day(2, d.strftime("%Y%m%d"), bounds, config.grid_dir,
+                            config.events_dir, sanity=False)
+            r3 = verify_day(3, d.strftime("%Y%m%d"), bounds, config.grid_dir,
+                            config.events_dir, sanity=False)
+            if r2.ok and r3.ok:
+                print(_ok(f"{d:%Y%m%d} already processed — skipping"))
+                continue
+
+        if args.dry_run:
+            print(f"  [dry-run] would fetch + run stages 2/3 for {d:%Y%m%d}")
+            continue
+
+        conus = ensure_conus(d, config.conus_dir)
+        if conus is None:
+            last_available = d - datetime.timedelta(days=1)
+            print(_warn(f"stopping at last published day {last_available:%Y%m%d}"))
+            break
+
+        print(_stage(f"\n[{d:%Y%m%d}] stages 2/3"))
+        s = _run_day_gated(config, runners, d, bounds, [2, 3], workers,
+                           args.skip_existing, region_label)
+        print(_ok(f"shard: {s['shard_kb']:,} KB  analyze: {s['analyze_s']:.0f}s  "
+                  f"events: {s['events']}"))
+        _write_stage3_provenance(config, d, d, bounds, run_start)
+
+    if args.stages_only:
+        if args.dry_run:
+            print(_ok("\nDry run complete (stages-only)."))
+            return
+        print(_ok("\nStages 2/3 done (stages-only — no aggregate/deploy/prune)."))
+        return
+
+    # The window actually covered may be shorter than requested (leading edge).
+    window_end = min(end, last_available)
+    start_tag, end_tag = start.strftime("%Y%m%d"), window_end.strftime("%Y%m%d")
+    regional = config.regional_dir / f"{alias}_{start_tag}_{end_tag}.parquet"
+    out_html = config.maps_dir / f"{alias}_{start_tag}_{end_tag}.html"
+
+    if args.dry_run:
+        print(f"  [dry-run] would aggregate → {_rel(regional)}")
+        print(f"  [dry-run] would visualize → {_rel(out_html)}")
+        if do_deploy:
+            print(f"  [dry-run] would deploy: deploy_v2 --publish-as {alias} "
+                  f"--source-stem {out_html.stem}")
+        if do_prune:
+            _prune_window(config, start, bounds, dry_run=True)
+        print(_ok("\nDry run complete."))
+        return
+
+    # --- Stage 4: aggregate the whole window ---
+    date_tags = [d.strftime("%Y%m%d") for d in _date_range(start, window_end)]
+    print(_stage(f"\nStage 4: aggregate {ARROW} {regional.name}"))
+    df = runners.run_stage4(date_tags, lat_min, lat_max, lon_min, lon_max,
+                            alias, str(regional))
+    _write_regional_provenance(config, regional, bounds, date_tags)
+    print(_ok(f"aggregated {len(df):,} events"))
+
+    # --- Stage 5: visualize (PMTiles, stable asset stem for --publish-as) ---
+    traffic = args.traffic_tiles or config.traffic_tiles_url
+    ff_tiles = (args.traffic_tiles
+                if (args.traffic_tiles and not args.traffic_tiles.startswith("http"))
+                else config.traffic_tiles_local)
+    ff_out = str(config.data_root / "foreflight" /
+                 f"{alias}_{start_tag}_{end_tag}.zip")
+    print(_stage("\nStage 5: map (PMTiles)"))
+    runners.run_stage5(df, str(out_html), pmtiles=True, zoom=args.zoom,
+                       traffic_tile_dir=traffic, html_only=False,
+                       foreflight_output=ff_out,
+                       foreflight_name=config.foreflight_pack_name,
+                       foreflight_tiles=ff_tiles,
+                       print_summary=False, airport_quality=None,
+                       asset_stem=alias)
+    print(_ok(f"map written: {out_html.name}"))
+
+    # --- Deploy under the stable alias ---
+    if do_deploy:
+        local_tiles = (traffic if (traffic and not traffic.startswith("http"))
+                       else None)
+        cmd = ["python", "src/tools/deploy_v2",
+               "--publish-as", alias, "--source-stem", out_html.stem]
+        if local_tiles:
+            cmd += ["--traffic-tiles-dir", local_tiles]
+        print(_stage(f"\nDeploy: {' '.join(cmd)}"))
+        rc = subprocess.run(cmd, cwd=str(_ROOT)).returncode
+        if rc != 0:
+            raise SystemExit(_fail(f"deploy_v2 failed (rc={rc})"))
+        print(_ok("deployed"))
+
+    # --- Prune out-of-window data ---
+    if do_prune:
+        print(_stage(f"\nPrune: dropping data before {start:%Y%m%d}"))
+        _prune_window(config, start, bounds, dry_run=False)
+
+    print(_ok("\nDone."))
+
+
+# ---------------------------------------------------------------------------
 # status
 # ---------------------------------------------------------------------------
 
@@ -596,6 +792,31 @@ def build_parser(config) -> argparse.ArgumentParser:
                          "map's inlined .pmtiles/_tracks refs, for deploy_v2 "
                          "--publish-as. PMTiles mode only")
     pr.set_defaults(func=cmd_run)
+
+    # catchup
+    pc = sub.add_parser(
+        "catchup",
+        help="Fetch missing day(s), rebuild the sliding window, deploy, prune")
+    _add_common(pc, config)
+    pc.add_argument("--window-days", type=int,
+                    help="Sliding window length (override config window.days)")
+    pc.add_argument("--rebuild", action="store_true",
+                    help="Reprocess every day in the window, not just missing ones")
+    pc.add_argument("--stages-only", action="store_true",
+                    help="Fetch + stages 2/3 only (skip aggregate/visualize/deploy/"
+                         "prune). For chunked initial backfill.")
+    pc.add_argument("--skip-existing", action="store_true",
+                    help="Skip cells whose stage 2/3 outputs already exist")
+    pc.add_argument("--no-deploy", action="store_true",
+                    help="Build the window but don't deploy_v2")
+    pc.add_argument("--no-prune", action="store_true",
+                    help="Don't delete out-of-window data")
+    pc.add_argument("--workers", type=int, help="Override config runtime.workers")
+    pc.add_argument("--traffic-tiles", help="Traffic tile URL or local path prefix")
+    pc.add_argument("--zoom", type=float, default=None)
+    pc.add_argument("--dry-run", action="store_true",
+                    help="Report the days/artifacts/prune-set without doing anything")
+    pc.set_defaults(func=cmd_catchup)
 
     # status
     ps = sub.add_parser("status", help="Report what's on disk (read-only)")
