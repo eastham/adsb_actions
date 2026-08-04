@@ -1,0 +1,9 @@
+
+rules:
+  stripper:
+    conditions:
+      latlongring: [100, 37.6258247,-120.9544300]  # 100nm radius around KMOD
+      min_alt: 300
+      max_alt: 4000
+    actions:
+      emit_jsonl: "output/KMOD_100nm.gz"

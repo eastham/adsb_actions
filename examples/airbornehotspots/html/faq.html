@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-TBDC7S1GCL"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-TBDC7S1GCL');
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FAQ</title>
+<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "b4e63e29656945479c5050399013db3f"}'></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    background: #f8fafc; color: #1e293b; line-height: 1.6;
+  }
+  .navbar {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+    padding: 12px 24px; background: #0f172a;
+    border-bottom: 1px solid #1e293b;
+  }
+  .navbar-brand {
+    font-size: 1.1rem; font-weight: 700; color: #fff;
+    text-decoration: none; margin-right: auto;
+  }
+  .navbar a {
+    color: #cbd5e1; text-decoration: none; font-size: 0.95rem;
+    font-weight: 500;
+  }
+  .navbar a:hover { color: #fff; }
+  .container { max-width: 960px; margin: 0 auto; padding: 40px 24px; }
+  h1 {
+    font-size: 2rem; font-weight: 700; color: #0f172a;
+    margin-bottom: 16px;
+  }
+  p { color: #475569; margin: 16px 0; }
+  ul { color: #475569; margin: 12px 0 16px 24px; }
+  a { color: #2563eb; text-decoration: none; font-weight: 500; }
+  a:hover { text-decoration: underline; }
+  .footer {
+    margin-top: 48px; padding-top: 20px; border-top: 1px solid #e2e8f0;
+    font-size: 0.85rem; color: #64748b;
+  }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a class="navbar-brand" href="/">airbornehotspots.org</a>
+  <a href="about.html">About</a>
+  <a href="faq.html">FAQ</a>
+  <a href="casestudies.html">Case Studies</a>
+  <a href="methodology.html">Methodology</a>
+  <a href="foreflight.html">ForeFlight</a>
+  <a href="contact.html">Get in Touch</a>
+</nav>
+<div class="container">
+  <h1>Frequently Asked Questions</h1>
+  <h2>What is this data good for?</h2>
+  <p>While ADS-B is not yet installed in every airplane, and not every ADS-B track will be in our database, higher-risk areas may still be detectable with enough data. Our hope is that the results are useful for three groups of people:</p>
+  <ul>
+    <li><b>Pilots</b>:
+      <ul style="margin: 0; padding-left: 1.5em;">
+        <li>So that they can be aware of the locations of loss-of-separation (LOS) hotspots, and busy areas in general, at airports they frequent</li>
+        <li>Seeing the (typically non-standard) procedures that lead to LOS events is often educational.</li>
+      </ul>
+    <li><b>Airport owners/managers/officials</b>: so that they can help educate pilots and design procedures that seek to avoid these events when possible</li>
+    <li><b>Special event operators:</b> ditto!</li>
+  </ul>
+
+  <h2>What interesting hotspots have you found so far?</h2>
+  <ul>
+    <li><a href="/v2/conus.html?airport=26N" target="hotspot">Ocean City, NJ</a>: Lots of shoreline sightseeing in this area, and lots of head-on events</li>
+    <li><a href="/v2/conus.html?airport=E16" target="hotspot">San Martin, CA</a>: Nearby class C airspace creates a high-traffic hotspot corridor to the north</li>
+    <li><a href="/v2/conus.html?airport=KWVI" target="hotspot">Watsonville, CA</a>: Helicopter power-line work just to the east of the airport.  Would it have been prudent for pilots to know about this?</li>
+    <li><a href="/v2/conus.html?airport=KCCB" target="hotspot">Upland, CA</a>: Very compressed pattern due to airspace seems to cause many events here </li>
+    <li><a href="/v2/conus.html?airport=KTCY" target="hotspot">Tracy, CA</a>: Numerous events northwest of the airport from aircraft attempting opposite-direction straight-in approaches. </li>
+    <li><a href="/v2/conus.html?airport=KEUL" target="hotspot">Caldwell, ID</a>: Helicopter training using the opposite pattern trigger a ton of events (not necessarily unsafe) </li>
+    <li><a href="/v2/conus.html?airport=KDED" target="hotspot">Deland, FL</a>: Hotspot off the end of rwy 30 from users of a crossing runway</li>
+    <li><a href="/v2/conus.html?airport=KHWV" target="hotspot">Shirley, NY</a>: Beach traffic strikes again</li>
+    <li><a href="/v2/conus.html?airport=KLGA" target="hotspot">New York, NY</a>: Lots of helicopter excitement over the Hudson river</li>
+    <li><a href="/v2/conus.html?airport=KDWA" target="hotspot">Davis, CA</a>: Apparently-uncharted ag strip northwest of airport</li>
+    <li><b>If you see something interesting,</b> please <a href="https://airbornehotspots.org/contact.html">contact us</a> to have it added to the list!</li>
+  </ul>
+  
+  <h2>Why are airborne hotspots worth looking at?</h2>
+  <p>Several years ago, the FAA established the <a href="https://www.faa.gov/airports/runway_safety/hotspots">Hot Spots</a> 
+    program, which puts areas of high risk of <b>ground collisions</b> on aviation charts.
+  Ground collisions are a common sort of accident, both among air-carrier and smaller aircraft.  Data is hard to come by, as these accidents often don't cause any injuries,
+  but a reasonable guess might be 10 or so collisions per year.
+  </p>
+  <p>Mid-air collisions, however, are extremely uncommon in air-carrier operations -- occurring once a decade or so.
+  <b>But among smaller aircraft, they are a major hazard, happening at a rate of about <a href="https://dspace.mit.edu/entities/publication/96b0d47f-492d-4727-b635-9500d10f00ba">12 a year.</a></b>
+  Now that data is available from ADS-B, it's time to consider addressing this safety threat to GA operations.
+  </p><p>The simplest intervention is simply making the data available: where are the <b>busiest</b> and <b>highest-risk</b> areas?  This data 
+  is available on this website, and could also be published on FAA's aviation charts, in a similar manner as ground hotspots.
+</p>
+
+  <h2>How are you classifying events as Loss Of Separation (LOS)?</h2>
+  <p>It is an arbitrary choice, balancing having too many events to process (and that won't crash people's web browsers) versus too few to see geographic patterns.  See the <a href="methodology.html">Methodology</a> page.</p>
+
+  <h2>Are LOS events necessarily unsafe?</h2>
+  <p>Absolutely not.  Some are normal (e.g. simultaneous operations to parallel runways.) The connection with safety is not established, and may be hard to establish given the rarity of midair collisions.  The idea here is to find areas and types of operation where pilots and airport operators may want to exercise more caution.</p>
+
+  <h2>Is an airport with a high LOS/day count unsafe?</h2>
+  <p>Not necessarily.  See the previous question.</p>
+
+  <h2>I see a certain tail number showing up frequently.  Is that airplane being operated unsafely?</h2>
+  <p>Not necessarily.  Some aircraft fly a lot more than others, so they may naturally be over-represented.  Also, some types of operation (especially training in the landing pattern) will expose the aircraft to more LOS events. </p>
+
+  <h2>Where is the raw data coming from?</h2>
+  <p>The raw data is provided by <a href="http://adsb.lol">adsb.lol</a>, who collect it from volunteers who receive ADS-B data and share it with them.
+  If you're interested in improving coverage near you, you can learn how to feed data to them <a href="https://www.adsb.lol/docs/get-started/introduction/">here.</a></p>
+
+  <h2>Is this useful for towered airports?</h2>
+  <p>That hasn't been the focus so far.  Plenty of operations that are common at
+    towered airports will show up in this analysis.  Also, towered airports frequently have parallel runways, which generate a lot of false positives in the current algorithm.
+    If you have thoughts on this, <a href="https://airbornehotspots.org/contact.html">get in touch</a>.</p>
+
+    <h2>I see an event that is categorized incorrectly.</h2>
+  <p>This is almost certain to happen given the incomplete nature of the data, and simple rules (see <a href="methodology.html">Methodology</a>) being applied to the categories. 
+    But if you see something that you think could be improved algorithmically, by all means <a href="https://airbornehotspots.org/contact.html">get in touch</a>.
+  </p>
+
+  <h2>The data is noisy.</h2>
+  <p>It sure is.  There are many sources of false positives and other problems.  Clicking on a number of events is likely necessary to understand the full context.
+  Common sources of false positives:
+    <ul>
+      <li>Formation flights      </li>
+      <li>Parallel runways</li>
+      <li>Helicopters using an opposite pattern alongside fixed-wing aircraft</li></li>
+    </ul>
+
+  <h2>There are very few or zero events at my favorite airport -- I can't see any pattern.</h2>
+  <p>Most airports are showing a 3-6 months of data.  More can be added in the longer term, but data before
+    2024 may have lower coverage and lower ADS-B-out adoption.  Low events might also be due to poor crowdsourcing coverage
+    of your airport -- if so, you can help contribute data to <a href="http://adsb.lol">adsb.lol</a>'s data to fix this problem in the future!
+  </p>
+
+  <h2>What's the business model here?</h2>
+  <p>This is a free service to the aviation community.  
+    The site and the data on it is free for non-commercial use and adaptation, and is licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a>.
+    The site contains information from <a href="https://adsb.lol">adsb.lol</a>, which is made available here under the <a href="https://opendatacommons.org/licenses/odbl/">Open Database License (ODbL)</a>.</p>
+
+  </p>
+  <div class="footer">
+    A service of 6061 Ventures LLC &middot;
+    <a href="accessibility.html">Accessibility</a>
+  </div>
+</div>
+</body>
+</html>

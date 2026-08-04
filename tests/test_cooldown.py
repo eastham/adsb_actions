@@ -13,12 +13,12 @@ YAML_STRING = """
       - tests/test1.kml 
 
   aircraft_lists:
-    banned: [ "N12345" ] 
+    watched: [ "N12345" ]
 
   rules:
-    banned_aircraft:
+    watched_aircraft:
       conditions:
-        aircraft_list: banned
+        aircraft_list: watched
         cooldown: 3     # minutes
       actions:
         callback: test_callback

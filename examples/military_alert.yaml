@@ -1,0 +1,16 @@
+# Military aircraft detection example -- only works in API mode.
+#
+# Uses a 10-minute cooldown per aircraft to avoid alert spam.
+#
+# Usage w/ tcp_api_monitor: python3 src/applications/tcp_api_monitor/monitor.py examples/military_alert.yaml
+
+rules:
+  military_aircraft:
+    conditions:
+      latlongring: [250, 37.5, -122.0]  # radius in nm, lat, long (SF Bay Area)
+      military: true       # aircraft flagged as military in database
+      cooldown: 10         # only trigger every 10 minutes per aircraft
+    actions:
+      print: True                   # print to console
+      #webhook: ['slack', 'military_aircraft_channel']
+

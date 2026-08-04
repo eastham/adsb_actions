@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-TBDC7S1GCL"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-TBDC7S1GCL');
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADS-B Loss of Separation Analysis</title>
+<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "b4e63e29656945479c5050399013db3f"}'></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    background: #f8fafc; color: #1e293b; line-height: 1.6;
+  }
+  .navbar {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+    padding: 12px 24px; background: #0f172a;
+    border-bottom: 1px solid #1e293b;
+  }
+  .navbar-brand {
+    font-size: 1.1rem; font-weight: 700; color: #fff;
+    text-decoration: none; margin-right: auto;
+  }
+  .navbar a {
+    color: #cbd5e1; text-decoration: none; font-size: 0.95rem;
+    font-weight: 500;
+  }
+  .navbar a:hover { color: #fff; }
+  .container { max-width: 960px; margin: 0 auto; padding: 40px 24px; }
+  h1 {
+    font-size: 2rem; font-weight: 700; color: #0f172a;
+    margin-bottom: 4px;
+  }
+  .tagline {
+    font-size: 1.1rem; color: #64748b; margin-bottom: 20px;
+  }
+  .description {
+    color: #475569; margin-bottom: 32px;
+  }
+  .description p {
+    margin: 16px 0;
+  }
+  .description ul {
+    margin: 8px 0; padding-left: 24px;
+  }
+  .stats-bar {
+    display: flex; gap: 32px; justify-content: center;
+    margin-bottom: 32px; padding: 16px 24px; background: #fff;
+    border: 1px solid #e2e8f0; border-radius: 10px;
+  }
+  .stat-item { text-align: center; }
+  .stat-value {
+    font-size: 1.6rem; font-weight: 700; color: #0f172a;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-label { font-size: 0.8rem; color: #64748b; text-transform: uppercase;
+                letter-spacing: 0.05em; }
+  .section { margin-bottom: 12px; }
+  .section-toggle {
+    width: 100%; display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px; background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 10px; cursor: pointer; font-size: 1rem;
+    transition: background 0.15s, box-shadow 0.15s;
+    text-align: left;
+  }
+  .section-toggle:hover { background: #f1f5f9;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .toggle-icon {
+    font-size: 0.75rem; color: #64748b; transition: transform 0.2s;
+    display: inline-block; width: 16px;
+  }
+  .toggle-icon.open { transform: rotate(90deg); }
+  .section-title { font-weight: 600; color: #1e293b; flex: 1; }
+  .section-count {
+    font-size: 0.85rem; color: #64748b; white-space: nowrap;
+  }
+  .section-content {
+    margin-top: 4px; padding: 0 4px;
+    animation: slideDown 0.2s ease-out;
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  table {
+    width: 100%; border-collapse: collapse; background: #fff;
+    border: 1px solid #e2e8f0; border-radius: 8px;
+    overflow: hidden;
+  }
+  thead th {
+    padding: 10px 16px; font-size: 0.8rem; font-weight: 600;
+    color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;
+    background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+    white-space: nowrap;
+  }
+  /* Column widths — keep Name from dominating */
+  th:nth-child(1) { width: 10%; }
+  th:nth-child(2) { width: 45%; }
+  th:nth-child(3) { width: 15%; }
+  th:nth-child(4) { width: 15%; }
+  th:nth-child(5) { width: 15%; }
+  tbody td {
+    padding: 10px 16px; border-bottom: 1px solid #f1f5f9;
+    font-size: 0.95rem;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #f8fafc; }
+  tbody tr.no-data:hover { background: #fff; }
+  a { color: #2563eb; text-decoration: none; font-weight: 500; }
+  a:hover { text-decoration: underline; }
+  .footer {
+    margin-top: 48px; padding-top: 20px; border-top: 1px solid #e2e8f0;
+    font-size: 0.85rem; color: #64748b;
+  }
+  /* Search box */
+  .search-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    margin-bottom: 24px; padding: 12px 20px;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+  }
+  .search-bar label {
+    font-size: 0.9rem; font-weight: 600; color: #475569;
+    white-space: nowrap;
+  }
+  .search-bar input {
+    width: 120px; padding: 6px 12px; font-size: 1rem;
+    border: 1px solid #cbd5e1; border-radius: 6px;
+    text-transform: uppercase;
+  }
+  .search-bar input:focus { outline: none; border-color: #2563eb; }
+  .search-bar button {
+    padding: 6px 16px; font-size: 0.9rem; font-weight: 600;
+    color: #fff; background: #2563eb; border: none; border-radius: 6px;
+    cursor: pointer;
+  }
+  .search-bar button:hover { background: #1d4ed8; }
+  /* Sortable table headers */
+  table.sortable thead th {
+    cursor: pointer; user-select: none;
+  }
+  table.sortable thead th:after {
+    content: " \25B4\25BE"; font-size: 2em; color: #64748b;
+    margin-left: 4px;
+  }
+  table.sortable thead th[aria-sort="ascending"]:after {
+    content: " \25B4"; color: #2563eb;
+  }
+  table.sortable thead th[aria-sort="descending"]:after {
+    content: " \25BE"; color: #2563eb;
+  }
+  /* Tooltip for th[title] */
+  thead th[title] {
+    text-decoration: underline dotted #64748b;
+    text-underline-offset: 3px;
+  }
+  /* Disclaimer modal */
+  #disclaimer-overlay {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,0.5); align-items: center; justify-content: center;
+  }
+  #disclaimer-overlay.active { display: flex; }
+  #disclaimer-box {
+    background: #fff; border-radius: 12px; padding: 32px 36px;
+    max-width: 520px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  }
+  #disclaimer-box h2 {
+    font-size: 1.2rem; font-weight: 700; color: #0f172a; margin-bottom: 16px;
+  }
+  #disclaimer-box p {
+    font-size: 0.95rem; color: #475569; margin-bottom: 12px; line-height: 1.6;
+  }
+  #disclaimer-box button {
+    margin-top: 8px; padding: 10px 28px; font-size: 0.95rem; font-weight: 600;
+    color: #fff; background: #2563eb; border: none; border-radius: 6px;
+    cursor: pointer; display: block; margin-left: auto;
+  }
+  #disclaimer-box button:hover { background: #1d4ed8; }
+</style>
+<script src="https://cdn.jsdelivr.net/gh/tofsjonas/sortable@3.2.3/sortable.min.js"></script>
+</head>
+<body>
+<nav class="navbar">
+  <a class="navbar-brand" href="/">airbornehotspots.org</a>
+  <a href="about.html">About</a>
+  <a href="faq.html">FAQ</a>
+  <a href="casestudies.html">Case Studies</a>
+  <a href="methodology.html">Methodology</a>
+  <a href="foreflight.html">ForeFlight</a>
+  <a href="contact.html">Get in Touch</a>
+</nav>
+<div id="disclaimer-overlay">
+  <div id="disclaimer-box">
+    <h2>Disclaimer</h2>
+    <p><strong>This information is experimental and incomplete.  Not for operational use.</strong> </p>
+    <p>
+This site is a work in progress and may contain errors, omissions, or misclassified events. 
+All information is provided for educational and situational awareness purposes only, and is not approved for operational use. 
+False positive and false negative events are certainly present, and no judgement is made against the pilots of any aircraft found here.
+Official aeronautical publications and NOTAMs remain your authoritative sources for flight planning and operations. 
+Use of this site is entirely at your own risk, and the authors make no warranties, express or implied, regarding the accuracy or completeness of the data presented.</p>
+    <button onclick="acceptDisclaimer()" autofocus>I understand and agree</button>
+  </div>
+</div>
+<div class="container">
+  <h1 align="center">A New Class of Aviation Safety Data</h1>
+
+   <p align="center"><b>For pilots:</b> fly with local knowledge at every airport — <b>For airport managers:</b> inform your procedures & outreach</p>
+  <br/>
+  <a href="/"><img src="/hotspot.png" style="width: 100%; display: block; margin: 0;" alt="Heatmap showing airborne near-collision hotspots at untowered airports across the US"></a>
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-value"><!--BEGIN:airports_with_data-->5,231<!--END:airports_with_data--></div>
+      <div class="stat-label">Airports with Coverage</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value"><!--BEGIN:total_events-->59,392<!--END:total_events--></div>
+      <div class="stat-label">Loss-of-Separation Events</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value"><!--BEGIN:data_points-->3.3 billion<!--END:data_points--></div>
+      <div class="stat-label">crowdsourced data points analyzed</div>
+    </div>
+  </div>
+  <p style="text-align:center;color:#6b7280;font-size:0.85em;margin:8px 0 0">
+    Data range: <!--BEGIN:date_range-->06/01/25 &ndash; 08/31/25<!--END:date_range--></p>
+
+
+
+  <div class="search-bar">
+    <label for="airport-search">Go to Airport:</label>
+    <input type="text" id="airport-search" maxlength="4"
+           placeholder="e.g. WVI" autocomplete="off">
+    <button onclick="searchAirport()">Go</button><span>or go <a href="/">direct to the world map</a>.</span>
+  </div>
+<!--BEGIN:section_blocks-->
+    <div class="section">
+      <button class="section-toggle" onclick="toggleSection('section-0')">
+        <span class="toggle-icon" id="icon-section-0">&#9654;</span>
+        <span class="section-title">Sample Region</span>
+        <span class="section-count">2 of 3 airports</span>
+      </button>
+      <div class="section-content" id="section-0" style="display:none">
+        <table class="sortable">
+          <thead>
+            <tr>
+              <th>Airport</th>
+              <th>Name</th>
+              <th>State</th>
+              <th style="text-align:right" title="Aircraft within .3nm and 400ft vertically, within 5nm of the airport, &#39;medium&#39; event quality or better">Nearby Events</th>
+              <th style="text-align:center">Data Quality</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><a href="/v2/conus.html?airport=KWVI" target="_blank">KWVI</a></td><td>Watsonville Muni</td><td>CA</td><td style="text-align:right;font-variant-numeric:tabular-nums">24</td><td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:0.85em;font-weight:600;color:#16a34a;background:#d1fae5">Good</span></td></tr>
+            <tr><td><a href="/v2/conus.html?airport=KPAO" target="_blank">KPAO</a></td><td>Palo Alto</td><td>CA</td><td style="text-align:right;font-variant-numeric:tabular-nums">12</td><td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:0.85em;font-weight:600;color:#ca8a04;background:#fef9c3">Fair</span></td></tr>
+            <tr class="no-data"><td>KSQL</td><td colspan="4" style="color:#9ca3af;font-style:italic">No data available</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+<!--END:section_blocks-->
+
+<br/><br/>
+
+  <div class="description">
+    <p>Thanks to the fine folks at <a href="https://adsb.lol">adsb.lol</a>, global, high-resolution, historical ADS-B data is
+    now available for research and analysis.  This site provides an analysis of where airplanes are getting close together at your 
+    favorite airports, in the hopes that it will be useful to improve awareness and safety.
+
+    <p>Of course, not every event like this represents a safety issue.  Common benign scenarios:</p>
+    <p align="center"><b>Formation flights — Parallel runways — Helicopters operating opposite a fixed-wing pattern — Noisy ADS-B data</b></p>
+    Analysis by local pilots will also be helpful to fully understand the data.
+    <p>More airports and regions outside the US will be added upon request. <a href="faq.html">FAQ</a> --  <a href="methodology.html">More about our methodology here</a></p>
+  </div>
+
+  <div class="footer">
+    A service of 6061 Ventures LLC &middot;
+    <a href="accessibility.html">Accessibility</a>
+  </div>
+</div>
+<script>
+function toggleSection(id) {
+  var el = document.getElementById(id);
+  var icon = document.getElementById('icon-' + id);
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    icon.classList.add('open');
+  } else {
+    el.style.display = 'none';
+    icon.classList.remove('open');
+  }
+}
+
+// Pending URL to navigate to after disclaimer is accepted
+var _pendingUrl = null;
+
+function maybeNavigate(url) {
+  if (sessionStorage.getItem('disclaimerShown')) {
+    window.open(url, '_blank');
+  } else {
+    _pendingUrl = url;
+    document.getElementById('disclaimer-overlay').classList.add('active');
+    document.querySelector('#disclaimer-box button').focus();
+  }
+}
+
+function acceptDisclaimer() {
+  sessionStorage.setItem('disclaimerShown', '1');
+  document.getElementById('disclaimer-overlay').classList.remove('active');
+  if (_pendingUrl) {
+    window.open(_pendingUrl, '_blank');
+    _pendingUrl = null;
+  }
+}
+
+function searchAirport() {
+  var raw = document.getElementById('airport-search').value.trim().toUpperCase();
+  if (!raw) return;
+  // Normalize to ICAO: prepend K for 3-letter US identifiers
+  var icao = raw;
+  if (/^[A-Z]{3}$/.test(raw)) {
+    icao = 'K' + raw;
+  }
+  // v2 single global map; airport deep-link via query param.
+  var url = '/v2/conus.html?airport=' + encodeURIComponent(icao);
+  maybeNavigate(url);
+}
+
+// Allow Enter key in search box
+document.getElementById('airport-search').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') searchAirport();
+});
+
+// Intercept airport table links to go through disclaimer check
+document.addEventListener('click', function(e) {
+  var a = e.target.closest('tbody a[href]');
+  if (!a) return;
+  e.preventDefault();
+  maybeNavigate(a.href);
+});
+</script>
+</body>
+</html>

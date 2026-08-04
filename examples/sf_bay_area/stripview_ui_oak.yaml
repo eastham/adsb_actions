@@ -1,0 +1,37 @@
+# Oakland Airport (OAK) stripview UI configuration.
+# Monitors aircraft in OAK approach, tower, and east/west sectors.
+# Includes proximity detection for loss-of-separation alerts (400ft vertical, 0.3nm lateral).
+# Usage: python src/applications/stripview/controller.py -- --rules examples/sf_bay_area/stripview_ui_oak.yaml
+
+  config:
+    kmls:
+      - examples/sf_bay_area/regions/oak_area.kml
+      - examples/sf_bay_area/regions/oak_area.kml
+
+  rules:
+    ui_update:
+      conditions:
+        regions: [ "OAK Approach", "OAK East", "OAK West", "OAK Tower" ]
+      actions:
+        callback: aircraft_update_cb
+
+    ui_remove:
+      conditions:
+        regions: []  # not in any KML-defined region
+      actions:
+        callback: aircraft_remove_cb
+
+    ui_expire:
+      conditions: {} # always run
+      actions:
+        expire_callback: aircraft_remove_cb
+
+    prox:
+      conditions:
+        min_alt: 0
+        max_alt: 50000
+        regions: [ "OAK Approach", "OAK East", "OAK West", "OAK Tower" ]
+        proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
+      actions:
+        print: True
+        callback: los_update_cb

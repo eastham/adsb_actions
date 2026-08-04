@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_c7035a3e613e52a5132424d0117a3d1d {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
+
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
+
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
+
+        
+</head>
+<body>
+    
+    
+    <div id="legend-box" style="
+        position: fixed;
+        bottom: 50px;
+        left: 50px;
+        width: 270px;
+        height: 190px;
+        background-color: white;
+        border: 2px solid black;
+        z-index: 1000;
+        padding: 10px;
+        font-size: 14px;
+    ">
+        <b>YEAR: <a href="2022.html">2022</a>
+        <a href="2023.html">2023</a>
+        <a href="2024.html">2024</a></b><br/><br/>
+        <b>Click on an event for details.</b><br>
+        <b>LOS event types:</b><br>
+        <i style="background: blue; width: 10px; height: 10px; display: inline-block;"></i> Overtake<br>
+        <i style="background: orange; width: 10px; height: 10px; display: inline-block;"></i> T-Bone<br>
+        <i style="background: red; width: 10px; height: 10px; display: inline-block;"></i> Head-On<br>
+        <i style="background: green; width: 10px; height: 10px; display: inline-block;"></i> Other<br>
+
+    </div>
+    <script>
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                var legend = document.getElementById('legend-box');
+                var coordDisplay = document.querySelector('.coord-display');
+                if (legend) {
+                    legend.style.display = legend.style.display === 'none' ? 'block' : 'none';
+                }
+                if (coordDisplay) {
+                    coordDisplay.style.display = coordDisplay.style.display === 'none' ? 'block' : 'none';
+                }
+            }
+        });
+    </script>
+    
+    
+            <div class="folium-map" id="map_c7035a3e613e52a5132424d0117a3d1d" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_c7035a3e613e52a5132424d0117a3d1d = L.map(
+                "map_c7035a3e613e52a5132424d0117a3d1d",
+                {
+                    center: [40.76625, -119.18355],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 13,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_fbd1a89eaf2d4c6879e6dd0365f11932 = L.tileLayer(
+                "https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}",
+                {
+  "minZoom": 0,
+  "maxZoom": 18,
+  "maxNativeZoom": 18,
+  "noWrap": false,
+  "attribution": "Esri VFR Sectional",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 0.8,
+}
+
+            );
+        
+    
+            tile_layer_fbd1a89eaf2d4c6879e6dd0365f11932.addTo(map_c7035a3e613e52a5132424d0117a3d1d);
+        
+    
+            var circle_8a8a50a037c4ad9491935a1594b52c10 = L.circle(
+                [36.921234, -121.802547],
+                {"bubblingMouseEvents": true, "color": "green", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "green", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 85, "stroke": true, "weight": 3}
+            ).addTo(map_c7035a3e613e52a5132424d0117a3d1d);
+        
+    
+        var popup_d2e0d0f920e34f86a140bd1b35b98124 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_ce525b4e11af12e2f6d50273ea2c8041 = $(`<div id="html_ce525b4e11af12e2f6d50273ea2c8041" style="width: 100.0%; height: 100.0%;">2025-12-13-00:10 N303RH/N736JA <b>Alt:</b> 1008 <b>type:</b> type <b>phase:</b> phase <b>Interp:</b> interp <b><a href='https://globe.adsbexchange.com/?replay=2025-12-13-00:11&lat=36.921234&lon=-121.802547&zoom=12'' target='_blank'>REPLAY LINK</a></b> <b>ATC audio:</b> audio<br></div>`)[0];
+                popup_d2e0d0f920e34f86a140bd1b35b98124.setContent(html_ce525b4e11af12e2f6d50273ea2c8041);
+            
+        
+
+        circle_8a8a50a037c4ad9491935a1594b52c10.bindPopup(popup_d2e0d0f920e34f86a140bd1b35b98124)
+        ;
+
+        
+    
+    
+            var circle_cce745e2cafa279f8ffa2e64d094969f = L.circle(
+                [36.9359585, -121.79033575],
+                {"bubblingMouseEvents": true, "color": "green", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "green", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 85, "stroke": true, "weight": 3}
+            ).addTo(map_c7035a3e613e52a5132424d0117a3d1d);
+        
+    
+        var popup_e07abf4c2f95a0215d29fbc4f5390e06 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_e522403be218bed5f1c4a76892529047 = $(`<div id="html_e522403be218bed5f1c4a76892529047" style="width: 100.0%; height: 100.0%;">2025-12-13-20:14 N8306K/N88HQ <b>Alt:</b> 50 <b>type:</b> type <b>phase:</b> phase <b>Interp:</b> interp <b><a href='https://globe.adsbexchange.com/?replay=2025-12-13-20:15&lat=36.9359585&lon=-121.79033575&zoom=12'' target='_blank'>REPLAY LINK</a></b> <b>ATC audio:</b> audio<br></div>`)[0];
+                popup_e07abf4c2f95a0215d29fbc4f5390e06.setContent(html_e522403be218bed5f1c4a76892529047);
+            
+        
+
+        circle_cce745e2cafa279f8ffa2e64d094969f.bindPopup(popup_e07abf4c2f95a0215d29fbc4f5390e06)
+        ;
+
+        
+    
+    
+            var circle_997be3639dbba958fa1ad9e2ad69fe94 = L.circle(
+                [36.9380774375, -121.788105875],
+                {"bubblingMouseEvents": true, "color": "green", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "green", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 85, "stroke": true, "weight": 3}
+            ).addTo(map_c7035a3e613e52a5132424d0117a3d1d);
+        
+    
+        var popup_4afa8891c8ff98e64910018ee80aa3e2 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_521fdbd80dd19eb35a1ccfb1f2e39bb9 = $(`<div id="html_521fdbd80dd19eb35a1ccfb1f2e39bb9" style="width: 100.0%; height: 100.0%;">2025-12-13-21:42 N4957F/N64WG <b>Alt:</b> 98 <b>type:</b> type <b>phase:</b> phase <b>Interp:</b> interp <b><a href='https://globe.adsbexchange.com/?replay=2025-12-13-21:41&lat=36.9380774375&lon=-121.788105875&zoom=12'' target='_blank'>REPLAY LINK</a></b> <b>ATC audio:</b> audio<br></div>`)[0];
+                popup_4afa8891c8ff98e64910018ee80aa3e2.setContent(html_521fdbd80dd19eb35a1ccfb1f2e39bb9);
+            
+        
+
+        circle_997be3639dbba958fa1ad9e2ad69fe94.bindPopup(popup_4afa8891c8ff98e64910018ee80aa3e2)
+        ;
+
+        
+    
+    
+            var circle_cea7ba46c6e56764ab19015f67d5a296 = L.circle(
+                [36.9467875, -121.759661],
+                {"bubblingMouseEvents": true, "color": "green", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "green", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 85, "stroke": true, "weight": 3}
+            ).addTo(map_c7035a3e613e52a5132424d0117a3d1d);
+        
+    
+        var popup_73957248c4921e2e5a71fef9bca2ec56 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_18631abdb4f36e7c6614ba08d338c7be = $(`<div id="html_18631abdb4f36e7c6614ba08d338c7be" style="width: 100.0%; height: 100.0%;">2025-12-13-21:47 N6MB/N733AK <b>Alt:</b> 850 <b>type:</b> type <b>phase:</b> phase <b>Interp:</b> interp <b><a href='https://globe.adsbexchange.com/?replay=2025-12-13-21:46&lat=36.9467875&lon=-121.759661&zoom=12'' target='_blank'>REPLAY LINK</a></b> <b>ATC audio:</b> audio<br></div>`)[0];
+                popup_73957248c4921e2e5a71fef9bca2ec56.setContent(html_18631abdb4f36e7c6614ba08d338c7be);
+            
+        
+
+        circle_cea7ba46c6e56764ab19015f67d5a296.bindPopup(popup_73957248c4921e2e5a71fef9bca2ec56)
+        ;
+
+        
+    
+    
+            var circle_8d1a169a29e90a2c0e1874fd856a9e2e = L.circle(
+                [36.9274535, -121.79694029999999],
+                {"bubblingMouseEvents": true, "color": "green", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "green", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 85, "stroke": true, "weight": 3}
+            ).addTo(map_c7035a3e613e52a5132424d0117a3d1d);
+        
+    
+        var popup_aa239ec6c3e992be9df3c41cd9dfc80c = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_95dea9867dfd2f9172ae063c080b68ea = $(`<div id="html_95dea9867dfd2f9172ae063c080b68ea" style="width: 100.0%; height: 100.0%;">2025-12-13-21:48 N4957F/N6MB <b>Alt:</b> 440 <b>type:</b> type <b>phase:</b> phase <b>Interp:</b> interp <b><a href='https://globe.adsbexchange.com/?replay=2025-12-13-21:47&lat=36.9274535&lon=-121.79694029999999&zoom=12'' target='_blank'>REPLAY LINK</a></b> <b>ATC audio:</b> audio<br></div>`)[0];
+                popup_aa239ec6c3e992be9df3c41cd9dfc80c.setContent(html_95dea9867dfd2f9172ae063c080b68ea);
+            
+        
+
+        circle_8d1a169a29e90a2c0e1874fd856a9e2e.bindPopup(popup_aa239ec6c3e992be9df3c41cd9dfc80c)
+        ;
+
+        
+    
+    
+            var circle_a6782efafdfc8925e89b90ac3f7c5c74 = L.circle(
+                [36.936287, -121.790051],
+                {"bubblingMouseEvents": true, "color": "green", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "green", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 85, "stroke": true, "weight": 3}
+            ).addTo(map_c7035a3e613e52a5132424d0117a3d1d);
+        
+    
+        var popup_94e19e29b4da8ab5925d06ed13f8676d = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_1d7f21f1aefc00f6c15129a89efac32f = $(`<div id="html_1d7f21f1aefc00f6c15129a89efac32f" style="width: 100.0%; height: 100.0%;">2025-12-13-21:59 N1504V/N525LG <b>Alt:</b> 62 <b>type:</b> type <b>phase:</b> phase <b>Interp:</b> interp <b><a href='https://globe.adsbexchange.com/?replay=2025-12-13-21:59&lat=36.936287&lon=-121.790051&zoom=12'' target='_blank'>REPLAY LINK</a></b> <b>ATC audio:</b> audio<br></div>`)[0];
+                popup_94e19e29b4da8ab5925d06ed13f8676d.setContent(html_1d7f21f1aefc00f6c15129a89efac32f);
+            
+        
+
+        circle_a6782efafdfc8925e89b90ac3f7c5c74.bindPopup(popup_94e19e29b4da8ab5925d06ed13f8676d)
+        ;
+
+        
+    
+    
+            var circle_62d0bb99fd75a7a075cf5661a64dac0d = L.circle(
+                [36.9282075, -121.79627450000001],
+                {"bubblingMouseEvents": true, "color": "green", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "green", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 85, "stroke": true, "weight": 3}
+            ).addTo(map_c7035a3e613e52a5132424d0117a3d1d);
+        
+    
+        var popup_56a8540f77afd2a6c9d2eeb30270a5b4 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_95d5b9229814aa0d81f67287c064da22 = $(`<div id="html_95d5b9229814aa0d81f67287c064da22" style="width: 100.0%; height: 100.0%;">2025-12-13-23:41 N52TJ/N733AK <b>Alt:</b> 362 <b>type:</b> type <b>phase:</b> phase <b>Interp:</b> interp <b><a href='https://globe.adsbexchange.com/?replay=2025-12-13-23:40&lat=36.9282075&lon=-121.79627450000001&zoom=12'' target='_blank'>REPLAY LINK</a></b> <b>ATC audio:</b> audio<br></div>`)[0];
+                popup_56a8540f77afd2a6c9d2eeb30270a5b4.setContent(html_95d5b9229814aa0d81f67287c064da22);
+            
+        
+
+        circle_62d0bb99fd75a7a075cf5661a64dac0d.bindPopup(popup_56a8540f77afd2a6c9d2eeb30270a5b4)
+        ;
+
+        
+    
+    
+            var circle_a4e40dd224972954c3c6549890498b34 = L.circle(
+                [36.946884999999995, -121.7521295],
+                {"bubblingMouseEvents": true, "color": "green", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "green", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 85, "stroke": true, "weight": 3}
+            ).addTo(map_c7035a3e613e52a5132424d0117a3d1d);
+        
+    
+        var popup_209ce20830128bc2c9307fbe773af740 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_1bd414a35118d5cce6a2e13a0b057dc7 = $(`<div id="html_1bd414a35118d5cce6a2e13a0b057dc7" style="width: 100.0%; height: 100.0%;">2025-12-13-23:47 N6212F/N68459 <b>Alt:</b> 887 <b>type:</b> type <b>phase:</b> phase <b>Interp:</b> interp <b><a href='https://globe.adsbexchange.com/?replay=2025-12-13-23:46&lat=36.946884999999995&lon=-121.7521295&zoom=12'' target='_blank'>REPLAY LINK</a></b> <b>ATC audio:</b> audio<br></div>`)[0];
+                popup_209ce20830128bc2c9307fbe773af740.setContent(html_1bd414a35118d5cce6a2e13a0b057dc7);
+            
+        
+
+        circle_a4e40dd224972954c3c6549890498b34.bindPopup(popup_209ce20830128bc2c9307fbe773af740)
+        ;
+
+        
+    
+    
+            var circle_c6035fa0b35cc28c7efa5c5291a3be26 = L.circle(
+                [36.93747411904762, -121.78574414285714],
+                {"bubblingMouseEvents": true, "color": "green", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "green", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 85, "stroke": true, "weight": 3}
+            ).addTo(map_c7035a3e613e52a5132424d0117a3d1d);
+        
+    
+        var popup_8212ac57ff01637a76b49da8bbc2525c = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_78fab30858b95994f2c4c4e63574d98e = $(`<div id="html_78fab30858b95994f2c4c4e63574d98e" style="width: 100.0%; height: 100.0%;">2025-12-13-23:48 N319DB/N6212F <b>Alt:</b> 114 <b>type:</b> type <b>phase:</b> phase <b>Interp:</b> interp <b><a href='https://globe.adsbexchange.com/?replay=2025-12-13-23:48&lat=36.93747411904762&lon=-121.78574414285714&zoom=12'' target='_blank'>REPLAY LINK</a></b> <b>ATC audio:</b> audio<br></div>`)[0];
+                popup_8212ac57ff01637a76b49da8bbc2525c.setContent(html_78fab30858b95994f2c4c4e63574d98e);
+            
+        
+
+        circle_c6035fa0b35cc28c7efa5c5291a3be26.bindPopup(popup_8212ac57ff01637a76b49da8bbc2525c)
+        ;
+
+        
+    
+    
+            var coordDisplay = L.control({position: 'topright'});
+            coordDisplay.onAdd = function(map) {
+                this._div = L.DomUtil.create('div', 'coord-display');
+                this._div.style.backgroundColor = 'white';
+                this._div.style.border = '2px solid black';
+                this._div.style.padding = '10px';
+                this._div.style.fontFamily = 'monospace';
+                this._div.style.fontSize = '12px';
+                this._div.style.minWidth = '300px';
+                this._div.style.pointerEvents = 'auto';
+                this._div.style.userSelect = 'text';
+                this._div.style.cursor = 'text';
+
+                // Disable map dragging when interacting with this control
+                L.DomEvent.disableClickPropagation(this._div);
+                L.DomEvent.disableScrollPropagation(this._div);
+                this._div.addEventListener('mousedown', function(e) {
+                    L.DomEvent.stopPropagation(e);
+                });
+                this._div.addEventListener('dblclick', function(e) {
+                    L.DomEvent.stopPropagation(e);
+                });
+
+                this.update();
+                return this._div;
+            };
+
+            coordDisplay.update = function() {
+                var bounds = map_c7035a3e613e52a5132424d0117a3d1d.getBounds();
+                var sw = bounds.getSouthWest();
+                var ne = bounds.getNorthEast();
+                var se = L.latLng(sw.lat, ne.lng);
+                var nw = L.latLng(ne.lat, sw.lng);
+
+                this._div.innerHTML = '<b>Current Viewport Bounds: (esc to hide)</b><br>' +
+                    'Lower-Left:  lat=' + sw.lat.toFixed(7) + ', lon=' + sw.lng.toFixed(7) + '<br>' +
+                    'Upper-Right: lat=' + ne.lat.toFixed(7) + ', lon=' + ne.lng.toFixed(7) + '<br>' +
+                    'Lower-Right: lat=' + se.lat.toFixed(7) + ', lon=' + se.lng.toFixed(7) + '<br>' +
+                    'Upper-Left:  lat=' + nw.lat.toFixed(7) + ', lon=' + nw.lng.toFixed(7);
+            };
+
+            coordDisplay.addTo(map_c7035a3e613e52a5132424d0117a3d1d);
+
+            map_c7035a3e613e52a5132424d0117a3d1d.on('moveend', function() { coordDisplay.update(); });
+            map_c7035a3e613e52a5132424d0117a3d1d.on('zoomend', function() { coordDisplay.update(); });
+        
+</script>
+</html>

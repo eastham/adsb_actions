@@ -1,0 +1,8 @@
+# Airport lists that together represent all airports intended to be on airbornehotspots.com.
+# Used by src/tools/qa_cdn.py to cross-check the live site against the intended population.
+airport_lists:
+  - airport_lists/untowered_top160.txt
+  - airport_lists/untowered_top500_all.txt
+  - airport_lists/towered_busiest_quiet.txt
+  - airport_lists/towered_busiest_noisy.txt
+  - airport_lists/manual_request_airports.txt

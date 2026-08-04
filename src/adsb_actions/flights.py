@@ -1,5 +1,6 @@
 """Storage for all Flight objects in the system, and handling
 for flight updates."""
+import collections
 import threading
 import logging
 from typing import Dict
@@ -14,11 +15,17 @@ logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
 LOGGER = Logger()
 
+# Empirically, 5s seems better for global analysis, 10s for more detailed work
+# to avoid dropping anything at all
+MIN_PROX_FRESH = 5  # seconds; older locations not evaluated in proximity checks
+
 class Flights:
     """all Flight objects in the system, indexed by flight_id"""
 
     def __init__(self, bboxes, ignore_unboxed_flights=True):
-        self.flight_dict: Dict[str, Flight] = {}        # all flights in the system.
+        # OrderedDict keeps insertion/move_to_end order so expire_old()
+        # can stop early once it reaches a non-expired entry.
+        self.flight_dict: Dict[str, Flight] = collections.OrderedDict()
         self.lock: threading.Lock = threading.Lock()    # XXX may not be needed anymore...
         self.bboxes : list[Bboxes] = bboxes             # all bboxes in the system.
         self.last_checkpoint = 0                        # timestamp of last maintenance
@@ -55,8 +62,13 @@ class Flights:
         if not loc.tail:
             # couldn't convert ICAO code.  Try the flight name...
             loc.tail = loc.flight
-        if not loc.tail:
-            return loc.now
+        if not loc.tail or loc.tail == "N/A":
+            # Fall back to hex code to avoid all unknown aircraft being indexed
+            # under the same "N/A" key
+            if loc.hex:
+                loc.tail = loc.hex
+            else:
+                return loc.now
 
         with self.lock: # lock needed since testing can race
             flight = self.flight_dict.get(loc.tail)
@@ -65,6 +77,12 @@ class Flights:
                 self.flight_dict[loc.tail] = flight
             else:
                 flight.update_loc(loc)
+                # Keep OrderedDict sorted by last-seen time so expire_old()
+                # can iterate from oldest and stop early.
+                self.flight_dict.move_to_end(loc.tail)
+
+            if loc.suspicious:
+                flight.flags['suspicious'] = True
 
             flight.update_inside_bboxes(self.bboxes, loc)
             rules.process_flight(flight)
@@ -73,31 +91,51 @@ class Flights:
 
     def expire_old(self, rules, last_read_time, expire_secs):
         """Delete any flights that haven't been seen in a while.
-        This is important to make proximity checks efficient."""
+        This is important to make proximity checks efficient.
+
+        Because flight_dict is an OrderedDict ordered by last-seen time,
+        we can iterate from the oldest entry and stop as soon as we find
+        one that isn't expired.  This makes the common case O(k) where
+        k is the number of flights actually expired (usually 0-few)
+        instead of O(n) for all flights.
+
+        Returns:
+            Number of flights expired
+        """
 
         count = 0
         with self.lock:
-            for f in list(self.flight_dict):
-                flight = self.flight_dict[f]
+            while self.flight_dict:
+                # Peek at the oldest entry (front of OrderedDict)
+                f, flight = next(iter(self.flight_dict.items()))
                 if last_read_time - flight.lastloc.now > expire_secs:
                     rules.do_expire(flight)
                     del self.flight_dict[f]
                     count += 1
+                    logger.debug("Expired flight %s last seen at %d, now %d",
+                                 flight.flight_id, flight.lastloc.now, last_read_time)
+                else:
+                    break  # remaining entries are newer, nothing more to expire
 
-        logger.debug("Expire_old removed %d flights", count)
+        return count
 
-    def find_nearby_flight(self, flight2, altsep, latsep, last_read_time) -> Flight:
-        """Returns maximum of one nearby flight within the given separation, 
-        None if not found"""
+    def find_nearby_flight(self, flight2, altsep, latsep, last_read_time,
+                           candidates=None) -> Flight:
+        """Returns maximum of one nearby flight within the given separation,
+        None if not found.
 
-        MIN_FRESH = 10 # seconds.  Older locations not evaluated
+        candidates: optional iterable of Flight objects to check instead of
+        all flights (e.g. from a spatial grid pre-filter).
+        """
 
-        for flight1 in self.flight_dict.values():
+        for flight1 in (candidates if candidates is not None else self.flight_dict.values()):
             if flight1 is flight2:
                 continue
             if self.ignore_unboxed_flights and not flight2.in_any_bbox():
                 continue # performance optimization
-            if last_read_time - flight2.lastloc.now > MIN_FRESH:
+            if last_read_time - flight1.lastloc.now > MIN_PROX_FRESH:
+                continue
+            if last_read_time - flight2.lastloc.now > MIN_PROX_FRESH:
                 continue
 
             loc1 = flight1.lastloc

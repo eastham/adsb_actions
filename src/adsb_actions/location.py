@@ -1,5 +1,6 @@
 """Parsing and representation for a single position update coming from ADS-B."""
 
+import math
 import logging
 from dataclasses import dataclass, fields
 from typing import Optional
@@ -23,6 +24,13 @@ class Location:
     tail: Optional[str] = None  # tail number from ICAO code
     gs: Optional[float] = 0
     track: float = 0.
+    squawk: Optional[str] = None  # transponder code (4 octal digits)
+    emergency: Optional[str] = None  # ADS-B emergency status
+    category: Optional[str] = None  # emitter category (A1-A7, B1-B7, etc.)
+    baro_rate: Optional[int] = None  # vertical rate (feet/minute)
+    on_ground: bool = False  # True when alt_baro == "ground"
+    suspicious: bool = False  # True if position/speed anomaly detected
+    resampled: bool = False  # True if this is an interpolated position, not a real ADS-B report
     flightdict: Optional[dict] = None
 
     def __post_init__(self):
@@ -33,19 +41,37 @@ class Location:
         if not isinstance(self.gs, float): self.gs = 0
         if not isinstance(self.track, float): self.track = 0.
 
+    # Cache fields() result — it's the same tuple every time, but
+    # dataclasses.fields() rebuilds it on each call.
+    _fields = None
+
     @classmethod
     def from_dict(cl, d: dict):
         """Return a location created from a dict bearing the same-named fields."""
+        if cl._fields is None:
+            cl._fields = fields(Location)
         nd = {}
-        for f in fields(Location):
+        for f in cl._fields:
             if f.name in d:
                 nd[f.name] = d[f.name]
+
+        # Detect ground state before alt_baro gets coerced to 0
+        if 'alt_baro' in d and d['alt_baro'] == "ground":
+            nd['on_ground'] = True
 
         # XXX should this be in flight?
         if "hex" in d:
             tail = icao_to_n_or_c(d["hex"])
             if tail:
                 nd["tail"] = tail
+
+        # Use the "r" (registration) field from the API if available and we
+        # don't already have a tail from ICAO conversion
+        if "r" in d and d["r"] and "tail" not in nd:
+            nd["tail"] = d["r"]
+
+        # Store the original dict for access to fields not explicitly parsed
+        nd["flightdict"] = d
         return Location(**nd)
 
     def to_str(self):
@@ -60,7 +86,7 @@ class Location:
 
     def __sub__(self, other):
         """Return distance to the other Location in nm"""
-        return self.distfrom(other.lat, other.lon)
+        return self.distfrom_fast(other.lat, other.lon)
 
     def __lt__(self, other):
         """Altitude comparison only"""
@@ -70,6 +96,31 @@ class Location:
         """Altitude comparison only"""
         return self.alt_baro > other.alt_baro
 
+    def distfrom_fast(self, lat, lon):
+        # Haversine formula, est error .5% at 1 mile.
+
+        # Convert decimal degrees to radians
+        phi1, phi2 = math.radians(self.lat), math.radians(lat)
+        dphi = math.radians(lat - self.lat)
+        dlambda = math.radians(lon - self.lon)
+
+        a = math.sin(dphi/2)**2 + \
+            math.cos(phi1) * math.cos(phi2) * math.sin(dlambda/2)**2
+
+        # 3443.92 is the Earth's radius in Nautical Miles
+        return 2 * 3443.92 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    
     def distfrom(self, lat, lon):
         """Return distance from other lat/long in nm"""
         return distance.distance((self.lat, self.lon), (lat, lon)).nm
+
+    @classmethod
+    def meanloc(cls, loc1, loc2):
+        """Return a location that is the simple mean of two locations."""
+        alt = int((loc1.alt_baro + loc2.alt_baro) / 2)
+        newloc = Location(
+            lat=(loc1.lat + loc2.lat) / 2,
+            lon=(loc1.lon + loc2.lon) / 2,
+            alt_baro=alt
+        )
+        return newloc

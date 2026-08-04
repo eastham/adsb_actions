@@ -1,0 +1,70 @@
+import os
+import logging
+from applications.airport_monitor.los import process_los_launch, LOS
+from applications.airport_monitor.db_ops import add_op
+from core.database.interface import get_database
+from adsb_actions.stats import Stats
+from prometheus_client import Gauge
+
+from adsb_actions.adsb_logger import Logger
+from playsound import playsound
+from gtts import gTTS # google text-to-speech
+
+soundfile="/tmp/msg.mp3"
+tonefile="./src/sounds/airbus-master-warning-sound-high-quality.mp3"
+
+logger = logging.getLogger(__name__)
+#logger.level = logging.DEBUG
+LOGGER = Logger()
+
+Stats.register_prom_callbacks()
+
+def landing_cb(flight):
+    logger.info("Landing detected! %s", flight.flight_id)
+    if 'note' in flight.flags:
+        logger.info("Local-flight landing detected! %s", flight.flight_id)
+        Stats.local_landings += 1
+    Stats.landings += 1
+
+    add_op(flight, "Landing", 'note' in flight.flags)
+
+def popup_takeoff_cb(flight):
+    logger.info("Popup takeoff detected! %s", flight.flight_id)
+    Stats.popup_takeoffs += 1
+    takeoff_cb(flight)
+
+def takeoff_cb(flight):
+    logger.info("Takeoff detected! %s", flight.flight_id)
+    Stats.takeoffs += 1
+
+    add_op(flight, "Takeoff", False)
+
+def los_cb(flight1, flight2):
+    """LOS = Loss of Separation -- two airplanes in close proximity"""
+    logger.info("LOS detected! %s", flight1.flight_id)
+    process_los_launch(flight1, flight2)
+
+def play_vehicle_on_runway_audio(flight):
+    logger.info("Vehicle on runway detected, playing audio... %s", flight.flight_id)
+    # google text -> speech is pretty good
+    message = "Caution, Vehicle on runway"
+    playsound(tonefile)
+    tts = gTTS(message)
+    tts.save(soundfile)
+    playsound(soundfile)
+    playsound("./src/sounds/hesteah_caution.mp3")
+
+def register_callbacks(adsb_actions):
+    adsb_actions.register_callback("landing", landing_cb)
+    adsb_actions.register_callback("takeoff", takeoff_cb)
+    adsb_actions.register_callback("popup_takeoff", popup_takeoff_cb)
+    adsb_actions.register_callback("los_update_cb", los_cb)
+    adsb_actions.register_callback("vehicle_on_runway_audio_cb",
+                                    play_vehicle_on_runway_audio)
+
+def enter_db_fake_mode():
+    get_database().enter_fake_mode()
+
+def exit_workers():
+    LOS.quit = True
+    logger.info("Please wait for final LOS GC...")

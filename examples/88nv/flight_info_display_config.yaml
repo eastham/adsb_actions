@@ -1,0 +1,41 @@
+# 88NV (Black Rock City Municipal Airport) public flight info display
+# configuration.
+#
+# Example usage:
+#   python src/applications/flight_info_display/monitor.py -- --testdata tests/20minutes.json --delay .2 --rules examples/88nv/flight_info_display_config.yaml
+#
+
+  monitor_config:
+#    window_size: [940, 1200]   # larger display
+    window_size: [500, 700]
+    window_top: 0
+    window_left: 1000
+    text_position: [20, -20]
+
+  config:
+    kmls:
+      - examples/88nv/regions/brc_large_regions.kml
+      - examples/88nv/regions/brc_small_regions.kml
+
+  rules:
+    ui_update:
+      conditions:
+        regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern" ]
+        rule_cooldown: .02  # mins
+      actions:
+        callback: aircraft_update_cb
+
+    ui_update2:   # clears departed/landed ac, but run less often to not spam the system
+      conditions:
+        regions: [ "Other" ]
+        rule_cooldown: 1  # mins
+      actions:
+        callback: aircraft_update_cb
+
+    # callback to hide strip for aircraft that is expired by the system
+    # due to inactivity.
+    ui_expire:
+      conditions: 
+         regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
+      actions:
+        expire_callback: aircraft_expire_cb

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-TBDC7S1GCL"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-TBDC7S1GCL');
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Methodology</title>
+<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "b4e63e29656945479c5050399013db3f"}'></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    background: #f8fafc; color: #1e293b; line-height: 1.6;
+  }
+  .navbar {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+    padding: 12px 24px; background: #0f172a;
+    border-bottom: 1px solid #1e293b;
+  }
+  .navbar-brand {
+    font-size: 1.1rem; font-weight: 700; color: #fff;
+    text-decoration: none; margin-right: auto;
+  }
+  .navbar a {
+    color: #cbd5e1; text-decoration: none; font-size: 0.95rem;
+    font-weight: 500;
+  }
+  .navbar a:hover { color: #fff; }
+  .container { max-width: 960px; margin: 0 auto; padding: 40px 24px; }
+  h1 {
+    font-size: 2rem; font-weight: 700; color: #0f172a;
+    margin-bottom: 16px;
+  }
+  p { color: #475569; margin: 16px 0; }
+  ul { color: #475569; margin: 12px 0 16px 24px; }
+  a { color: #2563eb; text-decoration: none; font-weight: 500; }
+  a:hover { text-decoration: underline; }
+  .footer {
+    margin-top: 48px; padding-top: 20px; border-top: 1px solid #e2e8f0;
+    font-size: 0.85rem; color: #64748b;
+  }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a class="navbar-brand" href="/">airbornehotspots.org</a>
+  <a href="about.html">About</a>
+  <a href="faq.html">FAQ</a>
+  <a href="casestudies.html">Case Studies</a>
+  <a href="methodology.html">Methodology</a>
+  <a href="foreflight.html">ForeFlight</a>
+  <a href="contact.html">Get in Touch</a>
+</nav>
+<div class="container">
+  <h1>Methodology</h1>
+  <ul>
+    <b>Please note</b> there are many potential sources of error in this data, including non-ADS-B-equipped aircraft, GPS errors, and data dropouts due to reception issues.  Any single event may be misleading, but the hope is that with enough events, useful patterns may emerge.  Also, a number of empirical criteria had to be chosen regarding separation distances, times, etc. 
+    <p>Here is the process:</p>
+    <li>Data is downloaded from <a href="http://adsb.lol">adsb.lol</a>'s <a href="https://github.com/adsblol">archive of historical location reports on github</a>.
+    They have crowdsourced ADS-B data from thousands of volunteers worldwide.</li>
+
+    <li>The downloaded data is fed through <a href="https://github.com/eastham/adsb_actions">adsb_actions</a> and resampled to 1Hz, then scanned for events where a pair of aircraft:
+      <ul>
+        <li>Are within 0.3 nm of each other laterally, and within 400 ft vertically</li>
+        <li>Are below 18,000 ft (the floor of Class A airspace)</li>
+        <li>Are high enough to rule out ground operations: within 5 nm of an airport, at least 200 ft above that airport's field elevation; elsewhere, at least 50 ft above sea level</li>
+        <li>Have both been heard from in the past 5 seconds (i.e. the encounter isn't an artifact of resampling across a reception gap)</li>
+      </ul>
+    </li>
+    <li>Each event is assigned a (very approximate) quality rating to help filter out likely false positives:
+      <ul>
+        <li><span style="color:#ff00ff;font-size:1.2em;">●</span> <b>Very High</b> – brief event (&le;30s), CPA closer than 0.2&nbsp;nm and 200&nbsp;ft vertically, no data quality issues</li>
+        <li><span style="color:orange;font-size:1.2em;">●</span> <b>High</b> – brief event (&le;30s), no data quality issues</li>
+        <li><span style="color:#c8a800;font-size:1.2em;">●</span> <b>Medium</b> – event lasted 30–90s (possible formation flight), or had data quality issues (sparse reports during the event)</li>
+        <li><span style="color:green;font-size:1.2em;">●</span> <b>Low</b> – a helicopter was involved, one aircraft had less than 60s of track data, or the event looks like formation flight or bad data:
+          <ul>
+            <li>Event lasted over 90s (probable formation flight or parallel runway ops)</li>
+            <li>The two aircraft stayed within 0.6&nbsp;nm of each other for most of the time both were being tracked (formation flight, or a reception gap that froze one aircraft's position)</li>
+            <li>No valid data near the closest point of approach — neither a real report within a few seconds of it, nor within half a mile of it</li>
+            <li>Implausibly large position jumps, or a track that stopped reporting before the event began</li>
+          </ul>
+          As an exception, aircraft that were more than 1&nbsp;nm apart when we first saw them both cannot be a formation flight, so the formation-based downgrades above do not apply to them.
+        </li>
+      </ul>
+      On the home page's list of airports, only Medium quality and above events, within 5nm of the airport, are included in the event counts.
+    </li>  </ul>
+
+    <p>Source code is available at <a href="https://github.com/eastham/adsb_actions">GitHub</a>.</p>
+  <div class="footer">
+    A service of 6061 Ventures LLC &middot;
+    <a href="accessibility.html">Accessibility</a>
+  </div>
+</div>
+</body>
+</html>

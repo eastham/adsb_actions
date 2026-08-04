@@ -1,0 +1,241 @@
+"""Offline LOS (Loss of Separation) analysis pipeline for a single airport and date.
+
+Downloads global ADS-B data from adsb.lol, extracts and converts traces,
+then runs proximity analysis to detect LOS events near an airport.
+
+Data at each stage:
+
+  Stage 1 - YAML generation:
+    Generates a per-airport prox_analyze_from_files.yaml with altitude bounds
+    (field elevation +/- configured offsets) and proximity thresholds.
+    Output: examples/generated/<ICAO>/prox_analyze_from_files.yaml
+
+  Stage 2 - Download (~3 GB):
+    Two split tar archives from GitHub: v<YYYY.MM.DD>-planes-readsb-prod-0.tar.aa/ab
+    These contain global ADS-B traces for one full day.
+    Output: data/<prefix>.tar.aa, data/<prefix>.tar.ab
+
+  Stage 3 - Extraction:
+    Concatenated tar extraction produces per-aircraft gzipped JSON trace files.
+    Each file contains one aircraft's full day of positions:
+      {"icao": "a1b2c3", "r": "N12345", "timestamp": <epoch>,
+       "trace": [[offset_sec, lat, lon, alt, gs, track, ...], ...]}
+    Output: traces/*.json.gz (one file per aircraft, ~15 GB uncompressed total)
+
+  Stage 4 - Trace conversion (convert_traces.py):
+    Reads per-aircraft traces, spatially filters to --radius nm around airport,
+    then external merge-sorts all points by timestamp into a single JSONL stream.
+    Each line is one position report:
+      {"now": <epoch>, "lat": 40.76, "lon": -119.21, "alt_baro": 1500,
+       "flight": "N12345", "hex": "a1b2c3", "gscp": 120, "track": 101, ...}
+    Output: examples/generated/<ICAO>/<MMDDYY>_<ICAO>.gz (gzipped sorted JSONL)
+
+  Stage 5 - LOS analysis (prox_analyze_from_files.py --resample --sorted-file):
+    Streams the time-sorted JSONL, resamples to 1-second intervals, and detects
+    proximity violations between aircraft pairs. For each LOS event, generates
+    an animated HTML map showing both aircraft trajectories.
+    Output: <MMDDYY>_<ICAO>.out  (full log with CSV lines)
+            <MMDDYY>_<ICAO>.csv.out  (grep'd CSV lines for postprocessing)
+            los_<tail1>_<tail2>_<timestamp>.html  (per-event animation)
+
+  Stage 6 - Visualization (visualizer.py):
+    Reads CSV output and plots all LOS events on a Folium map centered on the
+    airport, with optional heatmap overlay.
+    Output: airport_map.html
+
+Note: Stages 3-4 (extract + convert) are the bottleneck for multi-airport batch
+processing. The traces/ directory contains global data, so extracting once and
+running convert_traces.py multiple times with different --lat/--lon centers
+would avoid redundant downloads and extractions.
+
+Usage:
+    python src/tools/los_offline_pipeline.py 01/15/26 KSQL
+    python src/tools/los_offline_pipeline.py 01/15/26 KSQL --no-cleanup --ft-above 3000
+"""
+
+import math
+import os
+import subprocess
+import requests
+import shutil
+import argparse
+from pathlib import Path
+from datetime import datetime
+import generate_airport_config
+from batch_helpers import FT_MAX_ABOVE_AIRPORT, FT_MIN_BELOW_AIRPORT, ANALYSIS_RADIUS_NM
+
+DATA_DIR = "data"
+BASE_DIR = "examples/generated"
+
+
+def compute_bounds(center_lat: float, center_lon: float, radius_nm: float) -> tuple:
+    """Compute SW and NE corners from center point and radius in nautical miles.
+
+    Returns:
+        Tuple of (sw_lat, sw_lon, ne_lat, ne_lon)
+    """
+    # 1 degree latitude = 60 nm
+    lat_offset = radius_nm / 60.0
+    # 1 degree longitude = 60 nm * cos(latitude)
+    lon_offset = radius_nm / (60.0 * math.cos(math.radians(center_lat)))
+
+    sw_lat = center_lat - lat_offset
+    sw_lon = center_lon - lon_offset
+    ne_lat = center_lat + lat_offset
+    ne_lon = center_lon + lon_offset
+
+    return sw_lat, sw_lon, ne_lat, ne_lon
+
+def validate_date(date_text):
+    try:
+        return datetime.strptime(date_text, '%m/%d/%y')
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Incorrect date format '{date_text}', should be mm/dd/yy")
+
+def run_command(command):
+    print(f"🚀 Executing: {command}")
+    result = subprocess.run(command, shell=True, text=True)
+    if result.returncode != 0:
+        print(f"❌ Command failed.")
+    return result
+
+def load_airport(airport_icao):
+    airport = generate_airport_config.load_airport(airport_icao)
+    try:
+        field_elevation = float(airport.get('elevation_ft') or 0)
+        center_lat = float(airport.get('latitude_deg') or 0)
+        center_lon = float(airport.get('longitude_deg') or 0)
+        field_alt = int(airport.get('elevation_ft'))
+    except (ValueError, TypeError):
+        print("Error: Could not parse airport coordinates.", file=sys.stderr)
+        sys.exit(1)
+
+    return center_lat, center_lon, field_alt
+
+def setup_pipeline(args):
+    date_obj = args.date
+    airport_icao = args.airport.upper()
+    
+    # Format strings
+    date_iso = date_obj.strftime('%Y.%m.%d')
+    date_compact = date_obj.strftime('%m%d%y')
+    full_year = date_obj.strftime('%Y')
+    
+    base_dir = Path(BASE_DIR)
+    data_dir = Path(DATA_DIR)
+    airport_dir = base_dir / airport_icao
+    airport_dir.mkdir(parents=True, exist_ok=True)
+    
+    trace_gz = airport_dir / f"{date_compact}_{airport_icao}.gz"
+    file_prefix = f"v{date_iso}-planes-readsb-prod-0"
+
+    # --- STAGE 1: Generate Airport yaml if needed --- TODO TODO
+    lat, lon, field_alt = load_airport(airport_icao)
+
+    # Use command-line overrides for altitude bounds
+    ft_above = args.ft_above
+    ft_below = args.ft_below
+
+    airport_yaml = base_dir / airport_icao / f"prox_analyze_from_files.yaml"
+    if not airport_yaml.exists():
+        print(f"⚙️ Generating airport YAML at {airport_yaml}...")
+        yaml_text = generate_airport_config.generate_prox_yaml(airport_icao,
+                                                    field_alt + ft_above,
+                                                    field_alt + ft_below)
+        os.makedirs (base_dir / airport_icao, exist_ok=True)
+        with open(airport_yaml, 'w') as f:
+            f.write(yaml_text)
+    else:
+        print(f"✅ {airport_yaml} exists. Skipping generation.")
+
+    # --- STAGE 4: Download (.tar.aa / .tar.ab) ---
+    for ext in ['aa', 'ab']:
+        local_file = data_dir / f"{file_prefix}.tar.{ext}"
+        if not local_file.exists() or args.force_download:
+            print(f"📥 Downloading {local_file.name}...") # TODO progress indicator?
+            url = f"https://github.com/adsblol/globe_history_{full_year}/releases/download/v{date_iso}-planes-readsb-prod-0/{file_prefix}.tar.{ext}"
+            print(f"Downloading from {url}...")
+            r = requests.get(url, stream=True)
+            if r.status_code == 404:
+                # https://github.com/adsblol/globe_history_2025/releases/download/v2025.06.01-planes-readsb-prod-0tmp/v2025.06.01-planes-readsb-prod-0tmp.tar.aa
+                # global replace  prod-0 with prod-0tmp
+                url = url.replace("prod-0", "prod-0tmp")
+                print(f"Retrying download from {url}...")
+                r = requests.get(url, stream=True)
+
+            if r.status_code == 200:
+                with open(local_file, 'wb') as f:
+                    shutil.copyfileobj(r.raw, f)
+            else:
+                print(f"⚠️ Could not download {local_file.name} (Status: {r.status_code})")
+        else:
+            print(f"✅ {local_file.name} exists. Skipping download.")
+
+    # --- STAGE 5: Extraction (traces/ folder) ---
+    # We check for the 'traces' directory as the indicator of extraction
+    # force_download also forces re-extract
+    if not trace_gz.exists() or args.force_extract:
+        print("📦 Extracting tar archives...")
+        # Clean old data before extract
+        for folder in ['traces', 'acas', 'heatmap']:
+            if Path(folder).exists(): shutil.rmtree(folder)
+            
+        archive_pattern = data_dir / f"{file_prefix}.tar.a*"
+        run_command(f"cat {archive_pattern} | tar --options read_concatenated_archives -xf -")
+    else:
+        print(f"✅ {trace_gz.name} directory exists. Skipping extraction.")
+
+    # --- STAGE 6: Convert Traces (.gz file) ---
+    if not trace_gz.exists() or args.force_extract:
+        print(f"⚙️ Converting traces to {trace_gz.name}...")
+        run_command(f"python src/tools/convert_traces.py traces -o {trace_gz} "
+                    f"--lat {lat} --lon {lon} --radius {ANALYSIS_RADIUS_NM} --progress 100")
+    else:
+        print(f"✅ {trace_gz.name} exists. Skipping conversion.")
+
+    # Clean temp data (unless --no-cleanup for batch processing)
+    if not args.no_cleanup:
+        for folder in ['traces', 'acas', 'heatmap']:
+            if Path(folder).exists():
+                shutil.rmtree(folder)
+
+    # --- STAGE 7/8: Analysis (Always runs to reflect config changes) ---
+    analysis_out = trace_gz.with_suffix('.out')
+    csv_final = base_dir / f"{date_compact}_{airport_icao}.csv.out"
+    print("📊 Running Analysis...")
+    run_command(f"python3 src/analyzers/prox_analyze_from_files.py "
+                f"--yaml {base_dir}/{airport_icao}/prox_analyze_from_files.yaml "
+                f"--resample --sorted-file {trace_gz} --animate-los > {analysis_out} 2>&1")
+
+    run_command(f"grep CSV {analysis_out} > {csv_final}")
+    print("✅ CSV output written to:", csv_final)
+    print("✅ Visualization of individual events:")
+    run_command(f"grep 'LOS visualization' {analysis_out}")
+
+    # Debug/Visualizer - compute bounds centered on airport
+    all_points_csv = airport_dir / f"{date_compact}_{airport_icao.lower()}.all.csv"
+    sw_lat, sw_lon, ne_lat, ne_lon = compute_bounds(lat, lon, ANALYSIS_RADIUS_NM)
+    #run_command(f"python3 src/analyzers/simple_monitor.py examples/print_csv.yaml "
+    #            f"--sorted-file {trace_gz} > {all_points_csv} 2>&1")
+
+    run_command(f"cat {all_points_csv} | python3 src/postprocessing/visualizer.py "
+                f"--sw {sw_lat},{sw_lon} --ne {ne_lat},{ne_lon}")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="ADSB.lol Optimized Pipeline")
+    parser.add_argument("date", type=validate_date, help="Date in mm/dd/yy format")
+    parser.add_argument("airport", type=str, help="Airport ICAO code")
+
+    parser.add_argument("--force-download", action="store_true",
+                        help="Force download and re-extraction of raw tarballs")
+    parser.add_argument("--force-extract", action="store_true",
+                        help="Force re-conversion of traces (step 6)")
+    parser.add_argument("--no-cleanup", action="store_true",
+                        help="Skip cleanup of traces/ directory (for batch processing)")
+    parser.add_argument("--ft-above", type=int, default=FT_MAX_ABOVE_AIRPORT,
+                        help=f"Feet above airport elevation for analysis ceiling (default: {FT_MAX_ABOVE_AIRPORT})")
+    parser.add_argument("--ft-below", type=int, default=FT_MIN_BELOW_AIRPORT,
+                        help=f"Feet below airport elevation for analysis floor (default: {FT_MIN_BELOW_AIRPORT})")
+
+    args = parser.parse_args()
+    setup_pipeline(args)

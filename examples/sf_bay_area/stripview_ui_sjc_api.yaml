@@ -1,0 +1,46 @@
+# San Jose Airport (SJC) stripview UI configuration - API-based version
+# This version uses the public airplanes.live API instead of a local readsb instance.
+# Anyone can run this demo without any special hardware or network setup.
+#
+# Usage: python src/applications/stripview/controller.py --api --rules examples/sf_bay_area/stripview_ui_sjc_api.yaml
+
+monitor_config:
+  window_size: [400, 340]
+  window_top: 0
+  window_left: 950
+  text_position: [20, -20]
+
+config:
+  kmls:
+    - examples/sf_bay_area/regions/sjc.kml # used to place aircraft in correct window in UI
+    - examples/sf_bay_area/regions/sjc.kml # provides location string in flight strip UI
+
+rules:
+  ui_update:
+    conditions:
+      # latlongring defines the API query area: [radius_nm, lat, lon]
+      # Center point is roughly SJC airport, radius covers SJC, PAO, and surrounding area
+      latlongring: [50, 37.35, -121.93]
+      regions: [ "SJC Takeoff 30", "SJC Landing 30", "PAO Pattern", "Other nearby" ]
+      # Use per-aircraft cooldown instead of rule_cooldown since API returns
+      # batched data with identical timestamps
+      cooldown: .02  # refresh interval in minutes (per aircraft)
+      exclude_aircraft_substrs: ["N10C", "N10D"]
+    actions:
+      callback: aircraft_update_cb
+
+  ui_clear_departed:   # clears departed ac, but run less often to not spam the system
+    conditions:
+      regions: [ "Other nearby" ]
+      cooldown: 1  # mins (per aircraft)
+      exclude_aircraft_substrs: ["N10C", "N10D"]
+    actions:
+      callback: aircraft_update_cb
+
+  # callback to hide strip for aircraft that is expired by the system
+  # due to inactivity.
+  ui_expire_inactive:
+    conditions:
+      regions: [ "SJC Takeoff 30", "SJC Landing 30", "PAO Pattern", "Other nearby" ]
+    actions:
+      expire_callback: aircraft_remove_cb

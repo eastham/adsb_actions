@@ -1,0 +1,336 @@
+#!/usr/bin/env python3
+"""
+deploy_v2 - push v2 generated map files to remote storage under /v2.
+
+Uploads data/v2/maps/ (HTML, PMTiles, and per-event track sidecars)
+to {remote}/v2/, preserving the flat layout that the HTML files expect.
+
+By default only the assets the live HTML actually needs are pushed:
+  *.html, *.pmtiles, */tracks.ndjson, */tracks.index.json.gz,
+  */search_index.json.gz
+Legacy/uncompressed sidecar artifacts (tracks.json, tracks.json.gz) are
+filtered out — they roughly double the upload size and aren't referenced.
+
+We don't pre-gzip anything: Cloudflare's CDN auto-compresses HTML/JSON on
+egress (brotli or gzip per Accept-Encoding), and an earlier attempt to
+ship pre-gzipped HTML with Content-Encoding metadata revealed that
+Cloudflare aggressively decompresses gzipped upstream responses. Plain
+bytes go up; the CDN handles the wire-format compression.
+
+Use --publish-as <name> to additionally promote a chosen dated map to a
+stable URL (e.g. /v2/conus.html). The source map must have been generated
+with `stage5_visualize.py --asset-stem <name>` so its inlined .pmtiles /
+_tracks references already point at the stable filenames.
+
+Promoting also serves that same map as the site's root index.html, since the live
+map is the site's primary destination (the explanatory landing page lives at
+/about.html). An --asset-stem build inlines absolute /v2/ asset URLs, so the one
+HTML file resolves its .pmtiles/_tracks/_quality.json from both / and
+/v2/<name>.html. Promoting an older map built with page-relative asset refs would
+404 all its assets at the root, so the root copy checks for that and refuses.
+
+Pass --no-publish-root to promote to /v2/<name>.html only, leaving the front page
+on the previous build. Rarely what you want: the root and /v2/<name>.html then
+serve different maps until the next full promote.
+
+When --source-stem is given, the bulk copy (step 1) is scoped to just that
+stem's files, so the upload matches the build you named. Without it, every
+dated artifact in the maps dir is pushed.
+
+Use --traffic-tiles-dir to also push a traffic tile tree (e.g. tiles/traffic/)
+to {remote}/tiles/traffic/.
+
+Use --foreflight-pack to also push a ForeFlight Content Pack .zip (produced by
+export_foreflight.py) to {remote}/foreflight/.
+
+Add --foreflight-publish-as <name> to *publish* that pack: it is additionally
+copied to the stable {remote}/foreflight/<name>.zip that the public page's
+download buttons point at, and examples/airbornehotspots/html/foreflight.html is
+stamped with that same pack's date range and size. Doing both from one named file
+is what keeps the page's advertised range and the bytes behind conus.zip in sync
+— a pack pushed *without* this flag lands at its dated URL only and never touches
+the page, which is what you want for test builds.
+
+Examples:
+    python src/tools/deploy_v2
+    python src/tools/deploy_v2 --remote hotspots-initial:hotspots --dry-run
+    python src/tools/deploy_v2 --publish-as conus \\
+        --source-stem 24_50_-125_-65_20250601_20250831
+    python src/tools/deploy_v2 --traffic-tiles-dir tiles/traffic
+    python src/tools/deploy_v2 --foreflight-pack data/v2/foreflight/CONUS_Jan2026.zip
+    python src/tools/deploy_v2 \\
+        --foreflight-pack data/v2/foreflight/conus_20250601_20250831.zip \\
+        --foreflight-publish-as conus
+"""
+
+import argparse
+import os
+import subprocess
+import sys
+
+DEFAULT_REMOTE = "hotspots-initial:hotspots"
+DEFAULT_MAPS_DIR = "data/v2/maps"
+CACHE_CONTROL = "cache-control=no-cache, must-revalidate"
+
+# Only these patterns are uploaded. Skips legacy tracks.json/tracks.json.gz
+# (uncompressed/duplicate artifacts the HTML doesn't reference).
+INCLUDE_PATTERNS = [
+    "*.html",
+    "*.pmtiles",
+    "*_tracks/tracks.ndjson",
+    "*_tracks/tracks.index.json.gz",
+    # Tail-number search index (one per map, in the same _tracks sidecar dir).
+    "*_tracks/search_index.json.gz",
+    # Airport-quality sidecar JSONs written by stage5_visualize.py in
+    # PMTiles mode (one per HTML, named <stem>_quality.json).
+    "*_quality.json",
+]
+
+
+def _include_args(patterns: list[str]) -> list[str]:
+    args = []
+    for pat in patterns:
+        args.extend(["--include", pat])
+    return args
+
+
+def _run(cmd: list[str], dry_run: bool) -> None:
+    # --metadata enables --metadata-set to actually take effect (rclone
+    # silently ignores --metadata-set otherwise).
+    # --s3-no-check-bucket: our R2 token has read/write on the existing bucket
+    # but not CreateBucket. rclone's copyto otherwise pre-checks and 403s.
+    cmd = cmd + ["--metadata", "--s3-no-check-bucket"]
+    if dry_run:
+        cmd = cmd + ["--dry-run"]
+    print(f"  {' '.join(cmd)}", file=sys.stderr)
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        print(f"ERROR: rclone failed (exit {result.returncode})", file=sys.stderr)
+        sys.exit(1)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Deploy v2 map files (HTML, PMTiles, track sidecars) to remote storage.")
+    parser.add_argument("--remote", default=DEFAULT_REMOTE,
+                        help=f"rclone remote destination (default: {DEFAULT_REMOTE})")
+    parser.add_argument("--maps-dir", default=DEFAULT_MAPS_DIR,
+                        help=f"Local v2 maps directory (default: {DEFAULT_MAPS_DIR})")
+    parser.add_argument("--dry-run", "-n", action="store_true",
+                        help="Print rclone commands without uploading")
+    parser.add_argument("--publish-as", metavar="NAME", default=None,
+                        help="Also promote a dated map to /v2/<NAME>.html / "
+                             "<NAME>.pmtiles / <NAME>_tracks/. Requires --source-stem.")
+    parser.add_argument("--no-publish-root", dest="publish_root",
+                        action="store_false", default=True,
+                        help="Don't also serve the promoted map as the site root "
+                             "index.html. By default --publish-as updates the root too, "
+                             "so the live map and the front page can't drift apart.")
+    parser.add_argument("--source-stem", metavar="STEM", default=None,
+                        help="Filename stem (no extension) of the dated map to "
+                             "promote, e.g. 24_50_-125_-65_20250601_20250831")
+    parser.add_argument("--traffic-tiles-dir", metavar="DIR", default=None,
+                        help="Also push this local directory to {remote}/tiles/traffic/ "
+                             "(e.g. tiles/traffic)")
+    parser.add_argument("--foreflight-pack", metavar="ZIP", default=None,
+                        help="Also push this ForeFlight Content Pack .zip to "
+                             "{remote}/foreflight/ (e.g. data/v2/foreflight/CONUS_Jan2026.zip)")
+    parser.add_argument("--foreflight-publish-as", metavar="NAME", default=None,
+                        help="Publish the --foreflight-pack: also copy it to the stable "
+                             "{remote}/foreflight/<NAME>.zip the public page links to, and "
+                             "stamp foreflight.html with that pack's date range/size.")
+    args = parser.parse_args()
+
+    if not os.path.isdir(args.maps_dir):
+        print(f"ERROR: maps directory not found: {args.maps_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.publish_as and not args.source_stem:
+        print("ERROR: --publish-as requires --source-stem", file=sys.stderr)
+        sys.exit(1)
+
+
+    if args.traffic_tiles_dir and not os.path.isdir(args.traffic_tiles_dir):
+        print(f"ERROR: traffic tiles directory not found: {args.traffic_tiles_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.foreflight_pack and not os.path.isfile(args.foreflight_pack):
+        print(f"ERROR: ForeFlight pack not found: {args.foreflight_pack}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.foreflight_publish_as and not args.foreflight_pack:
+        print("ERROR: --foreflight-publish-as requires --foreflight-pack", file=sys.stderr)
+        sys.exit(1)
+
+    if args.publish_as:
+        # Validate the source files exist before doing any work.
+        src_html = os.path.join(args.maps_dir, f"{args.source_stem}.html")
+        src_pmt = os.path.join(args.maps_dir, f"{args.source_stem}.pmtiles")
+        src_trk = os.path.join(args.maps_dir, f"{args.source_stem}_tracks")
+        for p in (src_html, src_pmt, src_trk):
+            if not os.path.exists(p):
+                print(f"ERROR: source not found: {p}", file=sys.stderr)
+                sys.exit(1)
+
+        # Serving the map from the root only works if its asset URLs are
+        # absolute; page-relative refs would resolve to /<name>.pmtiles and
+        # 404. That failure is silent (a blank map), and a map built before
+        # stage 5 started emitting absolute URLs still looks promotable — so
+        # check the bytes rather than the flags.
+        if args.publish_root:
+            with open(src_html, encoding="utf-8") as f:
+                html = f.read()
+            if f'"{args.publish_as}.pmtiles"' in html:
+                print(f"ERROR: {src_html} references '{args.publish_as}.pmtiles' "
+                      "page-relative; it would 404 when served from the site root.\n"
+                      "       Rebuild stage 5 with --asset-stem, then re-run.",
+                      file=sys.stderr)
+                sys.exit(1)
+
+    dst = f"{args.remote}/v2"
+    print(f"Deploying {args.maps_dir}/ → {dst}/", file=sys.stderr)
+
+    # 1. Push dated artifacts. When a specific build is named (--source-stem),
+    # scope the copy to just that stem's files so the upload matches the build
+    # you asked for. Otherwise fall back to pushing every dated artifact.
+    # (Historically this always uploaded the whole maps dir, which meant a small
+    # deploy could silently push a large unrelated build's multi-GB sidecars and
+    # a later deploy of that build would then no-op — confusing to reason about.)
+    if args.source_stem:
+        stem = args.source_stem
+        include_patterns = [
+            f"{stem}.html",
+            f"{stem}.pmtiles",
+            f"{stem}_tracks/tracks.ndjson",
+            f"{stem}_tracks/tracks.index.json.gz",
+            f"{stem}_tracks/search_index.json.gz",
+            f"{stem}_quality.json",
+        ]
+    else:
+        include_patterns = INCLUDE_PATTERNS
+    _run([
+        "rclone", "copy", args.maps_dir, dst,
+        "--progress",
+        "--metadata-set", CACHE_CONTROL,
+        *_include_args(include_patterns),
+    ], args.dry_run)
+
+    # 1b. Optionally push traffic tiles.
+    if args.traffic_tiles_dir:
+        tiles_dst = f"{args.remote}/tiles/traffic"
+        print(f"\nDeploying {args.traffic_tiles_dir}/ → {tiles_dst}/", file=sys.stderr)
+        _run([
+            "rclone", "copy", args.traffic_tiles_dir, tiles_dst,
+            "--progress",
+            "--metadata-set", CACHE_CONTROL,
+        ], args.dry_run)
+
+    # 1c. Optionally push a ForeFlight Content Pack .zip. Uses copyto so the
+    # destination filename matches the source regardless of any dir prefix.
+    if args.foreflight_pack:
+        ff_name = os.path.basename(args.foreflight_pack)
+        ff_dst = f"{args.remote}/foreflight/{ff_name}"
+        print(f"\nDeploying {args.foreflight_pack} → {ff_dst} ...", file=sys.stderr)
+        _run([
+            "rclone", "copyto", args.foreflight_pack, ff_dst,
+            "--progress",
+            "--metadata-set", CACHE_CONTROL,
+        ], args.dry_run)
+
+        # Publish: promote to the stable alias the public page links to, and
+        # stamp the page from that same pack. Both halves come from one named
+        # file, so the page's advertised date range cannot drift from the bytes
+        # actually served at <name>.zip.
+        if args.foreflight_publish_as:
+            alias_dst = f"{args.remote}/foreflight/{args.foreflight_publish_as}.zip"
+            print(f"\nPublishing {ff_name} → {alias_dst} ...", file=sys.stderr)
+            _run([
+                "rclone", "copyto", args.foreflight_pack, alias_dst,
+                "--progress",
+                "--metadata-set", CACHE_CONTROL,
+            ], args.dry_run)
+
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from generate_foreflight_page import PAGE, update_foreflight_page
+            summary = update_foreflight_page(args.foreflight_pack,
+                                             dry_run=args.dry_run)
+            verb = "would stamp" if args.dry_run else "stamped"
+            print(f"\nForeFlight page {verb}: {summary}", file=sys.stderr)
+            # The pack is live now, but the page describing it isn't until the
+            # static site is redeployed — keep that window short.
+            print(f"  Commit {PAGE.name}, then: python src/tools/deploy_static",
+                  file=sys.stderr)
+
+    # 2. Optionally promote a dated map to a stable name.
+    if args.publish_as:
+        name = args.publish_as
+        stem = args.source_stem
+        print(f"\nPromoting {stem}.* → {dst}/{name}.* ...", file=sys.stderr)
+
+        _run([
+            "rclone", "copyto",
+            os.path.join(args.maps_dir, f"{stem}.html"),
+            f"{dst}/{name}.html",
+            "--metadata-set", CACHE_CONTROL,
+        ], args.dry_run)
+
+        # The live map doubles as the site's front page. Same bytes as
+        # v2/<name>.html — its asset URLs are absolute, so one file serves both.
+        if args.publish_root:
+            print(f"  ...and as the site root index.html", file=sys.stderr)
+            _run([
+                "rclone", "copyto",
+                os.path.join(args.maps_dir, f"{stem}.html"),
+                f"{args.remote}/index.html",
+                "--metadata-set", CACHE_CONTROL,
+            ], args.dry_run)
+
+        _run([
+            "rclone", "copyto",
+            os.path.join(args.maps_dir, f"{stem}.pmtiles"),
+            f"{dst}/{name}.pmtiles",
+            "--metadata-set", CACHE_CONTROL,
+        ], args.dry_run)
+
+        # Tracks dir: copy only the two files we care about.
+        _run([
+            "rclone", "copy",
+            os.path.join(args.maps_dir, f"{stem}_tracks"),
+            f"{dst}/{name}_tracks",
+            "--metadata-set", CACHE_CONTROL,
+            "--include", "tracks.ndjson",
+            "--include", "tracks.index.json.gz",
+            "--include", "search_index.json.gz",
+        ], args.dry_run)
+
+        # Airport-quality sidecar (optional — only present if stage5 was run
+        # with --airport-quality). Promote to <name>_quality.json so the
+        # stable HTML can fetch it.
+        src_quality = os.path.join(args.maps_dir, f"{stem}_quality.json")
+        if os.path.exists(src_quality):
+            _run([
+                "rclone", "copyto",
+                src_quality,
+                f"{dst}/{name}_quality.json",
+                "--metadata-set", CACHE_CONTROL,
+            ], args.dry_run)
+
+        # Stamp the landing page's headline stats from this same stem, so the
+        # numbers can't drift from the map just promoted above.
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from generate_index_stats import (PAGE, compute_headline_stats,
+                                          stamp_index_template)
+        stats = compute_headline_stats(stem, args.maps_dir)
+        summary = stamp_index_template(stats, dry_run=args.dry_run)
+        verb = "would stamp" if args.dry_run else "stamped"
+        print(f"\nIndex stats {verb}: {summary}", file=sys.stderr)
+        # The map is live now, but the page describing it isn't until the static
+        # site is redeployed — keep that window short.
+        print(f"  Commit {PAGE.name}, then re-run generate_batch_outputs.py "
+              "and: python src/tools/deploy_static", file=sys.stderr)
+
+    print("Done.", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

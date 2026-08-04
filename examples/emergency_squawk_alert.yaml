@@ -1,0 +1,21 @@
+# Emergency squawk code detection example.
+# Sends a slack message when aircraft transmit emergency transponder codes:
+#   7500 - Hijacking
+#   7600 - Radio failure (lost communications)
+#   7700 - General emergency
+#
+# Includes a geographic filter (latlongring) for use with tcp_api_monitor.
+# Uses a 10-minute cooldown per aircraft to avoid alert spam.
+#
+# Usage w/ tcp_api_monitor: python3 src/applications/tcp_api_monitor/monitor.py examples/emergency_squawk_alert.yaml
+# Usage w/ readsb: python3 src/analyzers/simple_monitor.py --ipaddr localhost --port 30006 examples/emergency_squawk_alert.yaml
+
+rules:
+  emergency_squawk:
+    conditions:
+      squawk: [7500, 7600, 7700]
+      #latlongring: [250, 39.5580794, -120.0156502] # tells API where to monitor too
+      cooldown: 10      # only trigger every 10 minutes per aircraft
+    actions:
+      print: True                   # print to console
+      webhook: ['slack', 'emergency_aircraft_channel'] # send a message to a slack channel

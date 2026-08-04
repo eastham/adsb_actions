@@ -4,136 +4,199 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+      {
+        "name": "Hello World - print aircraft from sample pre-saved data",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/analyzers/simple_monitor.py",
+        "args": "--directory tests/sample_readsb_data examples/hello_world_rules.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Hello world -- print aircraft from local readsb feed",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/analyzers/simple_monitor.py",
+        "args": "--ipaddr boxone --port 30006 examples/hello_world_rules.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Callback runner -- low altitude alert from sample pre-saved data",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/analyzers/callback_runner.py",
+        "args": " --data tests/sample_readsb_data --callback_definitions examples/low_altitude_callbacks.py examples/low_altitude_alert.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Stripview UI live from readsb",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/applications/stripview/controller.py",
+        //"args": " -- --ipaddr boxone --port 30006 --rules examples/88nv/stripview_ui.yaml",
+        "args": " -- --ipaddr boxone --port 30006 --rules examples/sf_bay_area/stripview_ui_sjc.yaml",
+        //"args": " -- --ipaddr boxone --port 30006 --rules examples/sf_bay_area/stripview_ui_oak.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Stripview UI demo from saved data",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/applications/stripview/controller.py",
+        "args": " -- --testdata tests/20minutes.json --delay .2 --rules examples/88nv/stripview_ui.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Stripview UI live SJC (API - no hardware needed)",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/applications/stripview/controller.py",
+        "args": " -- --api --rules examples/sf_bay_area/stripview_ui_sjc_api.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Airport monitoring from saved data + (push ops to database)",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/applications/airport_monitor/main.py",
+        "args": "--testdata tests/20minutes.json --delay .01 --rules examples/88nv/airport_monitor_rules.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Airport monitoring from local readsb feed",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/applications/airport_monitor/main.py",
+        "args": "--ipaddr boxone --port 30006 --rules examples/88nv/airport_monitor_rules.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Airport monitoring from local json file",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/applications/airport_monitor/main.py",
+        "args": "--testdata examples/88nv/runwaytruck.json --delay 3 --rules examples/88nv/airport_monitor_rules.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
 
-        {"name":"Python: Current File","type":"python","request":"launch","program":"${file}","console":"integratedTerminal","justMyCode":true},
-        {
-            "name": "Harpers Stripview UI demo",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "controller.py",
-            "cwd": "${workspaceFolder}/src/stripview",
-            "args": " -- --ipaddr rpi4 --port 30006 --rules nberk_ui.yaml ../../tests/test_north_berkeley.kml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Stripview UI demo",
-            "type": "python",
-            "request": "launch",
-            "program": "controller.py",
-            "cwd": "${workspaceFolder}/src/stripview",
-            "args": " -- --testdata ../../tests/20minutes.json --delay .2 --rules ui.yaml ../../tests/brc_large_regions.kml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Public UI",
-            "type": "python",
-            "request": "launch",
-            "program": "public_ui.py",
-            "cwd": "${workspaceFolder}/src/stripview",
-            "args": " -- --testdata ../../tests/20minutes.json --delay .01 --rules public_ui.yaml ../../tests/test2.kml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Push ops to appsheet",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}",
-            "program": "src/op_pusher/op_pusher.py",
-            "args": "--testdata tests/20minutes.json --delay .01 --rules src/op_pusher/rules.yaml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Push from live feed",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}",
-            "program": "src/op_pusher/op_pusher.py",
-            "args": "--ipaddr 127.0.0.1 --port 30006 --rules src/op_pusher/rules.yaml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Harpers Push ops to appsheet",
-            "type": "debugpy",
-            "request": "launch",
-            "cwd": "${workspaceFolder}",
-            "program": "src/op_pusher/op_pusher.py",
-            "args": "--ipaddr rpi4 --port 30006 --rules ./src/op_pusher/nberk_rules.yaml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Replay data to port",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/src/analyzer",
-            "program": "replay.py",
-            "args": "--port 6666  --speed_x 1000 ../../tests/sample_readsb_data",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Parse and print data from port",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/src/simple",
-            "program": "main.py",
-            "args": "--ipaddr 127.0.0.1 --port 6666 basic_rules.yaml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Parse all data from files",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/src/analyzer",
-            "program": "analyze_from_files.py",
-            "args": "../../tests/sample_readsb_data",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Airport monitor 3",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/src/airport_monitor3",
-            "program": "monitor.py",
-            "args": " -- --testdata ../../tests/20minutes.json --delay .2 --rules monitor.yaml",
-//            "args": " -- --ipaddr 192.168.87.56 --port 30006 --rules monitor.yaml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Airport monitor2",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/src/airport_monitor2",
-            "program": "monitorapp.py",
-            "args": " -- --testdata ../../tests/20minutes.json --delay .2 --rules monitor.yaml ../../tests/test2.kml",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "Inject ADS-B data to readsb",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/src/analyzer",
-            "program": "replay_to_adsb.py",
-            "args": "--inject_addr 192.168.87.56:30001 ../../tests/1hr.json --speed_x 1",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
-        {
-            "name": "TCP API client",
-            "type": "python",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/src/tcp_client",
-            "program": "tcp_client.py",
-            "args": "tcp_rules.yaml"
-        }
+      {
+        "name": "Multi-airport monitoring via TCP API",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/applications/tcp_api_monitor/monitor.py",
+        "args": "examples/hello_world_api.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Analyze: Detect takeoff/landing ops from pre-saved data",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/analyzers/analyze_from_files.py",
+        "args": "--yaml examples/88nv/detect_ops_from_files.yaml tests/sample_readsb_data",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Analyze: detect LOS events from pre-saved data, with resampling.  (there are none in the default dataset)",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/analyzers/prox_analyze_from_files.py",
+        "args": "--yaml examples/generated/KAUN/prox_analyze_from_files.yaml --resample --sorted-file data/KAUN/081525_KAUN.gz",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Analyze WVI: detect LOS events from pre-saved data, with resampling.",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/analyzers/prox_analyze_from_files.py",
+        "args": "--yaml examples/KAUN/prox_analyze_from_files.yaml  --start-date 08/15/25 --end-date 08/15/25   --airports AUN --no-download",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Analyze WVI: full download/analysis pipeline, detect LOS events from github data, with resampling.",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/tools/los_offline_pipeline.py",
+        "args": "1/25/26 KWVI",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Public Flight info display (FIDS)",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/applications/flight_info_display/monitor.py",
+        "args": " -- --testdata tests/20minutes.json --delay .2 --rules examples/88nv/flight_info_display_config.yaml",
+        //"args": " -- --ipaddr 192.168.87.56 --port 30006 --rules examples/88nv/flight_info_display_config.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Legacy airport monitor 1",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "examples/legacy/airport_monitor1/monitor.py",
+        "args": " -- --testdata tests/20minutes.json --delay .2 --rules examples/legacy/airport_monitor1/monitor.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Legacy airport monitor 2",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}/examples/legacy/airport_monitor2",
+        "program": "monitorapp.py",
+        "args": " -- --testdata ../../../tests/20minutes.json --delay .2 --rules monitor.yaml",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Replay saved data to port 30006",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/lib/replay.py",
+        "args": "--port 30006 --speed_x 1000 tests/sample_readsb_data",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Inject ADS-B data to readsb",
+        "type": "debugpy",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "program": "src/tools/replay_to_adsb.py",
+        "args": "--inject_addr boxone:30001 tests/20minutes.json --speed_x 10",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      }
     ]
 }

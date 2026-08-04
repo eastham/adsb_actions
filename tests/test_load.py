@@ -20,12 +20,12 @@ YAML_STRING = """
       - tests/test1.kml 
 
   aircraft_lists:
-    banned: [ "N12345" ] 
+    watched: [ "N12345" ]
 
   rules:
-    banned_aircraft:
+    watched_aircraft:
       conditions:
-        aircraft_list: banned
+        aircraft_list: watched
         regions: ["Generic Gate Ground", "non-existent"]  # This is an OR expression
       actions:
         callback: test_callback
@@ -37,7 +37,7 @@ YAML_STRING = """
         regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
         proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
       actions:
-        callback: abe_update_cb
+        callback: los_update_cb
 """
 
 JSON_STRING_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9", "flight": "N12345"}\n'

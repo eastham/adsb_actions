@@ -1,16 +1,27 @@
 """This module parses rules and actions, and applies them to flight data."""
 
 import datetime
+import gzip
+import json
+import orjson
 import logging
-from typing import Callable
+import os
+import shlex
+import subprocess
+import sys
+from typing import Callable, Optional, Dict, Tuple, List
 from .flight import Flight
 from .stats import Stats
 from .ruleexecutionlog import RuleExecutionLog, ExecutionCounter
 from .adsb_logger import Logger
-from .page import send_page, send_slack
+from .webhooks import send_webhook
+from .geo_helpers import nm_to_lat_lon_offsets
+from .rules_optimizations import (initialize_rule_optimizations,
+                                   get_candidate_rule_indices,
+                                   PROX_SPATIAL_BUCKET_DEG)
 
 logger = logging.getLogger(__name__)
-#logger.level = logging.DEBUG
+logger.level = logging.WARNING
 LOGGER = Logger()
 
 class Rules:
@@ -27,37 +38,94 @@ class Rules:
             function.
     """
 
-    def __init__(self, data):
+    def __init__(self, data, use_optimizations: bool = False):
+        """Initialize Rules with optional performance optimizations.
+
+        Args:
+            data: YAML rules data dictionary
+            use_optimizations: Enable performance optimizations for batch processing:
+                - Bbox pre-computation for fast spatial rejection
+                - Spatial grid indexing to reduce rule checks from O(n_rules) to O(1)
+                Best for batch processing with many rules (e.g., shard pass with 99 airports).
+                Not needed for streaming mode with few rules.
+        """
         self.yaml_data : dict = data
         self.rule_execution_log = RuleExecutionLog()
         self.callbacks : dict[str, Callable]= {}    # mapping from yaml name to fn
+        self._emit_files: dict[str, gzip.GzipFile] = {}  # open file handles for emit_jsonl
+        self._use_optimizations = use_optimizations
+        self._spatial_grid: Optional[Dict[Tuple[int, int], List[int]]] = None
+
+        if self.get_rules() is {}:
+            logger.warning("No rules found in YAML")
+            return
 
         # YAML rules correctness checks
-        for rule in self.yaml_data['rules'].values():
-            assert self.conditions_valid(rule['conditions']), "Invalid conditions"
-            assert self.actions_valid(rule['actions']), "Invalid actions"
+        for rule in self.get_rules().values():
+            assert self.conditions_valid(rule['conditions']), "Invalid conditions, see log for more info"
+            assert self.actions_valid(rule['actions']), "Invalid actions, see log for more info"
+
+        # Performance optimizations: bbox pre-computation + spatial grid
+        # Delegated to rules_optimizations.py for cleaner separation
+        self._rule_list, self._spatial_grid = initialize_rule_optimizations(
+            self.get_rules(),
+            use_optimizations=self._use_optimizations
+        )
+
+    def get_rules(self) -> list:
+        if not 'rules' in self.yaml_data:
+            return {}
+        else:
+            return self.yaml_data['rules']
 
     def process_flight(self, flight: Flight) -> None:
         """Apply rules and actions to the current position of a given flight. """
 
-        rule_items = self.yaml_data['rules'].items()
+        _debug = logger.isEnabledFor(logging.DEBUG)
+        lat = flight.lastloc.lat
+        lon = flight.lastloc.lon
 
-        for rule_name, rule_value in rule_items:
-            logger.debug("Checking rules %s", rule_name)
+        # Determine which rules to check based on spatial grid (if enabled)
+        if self._use_optimizations and self._spatial_grid is not None:
+            # Get candidate rule indices from spatial grid (typically 1-3 rules)
+            candidate_indices = get_candidate_rule_indices(lat, lon, self._spatial_grid)
+            rules_to_check = [self._rule_list[idx] for idx in candidate_indices]
+        else:
+            # Default behavior: check all rules
+            rules_to_check = self._rule_list
+
+        for bbox, rule_name, rule_value in rules_to_check:
+            # Fast inline pre-reject for latlongring rules using
+            # pre-computed lat/lon bounding boxes.
+            # bbox is (min_lat, max_lat, min_lon, max_lon) or None
+            if bbox and (lat < bbox[0] or lat > bbox[1] or lon < bbox[2] or lon > bbox[3]):
+                continue
+
+            if _debug:
+                logger.debug("Checking rules %s", rule_name)
 
             if self.conditions_match(flight, rule_value['conditions'], rule_name):
-                logger.debug("MATCH for rule '%s' for flight %s", rule_name, flight.flight_id)
+                if _debug:
+                    logger.debug("MATCH for rule '%s' for flight %s", rule_name, flight.flight_id)
 
                 self.do_actions(flight, rule_value['actions'], rule_name)
-            else:
+            elif _debug:
                 logger.debug("NOMATCH for rule '%s' for flight %s", rule_name, flight.flight_id)
 
     def conditions_valid(self, conditions: dict):
         """Check for invalid or unknown conditions, return True if valid."""
-        VALID_CONDITIONS = ['proximity', 'aircraft_list', 'min_alt', 'max_alt',
-                            'transition_regions', 'regions', 'latlongring',
+        VALID_CONDITIONS = ['proximity', 'aircraft_list', 'exclude_aircraft_list',
+                            'one_in_aircraft_list', 'exclude_aircraft_substrs',
+                            'min_alt', 'max_alt',
+                            'transition_regions', 'changed_regions',
+                            'joined_region', 'departed_region',
+                            'regions', 'latlongring',
                             'cooldown', 'rule_cooldown', 'has_attr', 'min_time',
-                            'max_time']
+                            'max_time', 'time_ranges', 'enabled', 'squawk',
+                            'emergency', 'category', 'exclude_category',
+                            'min_gs', 'max_gs',
+                            'min_vertical_rate', 'max_vertical_rate',
+                            'callsign_prefix', 'on_ground', 'military']
 
         try:
             for condition in conditions.keys():
@@ -70,19 +138,37 @@ class Rules:
         return True
 
     def conditions_match(self, flight: Flight, conditions: dict,
-                         rule_name: str) -> bool:
-        """Determine if the given rule conditions match for the given 
-        flight.  Put expensive-to-evaluate conditions toward the bottom,
+                         rule_name: str, other_flight: Flight = None) -> bool:
+        """Determine if the given rule conditions match for the given
+        flight.  Returns true on match for the specific rule given, false
+        otherwise.
+        Note: Put expensive-to-evaluate conditions toward the bottom,
         for best performance."""
 
-        logger.debug("condition_match checking rules: %s", str(conditions))
+        #logger.debug("condition_match checking rules: %s", str(conditions))
         Stats.condition_match_calls += 1
 
-        # TODO the approach below prevents us from having multiple rules of
-        # the same type.  Do we need to support that?
+        # Check enabled condition first - cheap and can short-circuit evaluation
+        if 'enabled' in conditions:
+            if not conditions['enabled']:
+                return False
 
         if 'proximity' in conditions:
             return False  # handled asynchronously in handle_proximity_conditions
+
+        # latlongring checked early: lat/lon band pre-reject is very cheap
+        # and eliminates ~99% of points for spatially-filtered rules.
+        if 'latlongring' in conditions:
+            condition_value = conditions['latlongring']
+            lat_offset, lon_offset = nm_to_lat_lon_offsets(condition_value[0], condition_value[1])
+            if abs(flight.lastloc.lat - condition_value[1]) > lat_offset:
+                return False
+            if abs(flight.lastloc.lon - condition_value[2]) > lon_offset:
+                return False
+            dist = flight.lastloc.distfrom_fast(
+                condition_value[1], condition_value[2])
+            if condition_value[0] < dist:
+                return False
 
         if 'aircraft_list' in conditions:
             condition_value = conditions['aircraft_list']
@@ -94,6 +180,41 @@ class Rules:
             result = flight.flight_id in ac_list
             if not result:
                 return False
+
+        if 'exclude_aircraft_list' in conditions:
+            condition_value = conditions['exclude_aircraft_list']
+            try:
+                ac_list = self.yaml_data['aircraft_lists'][condition_value]
+            except KeyError:
+                logger.critical("Aircraft list not found: %s", condition_value)
+                return False
+            result = flight.flight_id not in ac_list
+            if not result:
+                return False
+
+        if 'one_in_aircraft_list' in conditions:
+            # Match only when exactly one of the two paired aircraft is in the list.
+            # other_flight is None on the pre-check pass (before flight2 is known);
+            # in that case we defer evaluation to the flight2 pass where other_flight
+            # is always provided.
+            condition_value = conditions['one_in_aircraft_list']
+            try:
+                ac_list = self.yaml_data['aircraft_lists'][condition_value]
+            except KeyError:
+                logger.critical("Aircraft list not found: %s", condition_value)
+                return False
+            if other_flight is not None:
+                f_in = flight.flight_id in ac_list
+                o_in = other_flight.flight_id in ac_list
+                if not (f_in ^ o_in):  # XOR: exactly one must be in the list
+                    return False
+
+        if 'exclude_aircraft_substrs' in conditions:
+            condition_value = conditions['exclude_aircraft_substrs']
+            for value in condition_value:
+                result = value in flight.flight_id
+                if result:
+                    return False
 
         if 'min_alt' in conditions:
             condition_value = conditions['min_alt']
@@ -108,10 +229,37 @@ class Rules:
                 return False
 
         if 'transition_regions' in conditions:
-            # moved from one region to another.  None is a valid region.
+            # moved from one region to another.  None is a valid region,
+            # representing being outside of any region in any kml file
             condition_value = conditions['transition_regions']
             result = (flight.was_in_bboxes([condition_value[0]]) and
                        flight.is_in_bboxes([condition_value[1]]))
+            if not result:
+                return False
+
+        if 'joined_region' in conditions:
+            # entered this region; was not in it previously
+            region = conditions['joined_region']
+            if not (flight.is_in_bboxes([region]) and
+                    not flight.was_in_bboxes([region])):
+                return False
+
+        if 'departed_region' in conditions:
+            # left this region; was in it previously
+            region = conditions['departed_region']
+            if not (flight.was_in_bboxes([region]) and
+                    not flight.is_in_bboxes([region])):
+                return False
+
+        if 'changed_regions' in conditions:
+            condition_value = conditions['changed_regions']
+            # "any" (or True for backwards compat): trigger on any region change
+            # "strict": only trigger if both prev and current are in some region
+            mode = str(condition_value).lower() if condition_value is not True else "any"
+            if mode == "strict":
+                if not flight.was_in_any_bbox() or not flight.in_any_bbox():
+                    return False
+            result = flight.prev_inside_bboxes != flight.inside_bboxes
             if not result:
                 return False
 
@@ -140,14 +288,6 @@ class Rules:
                 return False
 
 
-        if 'latlongring' in conditions:
-            condition_value = conditions['latlongring']
-            dist = flight.lastloc.distfrom(
-                condition_value[1], condition_value[2])
-            result = condition_value[0] >= dist
-            if not result:
-                return False
-
         if 'has_attr' in conditions:
             condition_value = conditions['has_attr']
             if flight.lastloc.flightdict:
@@ -155,6 +295,134 @@ class Rules:
             else:
                 result = False
             if not result:
+                return False
+
+        if 'squawk' in conditions:
+            # NOTE this condition data may not be immediately available until it is
+            # periodically broadcast
+            condition_value = conditions['squawk']
+            # Get squawk from flightdict
+            squawk = flight.lastloc.flightdict.get('squawk') if flight.lastloc.flightdict else None
+            # condition_value can be a single squawk code or a list of codes
+            if isinstance(condition_value, list):
+                squawk_list = [str(s) for s in condition_value]
+            else:
+                squawk_list = [str(condition_value)]
+            result = squawk in squawk_list
+            if not result:
+                return False
+
+        if 'emergency' in conditions:
+            # NOTE this condition data may not be immediately available until it is
+            # periodically broadcast
+            condition_value = conditions['emergency']
+            # Get emergency from flightdict
+            emergency = flight.lastloc.flightdict.get('emergency') if flight.lastloc.flightdict else None
+            if emergency is None:
+                return False
+            # "any" matches any emergency status except "none"
+            if condition_value == 'any':
+                result = emergency != 'none'
+            elif isinstance(condition_value, list):
+                result = emergency in condition_value
+            else:
+                result = emergency == condition_value
+            if not result:
+                return False
+
+        if 'category' in conditions:
+            # NOTE this condition data may not be immediately available until it is
+            # periodically broadcast
+            condition_value = conditions['category']
+            # Get category from flightdict
+            category = flight.lastloc.flightdict.get('category') if flight.lastloc.flightdict else None
+            if category is None:
+                return False
+            if isinstance(condition_value, list):
+                result = category in condition_value
+            else:
+                result = category == condition_value
+            if not result:
+                return False
+
+        if 'exclude_category' in conditions:
+            # NOTE this condition data may not be immediately available until it is
+            # periodically broadcast
+            condition_value = conditions['exclude_category']
+            # Get category from flightdict
+            category = flight.lastloc.flightdict.get('category') if flight.lastloc.flightdict else None
+            if category is not None:
+                if isinstance(condition_value, list):
+                    if category in condition_value:
+                        return False
+                else:
+                    if category == condition_value:
+                        return False
+
+        if 'min_gs' in conditions:
+            condition_value = conditions['min_gs']
+            if flight.lastloc.gs is None:
+                return False
+            result = flight.lastloc.gs >= float(condition_value)
+            if not result:
+                return False
+
+        if 'max_gs' in conditions:
+            condition_value = conditions['max_gs']
+            if flight.lastloc.gs is None:
+                return False
+            result = flight.lastloc.gs <= float(condition_value)
+            if not result:
+                return False
+
+        if 'min_vertical_rate' in conditions:
+            condition_value = conditions['min_vertical_rate']
+            if flight.lastloc.baro_rate is None:
+                return False
+            result = flight.lastloc.baro_rate >= int(condition_value)
+            if not result:
+                return False
+
+        if 'max_vertical_rate' in conditions:
+            condition_value = conditions['max_vertical_rate']
+            if flight.lastloc.baro_rate is None:
+                return False
+            result = flight.lastloc.baro_rate <= int(condition_value)
+            if not result:
+                return False
+
+        if 'callsign_prefix' in conditions:
+            condition_value = conditions['callsign_prefix']
+            if flight.flight_id is None:
+                return False
+            if isinstance(condition_value, list):
+                result = any(flight.flight_id.startswith(prefix) for prefix in condition_value)
+            else:
+                result = flight.flight_id.startswith(condition_value)
+            if not result:
+                return False
+
+        if 'on_ground' in conditions:
+            condition_value = conditions['on_ground']
+            # on_ground: true means aircraft must be on ground
+            # on_ground: false means aircraft must be airborne
+            result = flight.lastloc.on_ground == condition_value
+            if not result:
+                return False
+
+        if 'military' in conditions:
+            condition_value = conditions['military']
+            # military: true means aircraft must have military dbFlags
+            # military: false means aircraft must NOT have military dbFlags
+            # NOTE: dbFlags is NOT transmitted via ADS-B. It's a database lookup
+            # performed by tracking services (airplanes.live, adsbexchange) that
+            # cross-reference the aircraft's ICAO hex code against known military
+            # registrations. Local readsb feeds won't have this field.
+            if flight.lastloc.flightdict and 'dbFlags' in flight.lastloc.flightdict:
+                is_military = flight.lastloc.flightdict['dbFlags'] == 1
+            else:
+                is_military = False
+            if is_military != condition_value:
                 return False
 
         if 'min_time' in conditions:
@@ -173,12 +441,38 @@ class Rules:
             if not result:
                 return False
 
+        if 'time_ranges' in conditions:
+            ts_24hr = int(datetime.datetime.utcfromtimestamp(
+                flight.lastloc.now).strftime("%H%M"))
+            if not self._time_in_ranges(ts_24hr, conditions['time_ranges']):
+                return False
+
         return True
+
+    def _time_in_ranges(self, ts_24hr: int, time_ranges) -> bool:
+        """
+        Check if the integer time (HHMM, e.g. 1330) falls within any of the 
+        specified time ranges.  Each range is a string like "0000-0130" 
+        or "2200-0400" (wraps around midnight).
+        """
+        for rng in time_ranges:
+            start_str, end_str = rng.split('-')
+            start = int(start_str)
+            end = int(end_str)
+            if start <= end:
+                # Normal range (e.g., 0900-1700)
+                if start <= ts_24hr < end:
+                    return True
+            else:
+                # Wraps around midnight (e.g., 2200-0400)
+                if ts_24hr >= start or ts_24hr < end:
+                    return True
+        return False
 
     def actions_valid(self, actions: dict):
         """Check for invalid or unknown actions, return True if valid."""
         VALID_ACTIONS = ['webhook', 'print', 'callback', 'note', 'track',
-                         'expire_callback']
+                         'expire_callback', 'shell', 'print_csv', 'emit_jsonl']
 
         for action in actions.keys():
             if action not in VALID_ACTIONS:
@@ -199,46 +493,84 @@ class Rules:
                 Stats.webhooks_fired += 1
                 try:
                     [action_type, action_recipient] = action_value
-                except Exception: # pylint: disable=broad-except
+                except Exception:  # pylint: disable=broad-except
                     logger.error("Invalid webhook action: %s", action_value)
                     continue
 
-                if 'slack' == action_type:
+                # Build message based on webhook type
+                if action_type == 'slack':
                     text = (f"Rule {rule_name} matched for: {flight.to_str()}\n"
-                        f"LIVE LINK: {flight.to_link()}\n"
-                        f"RECORDING: {flight.to_recording()}")
-                    send_slack(action_recipient, text)
-                elif 'page' == action_type:
+                            f"LIVE LINK: {flight.to_link()}\n"
+                            f"RECORDING: {flight.to_recording()}")
+                else:
+                    # Generic/page format
                     text = (f"Rule {rule_name}: {flight.lastloc.to_short_str()} "
                             f"{str(flight.inside_bboxes)}")
-                    send_page(action_recipient, text)
-                else:
-                    logger.error("Unknown webhook action type: %s", action_type)
+
+                if not send_webhook(action_type, action_recipient, text):
+                    logger.debug("Webhook '%s' was not sent (not configured or failed)",
+                                action_type)
+
+            elif 'shell' == action_name:
+                # Execute shell command with sanitized variable substitution
+                try:
+                    cmd = action_value.format(
+                        flight_id=shlex.quote(flight.flight_id or ''),
+                        hex=shlex.quote(flight.lastloc.hex or ''),
+                        alt=int(flight.lastloc.alt_baro or 0),
+                        lat=float(flight.lastloc.lat or 0),
+                        lon=float(flight.lastloc.lon or 0),
+                        speed=int(flight.lastloc.gs or 0),
+                        track=int(flight.lastloc.track or 0),
+                        rule=shlex.quote(rule_name),
+                    )
+                    logger.debug("Executing shell command: %s", cmd)
+                    subprocess.run(cmd, shell=True, timeout=10,
+                                   capture_output=True, check=False)
+                except subprocess.TimeoutExpired:
+                    logger.warning("Shell command timed out: %s", cmd[:50])
+                except KeyError as e:
+                    logger.error("Shell command has unknown variable: %s", e)
+                except Exception as e:  # pylint: disable=broad-except
+                    logger.error("Shell command failed: %s", e)
 
             elif 'print' == action_name:
-                timestamp = datetime.datetime.fromtimestamp(
-                    flight.lastloc.now).strftime("%m/%d/%y %H:%M")
-                print(
-                    f"{timestamp}: Rule {rule_name} matched for {flight.to_str()}",
-                    f"{flight.flags.get('note', '')}")
+                ts_utc = datetime.datetime.utcfromtimestamp(
+                    flight.lastloc.now).strftime('%m/%d/%y %H:%M:%S')
+                note = flight.flags.get('note', '')
+                msg = f"{rule_name}: {ts_utc} {flight.to_str()} {note}"
+                if sys.stdout.isatty():
+                    print(f"\033[92m{msg}\033[0m")  # green on TTY
+                else:
+                    print(msg)
 
             elif 'callback' == action_name:
                 Stats.callbacks_fired += 1
                 Stats.last_callback_flight = flight
                 if not action_value in self.callbacks:
-                    logger.error("No callback defined: %s, %s",
-                                 action_value, flight.flight_id)
+                    timestamp = datetime.datetime.fromtimestamp(
+                        flight.lastloc.now).strftime("%m/%d/%y %H:%M")
+                    other_flight_id = ""
+                    if cb_arg:
+                        other_flight_id = cb_arg.flight_id
+
+                    logger.error("No callback defined: %s, %s, %s, %s",
+                                 action_value, flight.flight_id, other_flight_id,
+                                 timestamp)
                     continue
 
                 logger.debug("Doing callback for %s", flight.flight_id)
-                if cb_arg:
-                    # this is used for proximity events where you need to
-                    # be able to refer to both flights that are near each other
-                    self.callbacks[action_value](flight, cb_arg)
-                else:
-                    # all non-proximity events go here
-                    self.callbacks[action_value](flight)
-
+                try:
+                    if cb_arg:
+                        # this is used for proximity events where you need to
+                        # be able to refer to both flights that are near each other
+                        self.callbacks[action_value](flight, cb_arg)
+                    else:
+                        # all non-proximity events go here
+                        self.callbacks[action_value](flight)
+                except TypeError as e:
+                    logger.error("Callback %s arguments incorrect: %s",
+                                 action_value, str(e))
             elif 'note' == action_name:
                 # Attach a note to this flight for later use, typically in
                 # another rule's callback.
@@ -253,6 +585,50 @@ class Rules:
                 # statistics gathering.
                 pass # handled after execution is complete
 
+            elif 'print_csv' == action_name:
+                # Output CSV line compatible with visualizer.py
+                # Format: timestamp,_,datestr,lat,lon,altitude,tail1,tail2,_,link,interp,audio,type,phase,_,distance,altsep
+                ts = flight.lastloc.now
+                datestring = datetime.datetime.utcfromtimestamp(ts)
+                altdatestring = datestring.strftime("%Y-%m-%d-%H:%M")
+                lat = flight.lastloc.lat or 0
+                lon = flight.lastloc.lon or 0
+                alt = flight.lastloc.alt_baro or 0
+                tail1 = flight.flight_id.strip() if flight.flight_id else ""
+
+                # For proximity events, cb_arg has the second flight
+                tail2 = cb_arg.flight_id.strip() if cb_arg and cb_arg.flight_id else ""
+
+                # Build replay link
+                replay_time = datestring.strftime("%Y-%m-%d-%H:%M")
+                link = f"https://globe.adsbexchange.com/?replay={replay_time}&lat={lat}&lon={lon}&zoom=12"
+
+                # Event type from action_value or rule name
+                event_type = action_value if isinstance(action_value, str) and action_value is not True else rule_name
+
+                # CSV fields: timestamp,_,datestr,lat,lon,alt,tail1,tail2,_,link,interp,audio,type,phase,_,latdist,altdist
+                csv_line = (
+                    f"CSV OUTPUT FOR POSTPROCESSING: {ts},"
+                    f"{datestring},{altdatestring},{lat},{lon},"
+                    f"{alt},{tail1},{tail2},,"
+                    f"{link},,,{event_type},,,,"
+                )
+                logger.info(csv_line)
+
+            elif 'emit_jsonl' == action_name:
+                # Write the raw position dict as a JSONL line to a gzipped file.
+                # action_value is the output file path (e.g. "output/KDCU.gz")
+                # File handles are kept open for the duration of processing.
+                output_path = action_value
+                if output_path not in self._emit_files:
+                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                    self._emit_files[output_path] = gzip.open(output_path, 'wb',
+                                                                compresslevel=1)
+                    logger.info("emit_jsonl: opened %s", output_path)
+                if flight.lastloc.flightdict:
+                    self._emit_files[output_path].write(
+                        orjson.dumps(flight.lastloc.flightdict) + b'\n')
+
             else:
                 logger.warning("Unmatched action: %s", action_name)
 
@@ -264,7 +640,7 @@ class Rules:
         needed for UI implementations at least.
         TODO: tests needed."""
 
-        for rule_name, rule_value in self.yaml_data['rules'].items():
+        for rule_name, rule_value in self.get_rules().items():
             actions = rule_value['actions']
 
             if ( "expire_callback" in actions and
@@ -276,7 +652,7 @@ class Rules:
     def get_rules_with_condition(self, condition_type) -> list:
         """Returns a list of name/rule tuples that have a condition of the given type."""
 
-        rules_list = self.yaml_data['rules']
+        rules_list = self.get_rules()
         ret = []
         for rule_name, rule_body in rules_list.items():
             if condition_type in rule_body['conditions']:
@@ -286,24 +662,31 @@ class Rules:
     def get_rules_with_action(self, action_type) -> list:
         """Returns a list of name/rule tuples that have an action of the given type."""
 
-        rules_list = self.yaml_data['rules']
+        rules_list = self.get_rules()
         ret = []
         for rule_name, rule_body in rules_list.items():
             if action_type in rule_body['actions']:
                 ret.append((rule_name, rule_body))
         return ret
 
-    def handle_proximity_conditions(self, flights, last_read_time) -> None:
+    def handle_proximity_conditions(self, flights, last_read_time,
+                                     spatial_grid=None) -> list:
         """
         This is run periodically to check distance between all aircraft --
-        to check for any matching proximity conditions.  
+        to check for any matching proximity conditions.
         It's O(n^2), can be expensive, but altitude and bbox limits can help...
 
         NOTE: currently flights not in any bbox are not checked, to improve
         execution time.
+
+        spatial_grid: optional dict mapping (lat_bucket, lon_bucket) -> list of
+        Flight objects, used to pre-filter candidates for find_nearby_flight.
+        Bucket size must be larger than the proximity latsep threshold.
         """
 
         prox_rules_list = self.get_rules_with_condition("proximity")
+        found_prox_events = []
+
         if prox_rules_list == []:
             return
 
@@ -315,22 +698,48 @@ class Rules:
                 # For each proximity rule, we want to check the rule conditions
                 # here, first removing the prox part of the rule which will
                 # never match during the usual synchronous update.
-                rule_conditions = rule_body['conditions'].copy() # XXX inefficient?
-                prox_rule_element = rule_conditions['proximity']
-                altsep, latsep = prox_rule_element
+                rule_conditions = rule_body['conditions'].copy()
+                altsep, latsep = rule_conditions['proximity']
                 del rule_conditions['proximity']
 
                 if self.conditions_match(flight1, rule_conditions, rule_name):
                     # Satisfied prox rule found, now see if there are nearby aircraft.
                     # NOTE that this only returns one flight, so we won't always have
                     # two actions fired for every pair of close-proximity aircraft.
+                    candidates = None
+                    if spatial_grid is not None:
+                        # Gather flights from the 3x3 neighborhood of buckets around flight1
+                        loc1 = flight1.lastloc
+                        bk_lat = int(loc1.lat / PROX_SPATIAL_BUCKET_DEG)
+                        bk_lon = int(loc1.lon / PROX_SPATIAL_BUCKET_DEG)
+                        candidates = []
+                        for dlat in (-1, 0, 1):
+                            for dlon in (-1, 0, 1):
+                                candidates.extend(
+                                    spatial_grid.get((bk_lat + dlat, bk_lon + dlon), []))
+
                     flight2 = flights.find_nearby_flight(flight1, altsep, latsep,
-                                                         last_read_time)
+                                                         last_read_time,
+                                                         candidates=candidates)
                     if flight2:
-                        logger.debug("Proximity match: %s %s", flight1.flight_id,
-                                     flight2.flight_id)
-                        self.do_actions(flight1, rule_body['actions'], rule_name,
-                                        flight2)
+                        # Also check if flight2 matches the rule conditions
+                        # This ensures excluded aircraft in flight2 won't
+                        # trigger the rule.
+                        if self.conditions_match(flight2, rule_conditions, rule_name,
+                                                 other_flight=flight1):
+                            logger.debug("Proximity match: %s %s", flight1.flight_id,
+                                        flight2.flight_id)
+                            self.do_actions(flight1, rule_body['actions'], rule_name,
+                                            flight2)
+                            found_prox_events.append((flight1, flight2))
+        return found_prox_events
+
+    def close_emit_files(self):
+        """Close all open emit_jsonl file handles."""
+        for path, fh in self._emit_files.items():
+            fh.close()
+            logger.info("emit_jsonl: closed %s", path)
+        self._emit_files.clear()
 
     def print_final_report(self):
         """Print a report of rule execution statistics, for any rule

@@ -1,0 +1,58 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"name": "City Boundary"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-119.233011, 40.783341],
+          [-119.216715, 40.807777],
+          [-119.181098, 40.803538],
+          [-119.175400, 40.776488],
+          [-119.207478, 40.764008],
+          [-119.233011, 40.783341]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {"name": "Runway 5R/23L"},
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-119.203828, 40.761056],
+          [-119.184075, 40.767808]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {"name": "Runway 5L/23R"},
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-119.230003, 40.755206],
+          [-119.211886, 40.761386]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {"name": "23L", "rotation": -114},
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-119.183, 40.7685]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {"name": "23R", "rotation": -114},
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-119.211, 40.7623]
+      }
+    }
+  ]
+}

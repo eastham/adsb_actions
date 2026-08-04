@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""
+deploy_static - push static html/ files and examples/generated/about.html to remote storage.
+
+Copies everything in html/ except excluded files, plus about.html from
+examples/generated/.
+
+The site root (index.html) is the live map and is published separately by
+deploy_v2 --publish-root; this script never writes it.
+
+Example:
+    python src/tools/deploy_static
+    python src/tools/deploy_static --dry-run
+"""
+
+import glob
+import os
+import subprocess
+import argparse
+
+DEFAULT_REMOTE = "hotspots-initial:hotspots"
+HTML_DIR = "examples/airbornehotspots/html"
+GENERATED_DIR = "examples/generated"
+
+# Files in HTML_DIR to skip (templates not meant for direct deployment)
+HTML_EXCLUDE = ["index_template.html", "unavailable_template.html"]
+
+# Extra individual files to deploy (relative to project root).
+# Note: root index.html is NOT deployed here — it's the live map, owned by
+# deploy_v2 --publish-root. The landing page lives at /about.html.
+EXTRA_FILES = ["examples/generated/about.html",
+               "examples/generated/unavailable.html"]
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Deploy static site files to remote storage via rclone.")
+    parser.add_argument("--remote", default=DEFAULT_REMOTE,
+                        help=f"rclone remote destination (default: {DEFAULT_REMOTE})")
+    parser.add_argument("--dry-run", "-n", action="store_true",
+                        help="Print rclone commands without running them")
+    parser.add_argument("--skip-extra", action="store_true",
+                        help="Skip deploying EXTRA_FILES (e.g. generated index/unavailable)")
+    args = parser.parse_args()
+
+    files = []
+
+    # Everything in html/ except excluded templates
+    for path in sorted(glob.glob(os.path.join(HTML_DIR, "*"))):
+        if os.path.isfile(path) and os.path.basename(path) not in HTML_EXCLUDE:
+            files.append(path)
+
+    # Extra individual files
+    if args.skip_extra:
+        print("Skipping EXTRA_FILES (--skip-extra)")
+    for path in ([] if args.skip_extra else EXTRA_FILES):
+        if os.path.isfile(path):
+            files.append(path)
+        else:
+            print(f"WARNING: {path} not found, skipping")
+
+    # Hard guard: the root index.html is the live map (deploy_v2 --publish-root).
+    # Anything uploaded from here lands at the bucket root by basename, so a
+    # stray index.html would silently replace the map with a static page.
+    clobber = [f for f in files if os.path.basename(f) == "index.html"]
+    if clobber:
+        print(f"ERROR: refusing to deploy {clobber} — root index.html is the "
+              "live map, published by deploy_v2 --publish-root.")
+        return
+
+    print(f"Deploying {len(files)} files to {args.remote}")
+    for f in files:
+        # --metadata is required for --metadata-set to take effect; rclone
+        # silently ignores --metadata-set without it (same gotcha as deploy_v2).
+        cmd = ["rclone", "copyto", f, f"{args.remote}/{os.path.basename(f)}",
+               "--progress",
+               "--s3-no-check-bucket",
+               "--metadata",
+               "--metadata-set", "cache-control=no-cache, must-revalidate"]
+        if args.dry_run:
+            cmd.append("--dry-run")
+        print(f"  {' '.join(cmd)}")
+        result = subprocess.run(cmd)
+        if result.returncode != 0:
+            print(f"  ERROR: rclone failed for {f} (exit {result.returncode})")
+
+if __name__ == "__main__":
+    main()

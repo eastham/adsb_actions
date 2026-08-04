@@ -1,0 +1,19 @@
+
+  config:
+    kmls:
+      - ../../examples/88nv/regions/brc_pusher_gates.kml
+
+  aircraft_lists:
+    ground_vehicles: [ "N10CE", "N10CF", "N10CG", "N10CH", "N10CJ", "N10CK", "N10CL", "N10CM", "N10CN", "N10CP" ]
+
+  rules:
+    proximity_alert:
+      conditions:
+        min_alt: 4000
+        max_alt: 10000
+        regions: [ "Generic Gate Air", "Vicinity" ]
+        proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
+        exclude_aircraft_substrs: ["N10C", "N10D"]  # ground vehicles
+      actions:
+        callback: los_update_cb
+

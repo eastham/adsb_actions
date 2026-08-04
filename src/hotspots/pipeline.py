@@ -1,0 +1,771 @@
+#!/usr/bin/env python3
+"""
+v2 LOS Pipeline Orchestrator
+
+Runs stages 2–5 over a date range and geographic region:
+  Stage 2: Shard CONUS JSONL into 1°×1° grid cells
+            source: data/  (CONUS_DDMMYY.gz files, override with --conus-dir)
+            dest:   data/v2/grid/<date_tag>/<date_tag>_<lat>_<lon>.gz
+  Stage 3: Run LOS analysis on each cell shard (parallelizable)
+            source: data/v2/grid/
+            dest:   data/v2/events/<date_tag>/<date_tag>_<lat>_<lon>.{csv,parquet}
+  Stage 4: Aggregate per-cell Parquets into a regional Parquet
+            source: data/v2/events/
+            dest:   data/v2/regional/<region>_<start>_<end>.parquet
+  Stage 5: Generate map HTML (self-contained or PMTiles)
+            source: data/v2/regional/
+            dest:   data/v2/maps/<region>_<start>_<end>.html
+
+Usage:
+    # Bay Area → Nevada band, 21 cells, 8 workers, PMTiles output:
+    python src/hotspots/pipeline.py \\
+        --start-date 20260101 --end-date 20260131 \\
+        --lat-min 36 --lat-max 39 --lon-min -122 --lon-max -115 \\
+        --workers 8 --pmtiles
+
+    # Named region (CA):
+    python src/hotspots/pipeline.py \\
+        --start-date 20260101 --end-date 20260131 \\
+        --region CA --workers 8 --pmtiles
+
+    # Skip sharding (shards already exist), just re-analyze + visualize:
+    python src/hotspots/pipeline.py \\
+        --start-date 20260101 --end-date 20260131 \\
+        --lat-min 36 --lat-max 39 --lon-min -122 --lon-max -115 \\
+        --skip-stage2 --workers 8
+
+    # Just re-visualize an existing regional Parquet:
+    python src/hotspots/stage5_visualize.py \\
+        --input data/v2/regional/36_39_-122_-115_20260101_20260131.parquet \\
+        --pmtiles
+"""
+
+import argparse
+import datetime
+import glob as glob_module
+import math
+import os
+import sys
+import time
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parents[2]
+for _p in [str(_ROOT / "src"), str(_ROOT)]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from hotspots.exclusions import is_excluded
+from hotspots.stage2_shard import (
+    shard, date_tag_from_input,
+    CONUS_LAT_MIN, CONUS_LAT_MAX, CONUS_LON_MIN, CONUS_LON_MAX,
+    GRID_DIR,
+)
+from hotspots.stage3_analyze import find_shards, analyze_shards, EVENTS_DIR
+from hotspots.stage4_aggregate import aggregate, find_parquet_files, REGIONS, REGIONAL_DIR
+from hotspots.stage5_visualize import (
+    DEPLOY_ASSET_PREFIX,
+    generate_html,
+    generate_pmtiles,
+    generate_pmtiles_html,
+    validate_pmtiles,
+    write_event_sidecars,
+    write_search_index,
+    load_events,
+    MAPS_DIR,
+    build_us_airports_lookup,
+    _parse_date_range_from_stem,
+)
+
+from tools.v2_airport_quality import (
+    build_v2_airport_quality,
+    load_us_airports_with_elev,
+)
+
+import pandas as pd
+
+
+# Named-region bounds (must match stage4_aggregate REGIONS keys)
+# Provided here so the CLI can use them without importing stage4 at parse time.
+_NAMED_REGIONS = {
+    name: (bb["lat_min"], bb["lat_max"], bb["lon_min"], bb["lon_max"])
+    for name, bb in REGIONS.items()
+}
+
+
+def _is_excluded(path: Path, date_tag: str) -> bool:
+    """Skip cells flagged in CELL_EXCLUSIONS (known high-density events that
+    flood the prox detector with false positives). verify.py shares the same
+    predicate so a deliberately-skipped cell isn't flagged as missing output."""
+    parts = path.stem.split("_")
+    if len(parts) < 3:
+        return False
+    try:
+        lat, lon = int(parts[1]), int(parts[2])
+    except ValueError:
+        return False
+    excluded, reason = is_excluded(lat, lon, date_tag)
+    if excluded:
+        print(f"  [excluded] {path.stem} — {reason}")
+    return excluded
+
+
+def _cell_in_box(path: Path, lat_min, lat_max, lon_min, lon_max) -> bool:
+    parts = path.stem.split("_")
+    if len(parts) < 3:
+        return False
+    try:
+        lat, lon = int(parts[1]), int(parts[2])
+        return lat_min <= lat < lat_max and lon_min <= lon < lon_max
+    except ValueError:
+        return False
+
+
+def _conus_path(date: datetime.date, conus_dir: str) -> Path:
+    """Return path to CONUS gz file for a date, e.g. data/CONUS_010126.gz."""
+    tag = date.strftime("%m%d%y")
+    return Path(conus_dir) / f"CONUS_{tag}.gz"
+
+
+def _foreflight_tile_dir(traffic_tile_dir: str | None) -> Path | None:
+    """Resolve the browser tile-prefix to a real filesystem tile tree for the
+    ForeFlight export, or None to skip the traffic layer.
+
+    Returns None for a URL (http...) or empty value. For a local value, resolve
+    it against the project root — dropping leading '..' segments, so the
+    browser-relative '../../../tiles/traffic' maps to <project-root>/tiles/traffic.
+    If the resolved tree doesn't exist, warn and return None (pack still builds,
+    just without the traffic layer)."""
+    if not traffic_tile_dir or traffic_tile_dir.startswith("http"):
+        return None
+    p = Path(traffic_tile_dir)
+    if not p.is_absolute():
+        rel = Path(*[part for part in p.parts if part != ".."])
+        p = _ROOT / rel
+    if not p.is_dir():
+        print(f"  [WARN] traffic tile dir for ForeFlight not found: {p} "
+              f"— exporting pack without the traffic layer")
+        return None
+    return p
+
+
+def _link_stable_assets(pmtiles_path: Path, sidecar_dir: Path, asset_stem: str) -> None:
+    """Symlink the stable '<asset_stem>.pmtiles' / '<asset_stem>_tracks' names next
+    to the dated build, so the stable names resolve in the maps dir. Relative link
+    targets so the maps dir stays relocatable. Replaces any existing symlink; leaves
+    real files untouched.
+
+    Note this does NOT make an --asset-stem build locally viewable: its HTML uses
+    absolute '/v2/...' URLs for deployment. Omit asset_stem to preview locally."""
+    for target, name in ((pmtiles_path, f"{asset_stem}.pmtiles"),
+                         (sidecar_dir, f"{asset_stem}_tracks")):
+        link = target.parent / name
+        if link.resolve() == target.resolve():
+            continue  # already points here
+        if link.is_symlink() or not link.exists():
+            link.unlink(missing_ok=True)
+            link.symlink_to(target.name)  # relative to the shared parent dir
+        else:
+            print(f"  [WARN] {link} is a real file, not a symlink — "
+                  f"leaving it; the local map may show stale data")
+
+
+def _date_range(start: datetime.date, end: datetime.date):
+    d = start
+    while d <= end:
+        yield d
+        d += datetime.timedelta(days=1)
+
+
+def run_stages_23(
+    date: datetime.date,
+    lat_min: int, lat_max: int, lon_min: int, lon_max: int,
+    conus_dir: str,
+    workers: int = 1,
+    animate: bool = False,
+    skip_shard: bool = False,
+    skip_existing: bool = False,
+) -> dict:
+    """
+    Run Stage 2 (shard) + Stage 3 (analyze) for one date.
+
+    Stages 2 and 3 are coupled per-date: Stage 2 produces per-cell shard files
+    that Stage 3 immediately consumes, so callers can iterate dates in a simple
+    loop without collecting intermediate state. Use skip_shard=True to skip
+    Stage 2 when shards are already on disk.
+
+    Returns stats dict: {date_tag, shard_s, shard_kb, analyze_s, events, errors}
+    """
+    conus_gz = _conus_path(date, conus_dir)
+    date_tag = date.strftime("%Y%m%d")
+    stats = {"date_tag": date_tag, "shard_s": 0, "shard_kb": 0,
+             "analyze_s": 0, "events": 0, "errors": 0}
+
+    # Stage 2
+    if skip_shard:
+        for lat in range(lat_min, lat_max):
+            for lon in range(lon_min, lon_max):
+                p = GRID_DIR / date_tag / f"{date_tag}_{lat}_{lon}.gz"
+                if p.exists():
+                    stats["shard_kb"] += p.stat().st_size // 1024
+    else:
+        if not conus_gz.exists():
+            print(f"  [WARN] CONUS file not found: {conus_gz} — skipping {date_tag}")
+            stats["errors"] += 1
+            return stats
+        t0 = time.time()
+        shard(str(conus_gz), lat_min, lat_max, lon_min, lon_max,
+              skip_existing=skip_existing)
+        stats["shard_s"] = time.time() - t0
+        for lat in range(lat_min, lat_max):
+            for lon in range(lon_min, lon_max):
+                p = GRID_DIR / date_tag / f"{date_tag}_{lat}_{lon}.gz"
+                if p.exists():
+                    stats["shard_kb"] += p.stat().st_size // 1024
+
+    # Stage 3
+    day_shards = [s for s in find_shards(GRID_DIR, date_tag)
+                  if _cell_in_box(s, lat_min, lat_max, lon_min, lon_max)
+                  and not _is_excluded(s, date_tag)]
+    if day_shards:
+        t0 = time.time()
+        results = analyze_shards(day_shards, workers=workers, animate=animate,
+                                 skip_existing=skip_existing)
+        stats["analyze_s"] = time.time() - t0
+        stats["events"] = sum(v["events"] or 0 for v in results.values()
+                               if v["error"] is None)
+        stats["errors"] += sum(1 for v in results.values()
+                                if v["error"] and v["error"] != "skipped")
+
+    return stats
+
+
+def run_stage4(
+    date_tags: list,
+    lat_min: int, lat_max: int, lon_min: int, lon_max: int,
+    region_label: str,
+    output_path: str,
+) -> pd.DataFrame:
+    """Aggregate per-cell Parquets for all date_tags into a regional Parquet."""
+    parquet_files = find_parquet_files(EVENTS_DIR, date_tags,
+                                       lat_min, lat_max, lon_min, lon_max)
+    df = aggregate(parquet_files)
+    REGIONAL_DIR.mkdir(parents=True, exist_ok=True)
+    if not df.empty:
+        df.to_parquet(output_path, index=False)
+        print(f"  Aggregated {len(df):,} events → {output_path}")
+    else:
+        print(f"  No events found for region {region_label}.")
+    return df
+
+
+def run_stage5(
+    df: pd.DataFrame,
+    output_path: str,
+    pmtiles: bool,
+    zoom: float | None,
+    traffic_tile_dir: str = "https://airbornehotspots.org/tiles",
+    asset_stem: str | None = None,
+    airport_quality: dict | None = None,
+    html_only: bool = False,
+    foreflight_output: str | None = None,
+    foreflight_name: str | None = None,
+    foreflight_tiles: str | None = None,
+    print_summary: bool = True,
+) -> None:
+    """Generate map HTML (self-contained or PMTiles) from a DataFrame of events.
+    `zoom=None` means auto-fit to data bounds on load (whole region visible);
+    pass an explicit value to override.
+
+    `html_only=True` (PMTiles mode only) skips tippecanoe and sidecar
+    regeneration, reusing the existing `.pmtiles` and `_tracks/` next to
+    `output_path`. Useful when only the embedded JS/CSS/HTML changed.
+
+    `foreflight_output`: path for the ForeFlight Content Pack .zip. Always
+    generated when provided. `foreflight_tiles` is the local filesystem tile
+    tree to pack (traffic layer); when omitted, falls back to `traffic_tile_dir`
+    only if that is itself a local path (not the browser URL).
+    """
+    MAPS_DIR.mkdir(parents=True, exist_ok=True)
+    if df.empty:
+        print("  Stage 5 skipped: no events.")
+        return
+
+    center_lat = float(df["lat"].mean())
+    center_lon = float(df["lon"].mean())
+
+    auto_fit = zoom is None
+    static_zoom = zoom if zoom is not None else 7.0  # fallback if AUTO_FIT JS fails
+    bounds = (
+        float(df["lon"].min()), float(df["lat"].min()),
+        float(df["lon"].max()), float(df["lat"].max()),
+    )
+
+    # Date range parsed from the output stem (e.g. *_20250601_20250831.html);
+    # airports lookup baked into the HTML for the upper-left jump box.
+    stem = Path(output_path).stem
+    date_range = _parse_date_range_from_stem(stem)
+    airports_lookup = build_us_airports_lookup()
+
+    # When provided, the airport-quality dict is inlined into the
+    # self-contained HTML, or written as a sidecar JSON next to the
+    # PMTiles HTML and fetched at load.
+    airport_quality_url: str | None = None
+    if airport_quality is not None and pmtiles:
+        # The file is written next to the HTML under its bare name; an
+        # asset_stem build fetches it from the deployed location instead.
+        stem_for_aq = asset_stem or Path(output_path).stem
+        aq_filename = f"{stem_for_aq}_quality.json"
+        aq_dest = Path(output_path).parent / aq_filename
+        with open(aq_dest, "w", encoding="utf-8") as f:
+            import json as _json
+            _json.dump(airport_quality, f)
+        airport_quality_url = (f"{DEPLOY_ASSET_PREFIX}{aq_filename}"
+                               if asset_stem else aq_filename)
+
+    if pmtiles:
+        pmtiles_path = str(Path(output_path).with_suffix(".pmtiles"))
+        sidecar_dir = output_path.replace(".html", "_tracks")
+        if html_only:
+            missing = [p for p in (pmtiles_path, sidecar_dir) if not Path(p).exists()]
+            if missing:
+                raise SystemExit(
+                    f"--html-only requires existing assets, but missing: {missing}. "
+                    f"Run once without --html-only to generate them."
+                )
+            # Existence isn't enough: an interrupted tippecanoe leaves a plausible
+            # but unusable SQLite file at the .pmtiles path, and reusing it yields
+            # a map with traffic but no events.
+            validate_pmtiles(pmtiles_path)
+            print(f"  --html-only: reusing existing {Path(pmtiles_path).name} and {Path(sidecar_dir).name}/")
+        else:
+            generate_pmtiles(df, pmtiles_path)
+            print(f"  Writing {len(df):,} event track sidecars...")
+            write_event_sidecars(df, sidecar_dir)
+            # Tail-number search index (same sidecar dir, same event_id keys).
+            write_search_index(df, sidecar_dir)
+        # With --asset-stem, the HTML fetches stable '<stem>.pmtiles' / '<stem>_tracks'
+        # names (for deploy aliases) rather than the dated files just written. Create
+        # local symlinks so the same build is ALSO viewable locally without a re-run;
+        # deploy still promotes the dated files to the stable name on the remote.
+        if asset_stem:
+            _link_stable_assets(Path(pmtiles_path), Path(sidecar_dir), asset_stem)
+        alt_bands = sorted(df["alt_band"].dropna().unique().tolist()) if "alt_band" in df.columns else []
+        html = generate_pmtiles_html(pmtiles_path, sidecar_dir,
+                                     center_lat, center_lon, static_zoom, alt_bands,
+                                     traffic_tile_dir=traffic_tile_dir,
+                                     date_range=date_range,
+                                     airports_lookup=airports_lookup,
+                                     airport_quality_url=airport_quality_url,
+                                     asset_stem=asset_stem,
+                                     bounds=bounds,
+                                     auto_fit=auto_fit)
+    else:
+        html = generate_html(df, center_lat, center_lon, static_zoom,
+                             traffic_tile_dir=traffic_tile_dir,
+                             date_range=date_range,
+                             airports_lookup=airports_lookup,
+                             airport_quality=airport_quality,
+                             bounds=bounds,
+                             auto_fit=auto_fit)
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html)
+    size_mb = os.path.getsize(output_path) / 1024 / 1024
+
+    # --- ForeFlight Content Pack ---
+    if foreflight_output:
+        try:
+            from tools.export_foreflight import export_pack
+            # traffic_tile_dir is a BROWSER path prefix (for the map HTML, resolved
+            # relative to the served map). ForeFlight needs a real FILESYSTEM tile
+            # tree instead, so resolve a local (non-http) value against the project
+            # root: '../../../tiles/traffic' → <project-root>/tiles/traffic. A
+            # missing tree skips the traffic layer rather than failing the pack.
+            local_tiles = _foreflight_tile_dir(foreflight_tiles or traffic_tile_dir)
+            export_pack(
+                output_zip=Path(foreflight_output),
+                traffic_tile_dir=local_tiles,
+                events_df=df,
+                # None → export_pack's own "CONUS Safety Layers" default
+                **({"pack_name": foreflight_name} if foreflight_name else {}),
+            )
+        except Exception as e:
+            print(f"  [WARN] ForeFlight export failed: {e}")
+
+    if not print_summary:
+        return
+
+    # --- Output summary ---
+    sep = "─" * 60
+    print(f"\n{sep}")
+    if pmtiles:
+        print(f"  Map (PMTiles):  {output_path}  ({size_mb:.1f} MB)")
+        print(f"  PMTiles file:   {Path(output_path).with_suffix('.pmtiles')}")
+        print(f"  Track sidecars: {output_path.replace('.html', '_tracks')}/")
+        print(f"  Serve: python src/hotspots/serve.py . 8080")
+        print(f"  Open:  http://localhost:8080/{output_path}")
+    else:
+        print(f"  Map (self-contained): {output_path}  ({size_mb:.1f} MB)")
+        print(f"  Open: file://{os.path.abspath(output_path)}")
+    if foreflight_output and Path(foreflight_output).exists():
+        ff_size_mb = Path(foreflight_output).stat().st_size / 1e6
+        print(f"  ForeFlight pack: {foreflight_output}  ({ff_size_mb:.1f} MB)")
+        preview_cmd = f"python src/tools/preview_mbtiles.py --zip '{foreflight_output}'"
+        local_tiles = (traffic_tile_dir
+                       if traffic_tile_dir and not traffic_tile_dir.startswith("http")
+                       else None)
+        if local_tiles:
+            preview_cmd += f" --traffic-tiles '{local_tiles}'"
+        print(f"  Preview: {preview_cmd}")
+    print(sep)
+
+
+# ---------------------------------------------------------------------------
+# Summary / benchmarking
+# ---------------------------------------------------------------------------
+
+def _print_summary(all_stats: list, lat_min, lat_max, lon_min, lon_max,
+                   wall_elapsed: float):
+    n_cells = (lat_max - lat_min) * (lon_max - lon_min)
+    n_days = len(all_stats)
+    total_shard_s = sum(s["shard_s"] for s in all_stats)
+    total_analyze_s = sum(s["analyze_s"] for s in all_stats)
+    total_events = sum(s["events"] for s in all_stats)
+    total_errors = sum(s["errors"] for s in all_stats)
+    total_shard_kb = sum(s["shard_kb"] for s in all_stats)
+    skipped_shard = sum(1 for s in all_stats if s["shard_s"] == 0 and not s["errors"])
+
+    avg_shard_kb = total_shard_kb / n_days if n_days else 0
+    avg_analyze_s = total_analyze_s / n_days if n_days else 0
+    avg_events = total_events / n_days if n_days else 0
+
+    print(f"\n{'─'*75}")
+    print(f"{'Date':<12} {'Shard KB':>10} {'Shard s':>8} {'Analyze s':>10} {'Events':>8}")
+    print(f"{'─'*75}")
+    for s in all_stats:
+        shard_note = "(skip)" if s["shard_s"] == 0 else f"{s['shard_s']:.0f}"
+        print(f"{s['date_tag']:<12} {s['shard_kb']:>10,} {shard_note:>8} "
+              f"{s['analyze_s']:>10.0f} {s['events']:>8}")
+    print(f"{'─'*75}")
+    print(f"{'TOTAL':<12} {total_shard_kb:>10,} {total_shard_s:>8.0f} "
+          f"{total_analyze_s:>10.0f} {total_events:>8}")
+    print(f"{'AVG/DAY':<12} {avg_shard_kb:>10,.0f} {'':>8} "
+          f"{avg_analyze_s:>10.1f} {avg_events:>8.1f}")
+    print(f"{'─'*75}")
+    print(f"\nTotal wall time: {wall_elapsed/60:.1f} min | Errors: {total_errors}")
+
+    # Extrapolation
+    # Rectangular bounding box cell count — actual land cells are ~60% of this
+    # due to ocean/Canada, but this is the correct upper bound for the full CONUS pass.
+    CONUS_CELLS = (CONUS_LAT_MAX - CONUS_LAT_MIN) * (CONUS_LON_MAX - CONUS_LON_MIN)
+    GLOBAL_CELLS = 3000
+
+    if skipped_shard < n_days:
+        measured_shard_s = total_shard_s / (n_days - skipped_shard)
+    else:
+        measured_shard_s = 90  # prototype fallback
+
+    analyze_s_per_cell_day = avg_analyze_s / n_cells if n_cells > 0 else avg_analyze_s
+    shard_kb_per_cell_day = avg_shard_kb / n_cells if n_cells > 0 else avg_shard_kb
+
+    print(f"\nEXTRAPOLATION (based on {n_cells} cells × {n_days} days)")
+    print(f"  Shard time/CONUS-file:   {measured_shard_s:.0f}s")
+    print(f"  Analyze time/cell/day:   {analyze_s_per_cell_day:.1f}s")
+    print(f"  Shard size/cell/day:     {shard_kb_per_cell_day:.0f} KB")
+    print(f"  Events/cell/day:         {avg_events/n_cells:.1f}")
+
+    for label, cells in [("CONUS", CONUS_CELLS), ("Global", GLOBAL_CELLS)]:
+        analyze_s_day = analyze_s_per_cell_day * cells
+        shard_mb_day = shard_kb_per_cell_day * cells / 1024
+        shard_gb_30 = shard_mb_day * 30 / 1024
+
+        print(f"\n  [{label}: {cells} cells]")
+        print(f"    Shard time/day:    {measured_shard_s/60:.1f} min (one CONUS pass)")
+        print(f"    Analyze time/day:  {analyze_s_day/60:.1f} min serial  "
+              f"→ {analyze_s_day/60/8:.1f} min on 8 cores  "
+              f"→ {analyze_s_day/60/32:.1f} min on 32 cores")
+        print(f"    Shard storage/30d: {shard_gb_30:.1f} GB")
+
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="v2 LOS Pipeline: shard → analyze → aggregate → visualize")
+
+    # Date range
+    parser.add_argument("--start-date", required=True,
+                        help="Start date YYYYMMDD")
+    parser.add_argument("--end-date", required=True,
+                        help="End date YYYYMMDD (inclusive)")
+
+    # Region
+    region_group = parser.add_mutually_exclusive_group(required=True)
+    region_group.add_argument("--region", choices=list(_NAMED_REGIONS.keys()),
+                               help="Named region")
+    region_group.add_argument("--lat-min", type=int, help="Min latitude (inclusive)")
+    parser.add_argument("--lat-max", type=int)
+    parser.add_argument("--lon-min", type=int)
+    parser.add_argument("--lon-max", type=int)
+
+    # Stage 3 parallelism
+    parser.add_argument("--workers", type=int, default=1,
+                        help="Parallel workers for Stage 3 (default: 1)")
+    parser.add_argument("--animate", action="store_true",
+                        help="Generate animation HTMLs in Stage 3")
+
+    # Stage 5
+    parser.add_argument("--pmtiles", action="store_true",
+                        help="Stage 5: PMTiles output (required for large datasets)")
+    parser.add_argument("--zoom", type=float, default=None,
+                        help="Initial map zoom. Default: auto-fit to data bounds "
+                             "(whole region visible). Pass an explicit value to override.")
+    parser.add_argument("--traffic-tiles", type=str,
+                        default="https://airbornehotspots.org/tiles",
+                        help="Traffic tile URL or local path prefix (default: production URL; "
+                             "use ../../../tiles/traffic for local dev)")
+    parser.add_argument("--asset-stem", type=str, default=None,
+                        help="Override the inlined .pmtiles / _tracks filenames in the "
+                             "generated HTML (e.g. --asset-stem conus). Used when the "
+                             "deployer publishes a stable-named alias separate from the "
+                             "dated source files. Only takes effect with --pmtiles.")
+
+    # Skip flags
+    parser.add_argument("--skip-existing", action="store_true",
+                        help="Skip cells/dates whose outputs already exist")
+    parser.add_argument("--skip-stage2", action="store_true",
+                        help="Skip Stage 2 (shards already exist)")
+    parser.add_argument("--skip-stage3", action="store_true",
+                        help="Skip Stage 3 (per-cell analysis already done)")
+    parser.add_argument("--skip-stage4", action="store_true",
+                        help="Skip Stage 4 (aggregation)")
+    parser.add_argument("--skip-stage5", action="store_true",
+                        help="Skip Stage 5 (visualization)")
+    parser.add_argument("--html-only", action="store_true",
+                        help="Stage 5: regenerate only the HTML, reusing the "
+                             "existing .pmtiles and _tracks/ next to the output. "
+                             "Use this when only embedded JS/CSS changed and you "
+                             "want to skip the slow tippecanoe + sidecar rebuild. "
+                             "Requires --pmtiles.")
+
+    # Airport-quality stage (between Stage 4 and Stage 5).
+    parser.add_argument("--airport-quality", action="store_true",
+                        help="Compute per-airport ADS-B coverage quality and "
+                             "render airplane icons on the v2 map. Off by "
+                             "default: a CONUS-month run takes hours.")
+    parser.add_argument("--airport-quality-path", type=str, default=None,
+                        help="Override the airport_quality.json output path. "
+                             "Default: data/v2/airport_quality_<start>_<end>.json. "
+                             "If the file already exists, reuse it (skip recompute).")
+
+    # Paths
+    parser.add_argument("--conus-dir", default="data",
+                        help="Directory containing CONUS_*.gz files (default: data)")
+
+    args = parser.parse_args()
+
+    if args.html_only and not args.pmtiles:
+        parser.error("--html-only requires --pmtiles (only PMTiles mode has reusable assets)")
+
+    # Resolve region
+    if args.region:
+        lat_min, lat_max, lon_min, lon_max = _NAMED_REGIONS[args.region]
+        region_label = args.region
+    else:
+        if None in (args.lat_max, args.lon_min, args.lon_max):
+            parser.error("--lat-min requires --lat-max, --lon-min, --lon-max")
+        lat_min, lat_max = args.lat_min, args.lat_max
+        lon_min, lon_max = args.lon_min, args.lon_max
+        region_label = f"{lat_min}_{lat_max}_{lon_min}_{lon_max}"
+
+    # Parse dates
+    try:
+        start_date = datetime.datetime.strptime(args.start_date, "%Y%m%d").date()
+        end_date   = datetime.datetime.strptime(args.end_date,   "%Y%m%d").date()
+    except ValueError as e:
+        parser.error(f"Invalid date: {e}")
+
+    if end_date < start_date:
+        parser.error("--end-date must be >= --start-date")
+
+    n_cells = (lat_max - lat_min) * (lon_max - lon_min)
+    n_days  = (end_date - start_date).days + 1
+    regional_parquet  = str(REGIONAL_DIR / f"{region_label}_{args.start_date}_{args.end_date}.parquet")
+    output_html       = str(MAPS_DIR     / f"{region_label}_{args.start_date}_{args.end_date}.html")
+    foreflight_output = str(_ROOT / "data" / "v2" / "foreflight" /
+                            f"{region_label}_{args.start_date}_{args.end_date}.zip")
+
+    print(f"v2 LOS Pipeline")
+    print(f"  Dates:   {args.start_date} – {args.end_date}  ({n_days} day(s))")
+    print(f"  Region:  {region_label}  lat [{lat_min},{lat_max}) × lon [{lon_min},{lon_max})  ({n_cells} cells)")
+    print(f"  Workers: {args.workers}  |  PMTiles: {args.pmtiles}")
+
+    wall_start = time.time()
+    all_stats = []
+
+    # Stages 2 + 3 — one date at a time
+    if not (args.skip_stage2 and args.skip_stage3):
+        dates = list(_date_range(start_date, end_date))
+        for i, d in enumerate(dates, 1):
+            date_str = d.strftime("%Y%m%d")
+            stage2_label = "Stage 2: shard CONUS→grid" if not args.skip_stage2 else "Stage 2: skipped"
+            print(f"\n[day {i}/{n_days}] {date_str}  |  {stage2_label}  →  Stage 3: LOS analysis")
+            stats = run_stages_23(
+                date=d,
+                lat_min=lat_min, lat_max=lat_max,
+                lon_min=lon_min, lon_max=lon_max,
+                conus_dir=args.conus_dir,
+                workers=args.workers,
+                animate=args.animate,
+                skip_shard=args.skip_stage2,
+                skip_existing=args.skip_existing,
+            )
+            all_stats.append(stats)
+            print(f"  shard: {stats['shard_kb']:,} KB  analyze: {stats['analyze_s']:.0f}s  "
+                  f"events: {stats['events']}")
+
+    # Stage 4: aggregate
+    df = pd.DataFrame()
+    if args.skip_stage4 and Path(regional_parquet).exists():
+        df = load_events(regional_parquet)
+        print(f"\nStage 4 skipped — loaded {len(df):,} events from {regional_parquet}")
+    else:
+        if args.skip_stage4:
+            print(f"\nStage 4: regional Parquet not found, aggregating from per-cell files...")
+        else:
+            print(f"\nStage 4: aggregate per-cell Parquets → regional Parquet ({(end_date - start_date).days + 1} day(s))...")
+        date_tags = [d.strftime("%Y%m%d") for d in _date_range(start_date, end_date)]
+        t4 = time.time()
+        df = run_stage4(date_tags, lat_min, lat_max, lon_min, lon_max,
+                        region_label, regional_parquet)
+        print(f"  Stage 4 done in {time.time()-t4:.0f}s")
+
+    # Optional: per-airport ADS-B quality scores → airport_quality.json,
+    # rendered as airplane icons on the v2 map.
+    #
+    # Resolution order:
+    #   1. If --airport-quality-path points at a pre-built aggregate JSON,
+    #      use it verbatim.
+    #   2. Else: aggregate whatever per-day files exist under data/v2/aq/
+    #      that fall within --start-date..--end-date. Warn about missing
+    #      days but don't recompute by default — the compute step is hours
+    #      long for CONUS-scale ranges.
+    #   3. Else (no per-day cache at all and no --skip-existing): trigger a
+    #      fresh compute via build_v2_airport_quality(). Suppressed when
+    #      --skip-existing is set, matching the project's "use what's on
+    #      disk" convention for that flag.
+    airport_quality = None
+    if args.airport_quality:
+        from pathlib import Path as _P
+        from tools.v2_airport_quality import (
+            aggregate_days, V2_AQ_DIR, aq_day_path,
+        )
+        import json as _json
+
+        if args.airport_quality_path:
+            # Explicit pre-built aggregate path — use it as-is.
+            aq_path = _P(args.airport_quality_path)
+            if not aq_path.exists():
+                raise SystemExit(f"--airport-quality-path not found: {aq_path}")
+            print(f"\nAirport-quality: loading {aq_path}")
+            with open(aq_path, "r", encoding="utf-8") as f:
+                airport_quality = _json.load(f)
+        else:
+            # Inventory the per-day cache for the requested date range.
+            requested_dates = list(_date_range(start_date, end_date))
+            present = [d for d in requested_dates
+                       if aq_day_path(V2_AQ_DIR, d.strftime("%Y%m%d")).exists()]
+            missing = [d for d in requested_dates if d not in present]
+
+            if present:
+                if missing:
+                    span = (
+                        f"{present[0].strftime('%Y-%m-%d')}..{present[-1].strftime('%Y-%m-%d')}"
+                        if present else "(none)")
+                    print(
+                        f"\nAirport-quality: aggregating {len(present)} per-day "
+                        f"file(s) from {V2_AQ_DIR}/ "
+                        f"(have: {span}; missing {len(missing)} day(s) — "
+                        f"first missing: {missing[0].strftime('%Y-%m-%d')})"
+                    )
+                    print(
+                        f"  Note: events parquet covers "
+                        f"{args.start_date}..{args.end_date} ({n_days} day(s)); "
+                        f"airport-quality reflects {len(present)} day(s) only."
+                    )
+                else:
+                    print(
+                        f"\nAirport-quality: aggregating {len(present)} per-day "
+                        f"file(s) from {V2_AQ_DIR}/"
+                    )
+                airport_quality = aggregate_days(date_range=present)
+            elif args.skip_existing:
+                print(
+                    f"\nAirport-quality: no per-day files found in {V2_AQ_DIR}/ "
+                    f"for {args.start_date}..{args.end_date}, and --skip-existing "
+                    f"is set — skipping airport quality.\n"
+                    f"  To compute fresh, run:\n"
+                    f"    python -m src.tools.v2_airport_quality --mode compute \\\n"
+                    f"        --start-date {args.start_date} --end-date {args.end_date} "
+                    f"--workers {args.workers}"
+                )
+            else:
+                # No cache and not --skip-existing → fresh compute (slow!).
+                print(
+                    f"\nAirport-quality: no per-day cache, computing fresh "
+                    f"({n_days} day(s); ~1 hour/day single-threaded). "
+                    f"Use --skip-existing to skip."
+                )
+                t_aq = time.time()
+                airports = load_us_airports_with_elev()
+                airport_quality = build_v2_airport_quality(
+                    grid_dir=GRID_DIR,
+                    airports=airports,
+                    date_range=list(_date_range(start_date, end_date)),
+                    workers=args.workers,
+                )
+                print(f"  Airport-quality done in {time.time()-t_aq:.0f}s "
+                      f"({len(airport_quality)} airports)")
+
+    # Stage 5: visualize
+    if not args.skip_stage5:
+        mode = "PMTiles" if args.pmtiles else "self-contained HTML"
+        print(f"\nStage 5: generate map ({mode})...")
+        t5 = time.time()
+        run_stage5(df, output_html, pmtiles=args.pmtiles, zoom=args.zoom,
+                   traffic_tile_dir=args.traffic_tiles,
+                   asset_stem=args.asset_stem,
+                   airport_quality=airport_quality,
+                   html_only=args.html_only,
+                   foreflight_output=foreflight_output)
+        print(f"  Stage 5 done in {time.time()-t5:.0f}s")
+
+    # Summary
+    wall_elapsed = time.time() - wall_start
+    if all_stats:
+        _print_summary(all_stats, lat_min, lat_max, lon_min, lon_max, wall_elapsed)
+    else:
+        print(f"\nDone in {wall_elapsed/60:.1f} min")
+
+    # Print deploy hint when PMTiles output is expected to exist.
+    if args.pmtiles:
+        stem = Path(output_html).stem
+        # --traffic-tiles-dir is deploy_v2's LOCAL upload dir (relative to cwd),
+        # not the HTML's tile URL (--traffic-tiles, relative to the served map).
+        # Only hint the flag when traffic tiles were used; conventional local
+        # dir is tiles/traffic.
+        tiles = args.traffic_tiles
+        traffic_flag = " --traffic-tiles-dir tiles/traffic" \
+            if (tiles and not tiles.startswith("http")) else ""
+        deploy_cmd = f"python src/tools/deploy_v2 --source-stem {stem}{traffic_flag}"
+        if args.asset_stem:
+            deploy_cmd += f" --publish-as {args.asset_stem}"
+        if foreflight_output and Path(foreflight_output).exists():
+            deploy_cmd += f" --foreflight-pack {foreflight_output}"
+        print(f"\nTo deploy:\n  {deploy_cmd}")
+
+
+if __name__ == "__main__":
+    main()

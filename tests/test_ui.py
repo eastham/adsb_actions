@@ -4,12 +4,13 @@ import yaml
 
 from adsb_actions.stats import Stats
 from adsb_actions.adsbactions import AdsbActions
+from adsb_actions.flights import MIN_PROX_FRESH
 
 YAML_STRING = """
   config:
     kmls:
-      - tests/test2.kml 
-      - tests/test3.kml 
+      - tests/test2.kml
+      - tests/test3.kml
 
   rules:
     ui_update:
@@ -31,21 +32,24 @@ YAML_STRING = """
             regions: [ "Scenic", "Gerlach Corridor", "Empire/Razorback/Pattern", "Other" ]
             proximity: [ 400, .3 ] # alt sep in MSL, lateral sep in nm
         actions:
-            callback: abe_update_cb
+            callback: los_update_cb
 """
 
-aircraft_update_ctr = aircraft_remove_ctr = abe_update_ctr = 0
+aircraft_update_ctr = aircraft_remove_ctr = los_update_ctr = 0
 def aircraft_update_cb(flight):
     global aircraft_update_ctr
+    print(f"UI update callback fired for flight {flight.flight_id}")
     aircraft_update_ctr += 1
 
 def aircraft_remove_cb(flight):
     global aircraft_remove_ctr
+    print(f"UI remove callback fired for flight {flight.flight_id}")
     aircraft_remove_ctr += 1
 
-def abe_update_cb(flight1, flight2):
-    global abe_update_ctr
-    abe_update_ctr += 1
+def los_update_cb(flight1, flight2):
+    global los_update_ctr
+    print(f"LOS update callback fired for flights {flight1.flight_id} and {flight2.flight_id}")
+    los_update_ctr += 1
 
 JSON_STRING_3000 = '{"now": 1661692178, "alt_baro": 3000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9"} \n'
 JSON_STRING_4000 = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9"} \n'
@@ -55,7 +59,14 @@ JSON_STRING_DISTANT = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat":
 JSON_STRING_GROUND = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9"} \n'
 JSON_STRING_GROUND_PLANE2 = '{"now": 1661692178, "alt_baro": 4000, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061db"} \n'
 JSON_STRING_ZEROALT = '{"now": 1661692178, "alt_baro": 0, "gscp": 128, "lat": 40.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061d9"} \n'
-JSON_STRING_PLANE3_DELAY = '{"now": 1661692185, "alt_baro": 0, "gscp": 128, "lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061da"}\n'
+_T0 = 1661692178
+# Advance time by exactly MIN_PROX_FRESH so the checkpoint fires (>= CHECKPOINT_INTERVAL=5)
+# while keeping the two ground planes fresh (check is strictly >, so == MIN_PROX_FRESH is fresh).
+_T1 = _T0 + MIN_PROX_FRESH
+JSON_STRING_PLANE3_DELAY = (
+    f'{{"now": {_T1}, "alt_baro": 0, "gscp": 128, '
+    f'"lat": 41.763537, "lon": -119.2122323, "track": 203.4, "hex": "a061da"}}\n'
+)
 
 def test_ui():
     Stats.reset()
@@ -71,7 +82,7 @@ def test_ui():
     adsb_actions = AdsbActions(yaml_data)
     adsb_actions.register_callback("aircraft_update_cb", aircraft_update_cb)
     adsb_actions.register_callback("aircraft_remove_cb", aircraft_remove_cb)
-    adsb_actions.register_callback("abe_update_cb", abe_update_cb)
+    adsb_actions.register_callback("los_update_cb", los_update_cb)
 
     adsb_actions.loop(JSON_STRING_GROUND)
     assert aircraft_update_ctr == 1
@@ -82,7 +93,7 @@ def test_ui():
     adsb_actions.loop(JSON_STRING_GROUND)
     adsb_actions.loop(JSON_STRING_GROUND_PLANE2)
     adsb_actions.loop(JSON_STRING_PLANE3_DELAY) # allow time to pass for checkpoint
-    assert abe_update_ctr == 2  # one for each plane near the other
+    assert los_update_ctr == 2  # one for each plane near the other
 
     if True:
         adsb_actions.loop(json_data)

@@ -1,0 +1,58 @@
+# Airport monitor API rules (by default, reads from airplanes.live API)
+#
+# Sends Slack messages and pager alerts when specific aircraft are detected in a
+# given area.
+#
+# Usage: python3 src/applications/tcp_api_monitor/monitor.py examples/88nv/airport_monitor_api_rules.yaml
+
+config:
+  kmls:
+    # specifying a KML will add more info to the log messages about aircraft
+    # location
+    - examples/88nv/regions/brc_large_regions.kml 
+
+aircraft_lists:
+  # Lists of tail numbers of interest.
+  watched_aircraft: [ "N12345" ] 
+
+rules:
+  # This "latlongring" condition will trigger an API 
+  # call to pull in data over TCP for that area.  The API has a max range of 
+  # 250 nm, so centering it on Reno to bias toward California.
+  large_area_query:
+    conditions:
+      latlongring: [250, 39.5580794, -120.0156502]   # uncomment for wide area detection
+      max_alt: 25000  # skip jet traffic
+
+    actions:
+      print: True
+      note: "query"     # a no-op for adsb_actions
+
+  # this "latlongring" condition will trigger a more focused query
+  local_area_low_flying_query:
+    conditions:
+      latlongring: [15, 40.786969, -119.204101]
+      max_alt: 7000
+    actions:
+      webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
+
+  # This rule will trigger a slack message when a watched aircraft is seen.
+  watched_aircraft_seen_tcp_slack:
+    conditions:
+      aircraft_list: watched_aircraft  # use aircraft_list above
+      cooldown: 30  # minutes to wait before matching a second time for this a/c
+
+    actions:
+      callback: activity_cb
+      webhook: ['slack', 'slack_nearby_webhook'] # send a message to a slack channel
+
+  # somewhat repeated rule since YAML doesn't support duplicate keys, this time
+  # send a page.
+  watched_aircraft_seen_tcp_page:
+    conditions:
+      aircraft_list: watched_aircraft  # use aircraft_list above
+      cooldown: 30  # minutes to wait before matching a second time for this a/c
+
+    actions:
+      callback: activity_cb
+      webhook: ['page', 'deputy'] # send a message to a pager

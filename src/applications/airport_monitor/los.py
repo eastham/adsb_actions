@@ -1,0 +1,563 @@
+"""Push Loss of Separation (LOS) Events to the server.
+These are pushed once upon first detection and again once
+expired, so that the minimum distance is logged."""
+
+import bisect
+import copy
+import logging
+import os
+import threading
+import time
+import datetime
+
+from applications.airport_monitor.db_ops import add_los, update_los
+from adsb_actions.stats import Stats
+from adsb_actions.location import Location
+from adsb_actions.adsb_logger import Logger
+from adsb_actions.flight import PLAYBACK_WEBSITE
+from adsb_actions.flights import MIN_PROX_FRESH
+
+logger = logging.getLogger(__name__)
+#logger.level = logging.DEBUG
+LOGGER = Logger()
+
+# Default output directory for generated animations
+ANIMATION_OUTPUT_DIR = os.path.join(os.path.dirname(__file__),
+                                     "../../../examples/generated")
+
+class LOS:
+    """
+    Track LOS (Loss of Separation) events.  These are pushed to the server
+    when initially seen, updated locally when additional callbacks come in,
+    and re-pushed to the server with the final stats once the event is gc'ed.
+    """
+    current_los_events = {}
+    finalized_los_events = {}  # Stores finalized events for post-processing
+    current_los_lock: threading.Lock = threading.Lock()
+    LOS_GC_TIME = 60        # seconds to wait before finalizing LOS
+    LOS_GC_LOOP_DELAY = 1   # seconds between GC checks
+    gc_thread = None
+    quit = False
+    animator = None  # Set by caller to enable animation generation
+    animation_output_dir = ANIMATION_OUTPUT_DIR
+    resampler = None  # Set by caller to enable location history on finalized events
+
+    def __init__(self, flight1, flight2, latdist, altdist, create_time):
+        # Keep flight1/flight2 in a universal order to enforce lock ordering
+        # and consistent keys
+        if flight1.flight_id > flight2.flight_id:
+            self.flight2 = flight1
+            self.flight1 = flight2
+        else:
+            self.flight1 = flight1
+            self.flight2 = flight2
+
+        # Shallow copy is sufficient: Location fields are all primitives except
+        # flightdict, which is the raw ADS-B JSON dict and is never mutated.
+        self.first_loc_1 = copy.copy(flight1.lastloc)
+        self.first_loc_2 = copy.copy(flight2.lastloc)
+
+        # Closest-approach distances.  Perhaps this is better represented
+        # with an absolute distance?
+        self.latdist = self.min_latdist = latdist
+        self.altdist = self.min_altdist = altdist
+
+        self.create_time = self.last_time = create_time
+        self.cpa_time = create_time
+        self.id = None
+        # Populated at finalization: {flight_id: [Location, ...]} for both flights
+        # contains real locations only (not resampled)
+        self.location_history = {}
+
+    def update(self, latdist, altdist, last_time, flight1, flight2,
+               update_loc_at_closest_approach=True):
+        self.latdist = latdist
+        self.altdist = altdist
+        self.last_time = last_time
+
+        if latdist < self.min_latdist or altdist < self.min_altdist:
+            logger.debug("LOS update: new minimum for %s vs %s: %.2f nm, %d MSL at %s",
+                         flight1.flight_id, flight2.flight_id, latdist, altdist,
+                         datetime.datetime.utcfromtimestamp(last_time)) 
+            self.min_latdist = latdist
+            self.min_altdist = altdist
+            self.cpa_time = last_time
+            if update_loc_at_closest_approach:
+                self.first_loc_1 = copy.copy(flight1.lastloc)
+                self.first_loc_2 = copy.copy(flight2.lastloc)
+
+    def get_key(self):
+        key = "%s %s" % (self.flight1.flight_id.strip(),
+            self.flight2.flight_id.strip())
+        return key
+
+    def populate_event_locations(self):
+        """Attach full location histories for both flights from the resampler.
+        Uses first_loc_1/2.flight which carry the resampler-assigned flight_id
+        (e.g. "N12345_1")."""
+        if not LOS.resampler:
+            return
+        locs_by_fid = LOS.resampler.locations_by_flight_id
+        for loc in (self.first_loc_1, self.first_loc_2):
+            fid = loc.flight
+            if fid in locs_by_fid:
+                self.location_history[fid] = locs_by_fid[fid]
+            else:
+                logger.warning("populate_event_locations: no locations for %s", fid)
+
+def process_los_launch(flight1, flight2, do_threading=True):
+    """Saw an LOS event -- in streaming mode, start a thread to 
+    keep an eye on it as the event progresses.
+
+    Args:
+        do_threading: If True, process in background thread and start GC thread
+            that uses wall-clock time (for real-time analysis only).
+            If False, process synchronously; caller must call los_gc(timestamp)
+            periodically with simulation timestamps (for offline analysis).
+    """
+    if do_threading:
+        t = threading.Thread(target=process_los, args=[flight1, flight2])
+        t.start()
+
+        if not LOS.gc_thread:
+            LOS.gc_thread = threading.Thread(target=gc_loop, daemon=True)
+            LOS.gc_thread.start()
+    else:
+        process_los(flight1, flight2)
+
+def process_los(flight1, flight2):
+    """Handle a single LOS event.  Could be new, or just an update to one that's
+    already underway.  Push to external database if new."""
+
+    # Check if either flight's data is stale relative to the other.
+    # If timestamps differ significantly, one aircraft stopped reporting
+    # and we shouldn't trust the distance calculation.
+    now1 = flight1.lastloc.now
+    now2 = flight2.lastloc.now
+    if abs(now1 - now2) > MIN_PROX_FRESH:
+        logger.debug("process_los skipped: timestamps too far apart (%s: %.0f, %s: %.0f)",
+                     flight1.flight_id, now1, flight2.flight_id, now2)
+        return
+
+    lateral_distance = flight1.lastloc - flight2.lastloc
+    alt_distance = abs(flight1.lastloc.alt_baro - flight2.lastloc.alt_baro)
+    logger.debug("process_los %s %s lateral dist %.2fnm %d MSL",
+                flight1.flight_id, flight2.flight_id, lateral_distance, alt_distance)
+
+    # Use the more recent timestamp as "now" for the LOS event
+    now = max(now1, now2)
+    # always create a new LOS at least to get flight1/flight2 ordering right
+    los = LOS(flight1, flight2, lateral_distance, alt_distance, now)
+
+    with LOS.current_los_lock:
+        key = los.get_key()
+        if key in LOS.current_los_events:
+            logger.debug("LOS update of key %s", key)
+            LOS.current_los_events[key].update(lateral_distance, alt_distance, now,
+                                         flight1, flight2)
+            Stats.los_update += 1
+        else:
+            logger.debug("LOS add key "+ key +" at " +
+                         str(datetime.datetime.utcfromtimestamp(now)) +
+                         ": " + flight1.to_str() + " " + flight2.to_str())
+            LOS.current_los_events[key] = los
+            Stats.los_add += 1
+
+            los.id = add_los(flight1, flight2, lateral_distance,
+                               alt_distance)
+
+def _count_real_reports(locations, start, end):
+    """Count real (non-resampled) ADS-B reports in a time window."""
+    return sum(1 for loc in locations if start <= loc.now <= end)
+
+def _count_sane_reports(locations, start, end, cpa_loc, max_dist_nm=0.5):
+    """Count real reports in a time window that are also near the CPA location.
+    Filters out reports that are in the time window but spatially far from
+    CPA, which indicates interpolated/stale position data."""
+    # return sum(1 for loc in locations
+    #            if start <= loc.now <= end and (loc - cpa_loc) <= max_dist_nm)
+    count = 0
+    for loc in locations:
+        if start <= loc.now <= end:
+            dist = loc - cpa_loc
+            if dist <= max_dist_nm:
+                count += 1
+            else:
+                logger.debug("sane_reports: skipping %s dist=%.2fnm", loc.now, dist)
+    return count
+
+TELEPORT_SPEED_KTS = 300  # max plausible speed for GA traffic
+
+def _check_teleportation(locations):
+    """Check for impossible speed jumps between consecutive reports.
+    Returns (max_speed_kts, from_time, to_time) or None if no teleportation."""
+    prev = None
+    for loc in locations:
+        if prev is not None:
+            dt = loc.now - prev.now
+            if dt > 5:  # smaller time windows can show crazy speeds under normal conditions
+                dist_nm = loc - prev
+                speed_kts = dist_nm / (dt / 3600)
+                if speed_kts > TELEPORT_SPEED_KTS:
+                    return (speed_kts, prev.now, loc.now)
+        prev = loc
+    return None
+
+CPA_WINDOW_S = 10  # seconds around CPA to check for real data
+SPARSE_DATA_THRESHOLD = 0.10  # require 20% real data during LOS
+FORMATION_PROXIMITY_NM = 0.6   # distance threshold for sustained-proximity check
+FORMATION_RATIO_THRESHOLD = 0.5  # fraction of co-observed samples within threshold to flag formation
+FORMATION_MATCH_TOLERANCE_S = 5  # max timestamp gap to consider two samples co-observed
+FORMATION_MAX_INITIAL_SEPARATION_NM = 1  # if aircraft start farther apart than this, can't be formation
+# How far before CPA the map/animation window begins (see los_detector._extract_track).
+# The initial-separation heuristic is clamped to this same window so the "started
+# separated" label never references a moment the map doesn't show.
+PRE_CPA_WINDOW_S = 120
+
+def _initial_separation_nm(locs1, locs2, match_tolerance_s, window_start=None):
+    """Lateral distance (nm) between the two flights at the start of their
+    co-observed tracks (not at LOS onset, when they are already close).
+
+    The track-overlap start is the later of the two first-report times; before
+    it, only one flight is being observed.  When window_start is given, the
+    measurement point is clamped forward to it, so the separation is only ever
+    read from within the window the map displays.  Picks the real report from
+    each flight nearest that time (within match_tolerance_s on both sides) and
+    returns the distance between them.  Returns None if no co-observed pair
+    exists near the measurement point."""
+    if not locs1 or not locs2:
+        return None
+
+    # Start of the window where both flights are observed.
+    overlap_start = max(min(l.now for l in locs1), min(l.now for l in locs2))
+    if window_start is not None:
+        overlap_start = max(overlap_start, window_start)
+
+    def nearest(locs, t):
+        best = min(locs, key=lambda l: abs(l.now - t))
+        return best if abs(best.now - t) <= match_tolerance_s else None
+
+    n1 = nearest(locs1, overlap_start)
+    n2 = nearest(locs2, overlap_start)
+    if n1 is None or n2 is None:
+        return None
+    return n1 - n2
+
+def _sustained_proximity_ratio(locs1, locs2, threshold_nm, match_tolerance_s):
+    """Return fraction of co-observed samples where the two aircraft are within
+    threshold_nm of each other.  'Co-observed' means both flights have a real
+    report within match_tolerance_s of each other.
+
+    Returns (ratio, paired_count) where ratio is None if no pairs found."""
+    # Build a sorted list of (time, loc) for locs2 to enable fast nearest lookup
+    sorted2 = sorted(locs2, key=lambda l: l.now)
+    if not sorted2:
+        return None, 0
+
+    times2 = [l.now for l in sorted2]
+
+    close_count = 0
+    total_pairs = 0
+
+    for loc1 in locs1:
+        # Find nearest loc2 by timestamp
+        idx = bisect.bisect_left(times2, loc1.now)
+        candidates = []
+        if idx < len(sorted2):
+            candidates.append(sorted2[idx])
+        if idx > 0:
+            candidates.append(sorted2[idx - 1])
+        nearest = min(candidates, key=lambda l: abs(l.now - loc1.now))
+        if abs(nearest.now - loc1.now) > match_tolerance_s:
+            continue  # no co-observed pair within tolerance
+        total_pairs += 1
+        if (loc1 - nearest) <= threshold_nm:
+            close_count += 1
+
+    if total_pairs == 0:
+        return None, 0
+    return close_count / total_pairs, total_pairs
+
+def calculate_event_quality(los, flight1, flight2):
+    """Calculate event quality score based on duration, aircraft type, and CPA.
+
+    Very High quality: high quality + CPA < 0.2 nm and 200 ft
+    High quality: brief event with good tracks
+    Medium quality: 1 min < event duration ≤ 2 min OR helicopter involved
+                    OR >25% resampled data during LOS (caps high/vhigh → medium)
+    Low quality: event duration > 2 min OR track duration < 1 min
+                 OR no real data near CPA
+
+    Returns: tuple of (quality_string, explanation_string)
+    """
+    # Calculate event duration (in seconds)
+    event_duration = los.last_time - los.create_time
+
+    # Calculate overall track duration (in seconds) for both flights
+    track_duration_1 = flight1.lastloc.now - flight1.firstloc.now
+    track_duration_2 = flight2.lastloc.now - flight2.firstloc.now
+    min_track_duration = min(track_duration_1, track_duration_2)
+
+    # Check for helicopter involvement (category A7)
+    cat1 = flight1.lastloc.flightdict.get('category') if flight1.lastloc.flightdict else None
+    cat2 = flight2.lastloc.flightdict.get('category') if flight2.lastloc.flightdict else None
+    is_helicopter = (cat1 == 'A7' or cat2 == 'A7')
+
+    # Get CPA (Closest Point of Approach) data
+    cpa_lateral_nm = los.min_latdist
+    cpa_vertical_ft = abs(los.min_altdist)  # Use absolute value for vertical separation
+
+    # Build explanation parts
+    reasons = []
+    event_duration_min = event_duration / 60.0
+    min_track_duration_min = min_track_duration / 60.0
+
+    # Pre-compute initial separation for formation heuristics (D and long-duration).
+    # Formation flights are close from the start; if aircraft were far apart at the
+    # start of the observed window they cannot be formation regardless of how the
+    # event unfolds.  Measured at track-overlap start, NOT at los.create_time --
+    # by LOS onset the aircraft are already close, so create_time would report a
+    # small separation for everything.  Clamped to the map/animation window
+    # (cpa_time - PRE_CPA_WINDOW_S) so the "started separated" label never cites a
+    # moment the map does not draw.
+    loc_history = getattr(los, 'location_history', {})
+    fids = list(loc_history.keys())
+    initial_sep = None
+    if len(fids) == 2:
+        window_start = getattr(los, 'cpa_time', None)
+        if window_start is not None:
+            window_start -= PRE_CPA_WINDOW_S
+        initial_sep = _initial_separation_nm(
+            loc_history[fids[0]], loc_history[fids[1]],
+            FORMATION_MATCH_TOLERANCE_S, window_start=window_start)
+    formation_possible = initial_sep is None or initial_sep <= FORMATION_MAX_INITIAL_SEPARATION_NM
+
+    # Apply quality criteria with explanations
+
+    if event_duration > 90 and formation_possible:
+        reasons.append(f"long duration {event_duration_min:.1f}min - likely formation flight")
+        quality = 'low'
+    elif event_duration > 90:
+        # Long but aircraft started far apart — not formation, downgrade to medium
+        reasons.append(
+            f"long duration {event_duration_min:.1f}min but started separated ({initial_sep:.1f} nm)")
+        quality = 'medium'
+    elif is_helicopter:
+        reasons.append("helicopter involved")
+        quality = 'low'
+    elif min_track_duration < 60:
+        reasons.append(f"short track {min_track_duration_min:.1f}min - insufficient data")
+        quality = 'low'
+    elif event_duration > 30:
+        reasons.append(f"moderate duration {event_duration_min:.1f}min - may be formation flight")
+        quality = 'medium'
+    else:
+        reasons.append(f"brief event {event_duration_min:.1f}min with good tracks")
+        quality = 'high'
+
+        # Check if high quality event qualifies for very high
+        if cpa_lateral_nm < 0.2 and cpa_vertical_ft < 200:
+            quality = 'vhigh'
+            reasons.append(f"very close CPA ({cpa_lateral_nm:.2f}nm, {cpa_vertical_ft:.0f}ft)")
+
+    # Location-level quality checks (only when event_locations populated, i.e. batch mode)
+    cpa_time = getattr(los, 'cpa_time', None)
+
+    if loc_history and cpa_time is not None:
+        # Heuristic A: no sane data near CPA → low quality
+        # Check both flights for real reports within ±CPA_WINDOW_S of CPA
+        # that are also spatially near the CPA location
+        cpa_loc = Location.meanloc(los.first_loc_1, los.first_loc_2)
+        for fid, locs in loc_history.items():
+            near_cpa = _count_sane_reports(locs, cpa_time - CPA_WINDOW_S,
+                                           cpa_time + CPA_WINDOW_S, cpa_loc)
+            if near_cpa == 0:
+                quality = 'low'
+                reasons = []
+                reasons.append(f"no sane data near CPA {fid}: 0 real in ±{CPA_WINDOW_S}s within 0.5nm")
+                break
+
+        # Heuristic B: sparse data during LOS → cap at medium
+        if quality in ('high', 'vhigh') and event_duration > 5:
+            for fid, locs in loc_history.items():
+                real_count = _count_real_reports(locs, los.create_time, los.last_time)
+                # Expected ~1 report/sec with typical ADS-B; compare to interval
+                real_frac = real_count / event_duration
+                if real_frac < SPARSE_DATA_THRESHOLD:
+                    quality = 'medium'
+                    reasons = []
+                    reasons.append(
+                        f"sparse data during LOS {fid}: {real_count} real during {event_duration:.0f}s event")
+                    break
+
+        # Heuristic C: teleportation in track → low quality
+        for fid, locs in loc_history.items():
+            result = _check_teleportation(locs)
+            if result:
+                speed_kts, t0, t1 = result
+                quality = 'low'
+                reasons = []
+                reasons.append(f"teleportation {fid}: {speed_kts:.0f}kts between t={t0:.0f}-{t1:.0f}")
+                break
+
+        # Heuristic D: sustained proximity → likely formation flight or coverage gap.
+        # Inhibited (via formation_possible) when aircraft started > 1nm apart.
+        if formation_possible and len(fids) == 2:
+            ratio, pairs = _sustained_proximity_ratio(
+                loc_history[fids[0]], loc_history[fids[1]],
+                FORMATION_PROXIMITY_NM, FORMATION_MATCH_TOLERANCE_S)
+            if ratio is not None and ratio >= FORMATION_RATIO_THRESHOLD:
+                quality = 'low'
+                reasons = []
+                reasons.append(
+                    f"sustained proximity ({ratio:.0%} of {pairs} paired samples within "
+                    f"{FORMATION_PROXIMITY_NM}nm — likely formation flight or coverage gap)")
+
+        # Heuristic E: track ended before LOS started → LOS computed against frozen position.
+        # loc_history contains real reports only, so the last timestamp is the true end of track.
+        for fid, locs in loc_history.items():
+            if not locs:
+                continue
+            last_real_t = max(l.now for l in locs)
+            if last_real_t < los.create_time:
+                quality = 'low'
+                reasons = []
+                reasons.append(
+                    f"track ended before LOS {fid}: last real {los.create_time - last_real_t:.0f}s before event")
+                break
+
+    # Add secondary factors as additional context
+    if quality not in ['low', 'vhigh'] and min_track_duration < 120:
+        reasons.append(f"track={min_track_duration_min:.1f}min")
+
+    explanation = "; ".join(reasons)
+    return quality, explanation
+
+def log_csv_record(flight1, flight2, los, datestring, altdatestring,
+                   animation_path=None):
+    """Put a CSV record in the log, with replay link for post-processing.
+
+    Args:
+        flight1, flight2: Flight objects
+        los: LOS object with event details
+        datestring: Human-readable date string
+        altdatestring: Alternate date format for replay link
+        animation_path: Optional path to generated animation HTML file
+    """
+    # Calculate quality score and explanation
+    quality_score, quality_explanation = calculate_event_quality(los, flight1, flight2)
+
+    meanloc = Location.meanloc(los.first_loc_1, los.first_loc_2)
+    replay_time = datetime.datetime.utcfromtimestamp(
+        los.create_time  # Use event start time, not end time
+    ).strftime("%Y-%m-%d-%H:%M")
+    link = (
+        f"{PLAYBACK_WEBSITE}/"
+        f"?replay={replay_time}&lat={meanloc.lat}&lon={meanloc.lon}"
+        f"&zoom=12'"
+    )
+    animation_field = os.path.basename(animation_path) if animation_path else ""
+    # CSV fields: timestamp,datestr,altdatestr,lat,lon,alt,flight1,flight2,quality,link,animation,interp,audio,type,phase,quality_explanation,latdist,altdist
+    csv_line = (
+        f"CSV OUTPUT FOR POSTPROCESSING: {los.first_loc_1.now},"
+        f"{datestring},{altdatestring},{meanloc.lat},{meanloc.lon},"
+        f"{meanloc.alt_baro},{flight1.flight_id.strip()},"
+        f"{flight2.flight_id.strip()},{quality_score},"
+        f"{link},{animation_field},interp,audio,type,phase,{quality_explanation},{los.min_latdist},{los.min_altdist},"
+    )
+
+    logger.debug(csv_line)
+    logger.debug("LOS visualization: %s", animation_field if animation_field else link)
+
+
+def gc_loop():
+    """Run in a separate thread to periodically check for LOS events.
+
+    NOTE: This uses wall-clock time, so it only works for real-time analysis.
+    For offline/historical analysis, use do_threading=False and pass los_gc
+    as a callback to do_resampled_prox_checks(), which will call it with
+    simulation timestamps.
+    """
+    while True:
+        time.sleep(LOS.LOS_GC_LOOP_DELAY)
+        los_gc(time.time())
+        if LOS.quit:
+            return
+
+
+def _generate_animation(los):
+    """Generate an animation HTML file for an LOS event.
+
+    Args:
+        los: LOS object with flight1, flight2, create_time
+
+    Returns:
+        Path to the generated HTML file, or None if generation failed
+    """
+    if not LOS.animator:
+        return None
+
+    # Ensure output directory exists
+    os.makedirs(LOS.animation_output_dir, exist_ok=True)
+
+    # Generate filename based on tails and timestamp
+    tail1 = los.flight1.flight_id.strip()
+    tail2 = los.flight2.flight_id.strip()
+    timestamp = datetime.datetime.utcfromtimestamp(los.create_time)
+    filename = f"los_{tail1}_{tail2}_{timestamp.strftime('%Y%m%d_%H%M%S')}.html"
+    output_path = os.path.join(LOS.animation_output_dir, filename)
+
+    try:
+        result = LOS.animator.animate_from_los_object(los, output_file=output_path)
+        if result:
+            return result
+    except Exception as e:
+        logger.error("Failed to generate animation for %s vs %s: %s",
+                    tail1, tail2, e)
+
+    return None
+
+def los_gc(ts):
+    """Check if any LOS events are ready to be finalized (i.e. final stats recorded)"""
+
+    with LOS.current_los_lock:
+        los_list = list(LOS.current_los_events.values())
+
+    for los in los_list:
+        logger.debug(f"LOS_GC {los.get_key()} {ts} {los.last_time}")
+        flight1 = los.flight1
+        flight2 = los.flight2
+
+        if ts - los.last_time > LOS.LOS_GC_TIME:
+            # No updates to this LOS for a while, finalize to database and remove.
+            datestring = datetime.datetime.utcfromtimestamp(los.cpa_time)
+            altdatestring = datestring.strftime("%Y-%m-%d-%H:%M")
+
+            logger.debug("LOS final update: %s %s - minimum separation: %f nm %d MSL. Last seen: %s",
+                        flight1.flight_id, flight2.flight_id,
+                        los.min_latdist, los.min_altdist,
+                        datestring)
+            Stats.los_finalize += 1
+
+            # do database update
+            update_los(flight1, flight2, los.min_latdist, los.min_altdist,
+                       los.create_time, los.id)
+
+            # Attach full location histories for quality analysis
+            los.populate_event_locations()
+
+            # Generate animation if animator is available
+            animation_path = None
+            if LOS.animator:
+                animation_path = _generate_animation(los)
+
+            try:
+                # Move to finalized events for post-processing (e.g., animation)
+                LOS.finalized_los_events[los.get_key()] = los
+                del LOS.current_los_events[los.get_key()]
+            except KeyError:
+                logger.error("Didn't find key in current_los_events")
+
+            # print CSV record (includes animation path if generated)
+            log_csv_record(flight1, flight2, los, datestring, altdatestring,
+                          animation_path)

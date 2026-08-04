@@ -1,6 +1,8 @@
 """Conversion tools for ICAO hex codes found in ADS-B messages."""
+from functools import lru_cache
 from icao_nnumber_converter_us import icao_to_n
 
+@lru_cache(maxsize=16384)
 def icao_to_n_or_c(hexstr: str) -> str:
     """Given ICAO hex code, convert to N- or C- tail number."""
     if not str:
@@ -37,5 +39,5 @@ def icao_to_c(hexstr : str, prefix : str, start : int,
     i3 = offset
     try:
         return prefix + ALPHABET[i1] + ALPHABET[i2] + ALPHABET[i3]
-    except:
+    except:  # pylint: disable=bare-except
         return None
