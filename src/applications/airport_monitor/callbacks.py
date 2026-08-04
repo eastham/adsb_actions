@@ -1,3 +1,4 @@
+import os
 import logging
 from applications.airport_monitor.los import process_los_launch, LOS
 from applications.airport_monitor.db_ops import add_op
@@ -6,6 +7,11 @@ from adsb_actions.stats import Stats
 from prometheus_client import Gauge
 
 from adsb_actions.adsb_logger import Logger
+from playsound import playsound
+from gtts import gTTS # google text-to-speech
+
+soundfile="/tmp/msg.mp3"
+tonefile="./src/sounds/airbus-master-warning-sound-high-quality.mp3"
 
 logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
@@ -40,7 +46,13 @@ def los_cb(flight1, flight2):
 
 def play_vehicle_on_runway_audio(flight):
     logger.info("Vehicle on runway detected, playing audio... %s", flight.flight_id)
-    # do something
+    # google text -> speech is pretty good
+    message = "Caution, Vehicle on runway"
+    playsound(tonefile)
+    tts = gTTS(message)
+    tts.save(soundfile)
+    playsound(soundfile)
+    playsound("./src/sounds/hesteah_caution.mp3")
 
 def register_callbacks(adsb_actions):
     adsb_actions.register_callback("landing", landing_cb)
