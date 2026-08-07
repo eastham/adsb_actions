@@ -1,5 +1,6 @@
 import os
 import logging
+import subprocess
 from applications.airport_monitor.los import process_los_launch, LOS
 from applications.airport_monitor.db_ops import add_op
 from core.database.interface import get_database
@@ -8,9 +9,10 @@ from prometheus_client import Gauge
 
 from adsb_actions.adsb_logger import Logger
 from playsound import playsound
-from gtts import gTTS # google text-to-speech
+#from gtts import gTTS # google text-to-speech
 
-soundfile="/tmp/msg.mp3"
+#soundfile="/tmp/msg.mp3" # gTTS
+soundfile="./src/sounds/hesteah_caution.mp3"
 tonefile="./src/sounds/airbus-master-warning-sound-high-quality.mp3"
 
 logger = logging.getLogger(__name__)
@@ -46,13 +48,15 @@ def los_cb(flight1, flight2):
 
 def play_vehicle_on_runway_audio(flight):
     logger.info("Vehicle on runway detected, playing audio... %s", flight.flight_id)
-    # google text -> speech is pretty good
-    message = "Caution, Vehicle on runway"
-    playsound(tonefile)
-    tts = gTTS(message)
-    tts.save(soundfile)
-    playsound(soundfile)
-    playsound("./src/sounds/hesteah_caution.mp3")
+    cmd = "/usr/bin/ffplay -autoexit -loglevel 8"
+    subprocess.Popen(f'{cmd} {tonefile} && {cmd} {soundfile}', shell=True)  # Popen does not block
+    logger.info("play_vehicle_on_runway_audio process started")
+
+    # google text -> speech is pretty good and we could parse the flight info for more detail
+    #message = "Caution, Vehicle on runway"
+    #tts = gTTS(message)
+    #tts.save(soundfile)
+    #playsound(soundfile)
 
 def register_callbacks(adsb_actions):
     adsb_actions.register_callback("landing", landing_cb)
