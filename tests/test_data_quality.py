@@ -14,7 +14,6 @@ from src.tools.data_quality import (
     build_data_quality,
     _score_termination,
     _score_gap,
-    _score_confidence,
     _overall_score,
 )
 
@@ -48,21 +47,12 @@ def test_score_gap():
     assert _score_gap(None) == "yellow"
 
 
-def test_score_confidence():
-    assert _score_confidence(10) == "green"
-    assert _score_confidence(5) == "green"
-    assert _score_confidence(4) == "yellow"
-    assert _score_confidence(3) == "yellow"
-    assert _score_confidence(2) == "red"
-    assert _score_confidence(1) == "red"
-
-
 def test_overall_score():
-    assert _overall_score("green", "green", "green") == "green"
-    assert _overall_score("green", "yellow", "green") == "yellow"
-    assert _overall_score("green", "green", "red") == "red"
-    assert _overall_score("red", "red", "red") == "red"
-    assert _overall_score("yellow", "red", "green") == "red"
+    assert _overall_score("green", "green") == "green"
+    assert _overall_score("green", "yellow") == "yellow"
+    assert _overall_score("yellow", "green") == "yellow"
+    assert _overall_score("red", "red") == "red"
+    assert _overall_score("yellow", "red") == "red"
 
 
 # --- Shard analysis tests ---
@@ -127,7 +117,6 @@ def test_build_data_quality(tmp_path):
     details = result["details"]
     assert details["terminationScore"] in ("green", "yellow", "red")
     assert details["gapScore"] in ("green", "yellow", "red")
-    assert details["confidenceScore"] in ("green", "yellow", "red")
 
     # Gap metrics should be present
     assert result["medianGapS"] is not None
