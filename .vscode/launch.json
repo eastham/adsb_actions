@@ -194,7 +194,7 @@
         "request": "launch",
         "cwd": "${workspaceFolder}",
         "program": "src/tools/replay_to_adsb.py",
-        "args": "--inject_addr boxone:30001 tests/runwaytruck.json --speed_x 1",
+        "args": "--inject_addr boxone:30001 examples/88nv/runwaytruck.json --speed_x 1",
         "console": "integratedTerminal",
         "justMyCode": true
       }

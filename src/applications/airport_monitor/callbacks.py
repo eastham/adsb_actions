@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 #logger.level = logging.DEBUG
 LOGGER = Logger()
 
+# Guards audio playback: playsound blocks for the length of the clip, so
+# playback runs off-thread, and overlapping triggers are dropped rather than
+# queued.
+AUDIO_COOLDOWN_SECS = 30
+TONE_FILE = "./src/sounds/airbus-master-warning-sound-high-quality.mp3"
+VEHICLE_ON_RUNWAY_FILE = "./src/sounds/hesteah_caution.mp3"
+
 Stats.register_prom_callbacks()
 
 def landing_cb(flight):
@@ -43,22 +50,11 @@ def los_cb(flight1, flight2):
     launch_alert_audio(False, f"LOS detected {flight1.flight_id}")
     process_los_launch(flight1, flight2)
 
-# Guards audio playback: playsound blocks for the length of the clip, so
-# playback runs off-thread, and overlapping triggers are dropped rather than
-# queued -- a stale alert is worse than a missed repeat.  Both LOS and
-# vehicle-on-runway fire repeatedly while the event is underway, so a shared
-# cooldown keeps a single event from replaying the alert on a loop.
-AUDIO_COOLDOWN_SECS = 30
-
 _audio_lock = threading.Lock()
 _audio_playing = False
-# monotonic time the last clip finished.  None means "never played" -- can't
-# use 0.0, since monotonic() is boot-relative and would put a freshly-booted
-# machine inside the cooldown for its first alert.
-_audio_last_finished = None
-
-TONE_FILE = "./src/sounds/airbus-master-warning-sound-high-quality.mp3"
-VEHICLE_ON_RUNWAY_FILE = "./src/sounds/hesteah_caution.mp3"
+# monotonic time the last clip finished; initialized so the first alert is
+# never in cooldown.
+_audio_last_finished = -AUDIO_COOLDOWN_SECS
 
 def _play_clip(path):
     """Play one clip and wait for it to finish.  pygame's play() returns
@@ -69,8 +65,7 @@ def _play_clip(path):
 
 def _play_alert_audio(vehicle_on_runway):
     """Play the warning tone, optionally followed by the vehicle-on-runway
-    voice callout.  Blocks for the length of the clips -- run via
-    launch_alert_audio(), not directly from a callback."""
+    voice callout.  Blocks for the length of the clips."""
     global _audio_playing, _audio_last_finished
 
     try:
@@ -100,9 +95,8 @@ def launch_alert_audio(vehicle_on_runway, context):
         if _audio_playing:
             logger.info("%s: audio already playing, skipping...", context)
             return
-        quiet_for = (time.monotonic() - _audio_last_finished
-                     if _audio_last_finished is not None else None)
-        if quiet_for is not None and quiet_for < AUDIO_COOLDOWN_SECS:
+        quiet_for = time.monotonic() - _audio_last_finished
+        if quiet_for < AUDIO_COOLDOWN_SECS:
             logger.info("%s: in %ds audio cooldown (%ds remaining), skipping...",
                         context, AUDIO_COOLDOWN_SECS,
                         round(AUDIO_COOLDOWN_SECS - quiet_for))
