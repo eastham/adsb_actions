@@ -17,6 +17,11 @@ cd adsb_actions
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
+USER=pi  # fix render access for a user
+sudo usermod -aG render $USER
+sudo usermod -aG video $USER
+newgrp render
+newgrp video
 
 # 2. Run with live data from the API (monitors aircraft near SFO)
 python3 src/applications/tcp_api_monitor/monitor.py examples/hello_world_api.yaml
