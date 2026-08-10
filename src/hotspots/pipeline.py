@@ -263,7 +263,7 @@ def run_stage5(
     output_path: str,
     pmtiles: bool,
     zoom: float | None,
-    traffic_tile_dir: str = "https://airbornehotspots.org/tiles",
+    traffic_tile_dir: str = "https://airbornehotspots.org/tiles/traffic",
     asset_stem: str | None = None,
     airport_quality: dict | None = None,
     html_only: bool = False,
@@ -523,7 +523,7 @@ def main():
                         help="Initial map zoom. Default: auto-fit to data bounds "
                              "(whole region visible). Pass an explicit value to override.")
     parser.add_argument("--traffic-tiles", type=str,
-                        default="https://airbornehotspots.org/tiles",
+                        default="https://airbornehotspots.org/tiles/traffic",
                         help="Traffic tile URL or local path prefix (default: production URL; "
                              "use ../../../tiles/traffic for local dev)")
     parser.add_argument("--asset-stem", type=str, default=None,

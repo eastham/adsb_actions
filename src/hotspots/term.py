@@ -42,9 +42,9 @@ def rel(path) -> str:
     Lets dry-run / status output show WHERE outputs land without dumping long
     absolute paths for in-project artifacts.
 
-    Does NOT resolve symlinks: `data/` is a symlink to the network mount, and we
-    want to show 'data/v2/...' (the in-project relative path), not the resolved
-    mount location it points at."""
+    Does NOT resolve symlinks: `data/` is a symlink to the network mount
+    (~/raspi5-data), and we want to show 'data/v2/...' (the in-project relative
+    path), not the resolved mount location it points at."""
     p = Path(path)
     try:
         return str(p.relative_to(Path.cwd()))
