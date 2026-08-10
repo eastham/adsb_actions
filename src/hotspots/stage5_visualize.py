@@ -465,7 +465,8 @@ def _airport_jump_js() -> str:
     [lon, lat] in AIRPORTS, and flyTo's the map. Caller must define a global
     `AIRPORTS` object and a global `map` (MapLibre instance).
     The ?airport= URL param is consumed inside the on-load callback so flyTo
-    runs after the map is ready.
+    runs after the map is ready, and rewritten here on every successful jump
+    so the address bar is always a shareable permalink.
     """
     return (
         'function jumpToAirport(code) {\n'
@@ -475,15 +476,28 @@ def _airport_jump_js() -> str:
         '  // AIRPORTS is keyed by OurAirports `ident` (e.g. KWVI, KC83). Users\n'
         '  // commonly type the 3-char local/IATA code (WVI, C83); try the\n'
         '  // K-prefixed form too if the raw code misses.\n'
+        '  var resolved = code;\n'
         '  var loc = AIRPORTS[code];\n'
         '  if (!loc && code.length === 3 && code[0] !== "K") {\n'
-        '    loc = AIRPORTS["K" + code];\n'
+        '    resolved = "K" + code;\n'
+        '    loc = AIRPORTS[resolved];\n'
         '  }\n'
         '  if (loc) {\n'
         '    map.flyTo({center: loc, zoom: 11});\n'
+        '    // Mirror the jump into ?airport=<ICAO> (the resolved code, so the\n'
+        '    // link is unambiguous). Drop ?event=/?tail= so the URL describes a\n'
+        '    // single view. replaceState, not pushState: repeated jumps should\n'
+        '    // not each add a back-button entry.\n'
+        '    try {\n'
+        '      var u = new URL(window.location);\n'
+        '      u.searchParams.set("airport", resolved);\n'
+        '      u.searchParams.delete("event");\n'
+        '      u.searchParams.delete("tail");\n'
+        '      history.replaceState(null, "", u);\n'
+        '    } catch (e) {}\n'
         '  } else {\n'
         '    alert("Airport " + code + " not in this map.");\n'
-        '  }\n'
+    '  }\n'
         '}\n'
         'document.addEventListener("DOMContentLoaded", function() {\n'
         '  var input = document.getElementById("airport-jump");\n'
