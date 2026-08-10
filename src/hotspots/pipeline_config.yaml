@@ -10,7 +10,10 @@ paths:
                               # --config (or $ADSB_V2_DATA_ROOT) to redirect.
   conus_dir: data             # source CONUS_*.gz files (network mount)
   traffic_tiles_local: ../../../tiles/traffic
-  traffic_tiles_url: https://airbornehotspots.org/tiles
+  # Must end in /traffic to match deploy_v2 --traffic-tiles-dir, which uploads to
+  # {remote}/tiles/traffic/. A bare .../tiles points at an older partial tree that
+  # only has z8+, so the traffic layer silently vanishes when zoomed out.
+  traffic_tiles_url: https://airbornehotspots.org/tiles/traffic
 
 # ForeFlight Content Pack: BASE display name shown for the overall pack in the
 # ForeFlight UI. cli.py appends the run's actual date range (e.g.
@@ -56,6 +59,13 @@ window:
   prune: true              # delete grid/events/CONUS/global older than the window
   region: conus            # region the catch-up builds + deploys
   deploy_alias: conus      # deploy_v2 --publish-as value (stable /v2/<alias>.html)
+  # Date ranges (inclusive, YYYYMMDD) the prune must NEVER delete, even though
+  # they fall outside the rolling window. The archive isn't a pure sliding
+  # window — these are research blocks that took hours to build and back
+  # published maps, so the rolling prune must leave them alone.
+  keep:
+    - 20250501-20250831    # 2025 summer study (backs the published 3-month map)
+    - 20260101-20260131    # Jan 2026 block
 
 # Geography: named bounding boxes. Integer degrees, inclusive min / exclusive max
 # (matches the existing cell-membership convention: lat_min <= lat < lat_max).

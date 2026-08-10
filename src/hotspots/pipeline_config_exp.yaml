@@ -24,7 +24,7 @@ paths:
   data_root: data_local/v2_exp
   conus_dir: data
   traffic_tiles_local: ../../../tiles/traffic
-  traffic_tiles_url: https://airbornehotspots.org/tiles
+  traffic_tiles_url: https://airbornehotspots.org/tiles/traffic
 
 deploy:
   remote: hotspots-initial:hotspots
