@@ -30,10 +30,17 @@ Stage selection maps onto pipeline.py's existing skip flags; the runners
 import argparse
 import datetime
 import json
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+# Where the raspi5 share is expected to be mounted. `data/` in the project root
+# is a symlink to this; runs whose paths resolve under it are mount-checked
+# before any writes (see _assert_network_mounted).
+NETWORK_MOUNT = "~/raspi5-data"
+MOUNT_HINT = "mount_smbfs //pi@raspi5/data ~/raspi5-data"
 
 _ROOT = Path(__file__).resolve().parents[2]
 for _p in (str(_ROOT / "src"), str(_ROOT)):
@@ -49,6 +56,49 @@ from hotspots import status as status_mod
 
 from hotspots.term import (stage as _stage, ok as _ok, fail as _fail,
                            warn as _warn, rel as _rel, ARROW)
+
+
+def _assert_network_mounted(config) -> None:
+    """Abort before any writes if data_root/conus_dir point at the network share
+    but it isn't actually mounted.
+
+    When the SMB share drops, its mountpoint reverts to an ordinary empty
+    directory that is still perfectly writable. A full run then "succeeds" —
+    every cell written, verify_day() counting the expected total — with the
+    output silently landing on local disk. The day-at-a-time gate can't catch
+    this: it checks completeness (did we get N cells?), not destination, and
+    output on the wrong disk is complete. So this has to be a precondition.
+
+    Only paths under the network mount are checked, so the local-disk configs
+    (test/exp sandboxes) run untouched.
+    """
+    for label, path in (("data_root", config.data_root),
+                        ("conus_dir", config.conus_dir)):
+        # Expand ~ before resolving: a config path like ~/raspi5-data/v2 would
+        # otherwise resolve to a bogus cwd-relative path and escape the check.
+        # Resolve symlinks too — `data/` is expected to be a symlink to the
+        # mount, so the mountpoint test has to run against the real location.
+        real = Path(path).expanduser().resolve()
+        mount = _mount_root(real)
+        if mount is None:
+            continue  # local disk (test/exp sandbox) — nothing to verify
+        if not os.path.ismount(mount):
+            raise SystemExit(_fail(
+                f"\nABORT: {label} ({_rel(path)}) lives on the network share at "
+                f"{mount}, which is NOT mounted.\n"
+                f"  Writing now would silently fill local disk instead of the "
+                f"drive.\n"
+                f"  Remount with:\n    {config.remount_cmd or MOUNT_HINT}\n"))
+
+
+def _mount_root(real: Path):
+    """Return the expected network mountpoint that `real` sits under, or None if
+    it's on local disk. Keyed off the configured mount location so a relocated
+    share only has to be updated in one place."""
+    expected = Path(NETWORK_MOUNT).expanduser()
+    if real == expected or expected in real.parents:
+        return expected
+    return None
 
 
 def _parse_date(s: str) -> datetime.date:
@@ -223,6 +273,10 @@ def cmd_run(config, args) -> None:
                        regional, out_html,
                        Path(ff_out) if ff_out else None, pmtiles, ff_tiles)
         return
+
+    # Fail fast if the network share isn't mounted — an unmounted share is still
+    # writable and would silently absorb the whole run onto local disk.
+    _assert_network_mounted(config)
 
     # Stages 2/3: day-at-a-time with verify + remount/retry gate. Provenance is
     # written per-day right after the gate passes, so if a later day aborts the
@@ -561,39 +615,94 @@ def _prune_window(config, keep_start, bounds, dry_run) -> None:
     catch-up never deletes them. Clean data/ by hand if the gz pile up.
 
     Every removal is printed; --dry-run lists without deleting."""
-    import re
     import shutil
 
-    keep_tag = keep_start.strftime("%Y%m%d")
     verb = "would remove" if dry_run else "removing"
-
-    def _rm(path: Path) -> None:
+    for path in _prune_targets(config, keep_start):
         print(f"  [prune] {verb} {_rel(path)}")
         if dry_run:
-            return
+            continue
         if path.is_dir():
             shutil.rmtree(path, ignore_errors=True)
         else:
             path.unlink(missing_ok=True)
 
+
+def _prune_targets(config, keep_start) -> list:
+    """The exact paths _prune_window would delete for this keep window.
+
+    Split out so the confirmation prompt and the deletion agree by construction
+    rather than by two copies of the same selection rules."""
+    import re
+
+    keep_tag = keep_start.strftime("%Y%m%d")
+    protected = config.window_keep
+
+    def _kept(tag: str) -> bool:
+        """True if tag is inside the rolling window or a protected range."""
+        return tag >= keep_tag or any(a <= tag <= b for a, b in protected)
+
+    targets = []
+
     # Per-day grid/events dirs named YYYYMMDD (owned by the v2 pipeline).
     for base in (config.grid_dir, config.events_dir):
         if not base.exists():
             continue
-        for day_dir in base.iterdir():
+        for day_dir in sorted(base.iterdir()):
             if day_dir.is_dir() and day_dir.name.isdigit() \
-                    and len(day_dir.name) == 8 and day_dir.name < keep_tag:
-                _rm(day_dir)
+                    and len(day_dir.name) == 8 and not _kept(day_dir.name):
+                targets.append(day_dir)
 
     # Regional/map artifacts whose trailing _<end> date is before the window.
     stem_end = re.compile(r"_(\d{8})_(\d{8})(?:_.*)?$")
     for base in (config.regional_dir, config.maps_dir):
         if not base.exists():
             continue
-        for p in base.iterdir():
+        for p in sorted(base.iterdir()):
             m = stem_end.search(p.stem if p.is_file() else p.name)
-            if m and m.group(2) < keep_tag:
-                _rm(p)
+            if not m or m.group(2) >= keep_tag:
+                continue
+            # An artifact covers a span, so protect it if it OVERLAPS a kept
+            # range — an end-date test alone would delete the 2025 summer map.
+            span_start, span_end = m.group(1), m.group(2)
+            if any(a <= span_end and span_start <= b for a, b in protected):
+                continue
+            targets.append(p)
+    return targets
+
+
+def _confirm_prune(config, keep_start, bounds, assume_yes=False) -> bool:
+    """Ask before deleting out-of-window data. Returns True to proceed.
+
+    Prune is irreversible and (on a mis-scoped window) can wipe days that took
+    hours to build, so it gets an explicit y/N gate. Non-interactive runs (cron,
+    piped stdin) ABORT the prune rather than assume yes — skipping a prune is
+    cheap and self-correcting on the next run; a wrong delete is not."""
+    targets = _prune_targets(config, keep_start)
+    if not targets:
+        print("  [prune] nothing out of window")
+        return False
+
+    for path in targets:
+        print(f"  [prune] would remove {_rel(path)}")
+    day_dirs = sum(1 for p in targets if p.is_dir() and p.name.isdigit())
+    print(_warn(f"\n  {len(targets)} path(s) to delete, including {day_dirs} "
+                f"day(s) of grid/events data, keeping {keep_start:%Y%m%d} onward."))
+    for a, b in config.window_keep:
+        print(f"  [prune] protected (window.keep): {a}-{b}")
+
+    if assume_yes:
+        print("  --yes given — proceeding.")
+        return True
+    if not sys.stdin.isatty():
+        print(_warn("  Non-interactive session — skipping prune. "
+                    "Re-run in a terminal, or pass --no-prune to silence this."))
+        return False
+    try:
+        reply = input("  Delete these? [y/N] ").strip().lower()
+    except EOFError:
+        return False
+    return reply in ("y", "yes")
 
 
 def cmd_catchup(config, args) -> None:
@@ -620,8 +729,13 @@ def cmd_catchup(config, args) -> None:
     print(f"  stages-only: {args.stages_only} | deploy: {do_deploy} "
           f"(alias '{alias}') | prune: {do_prune}")
 
-    # --- Fetch + stages 2/3 per day (leading edge stops when unpublished) ---
-    last_available = end
+    # --- Fetch + stages 2/3 per day ---
+    # Missing (unpublished) or corrupt days are skipped, not fatal — a mid-window
+    # gap must not block later days. Trailing missing days are the true leading
+    # edge and get trimmed from the window below; all skips are reported at the end.
+    missing_days: list[datetime.date] = []   # unpublished (gap or leading edge)
+    corrupt_days: list[datetime.date] = []   # release exists but tar unrecoverable
+    usable_days: list[datetime.date] = []    # processed or already-present, in window
     for d in _date_range(start, end):
         # Skip days already fully processed unless a rebuild is requested.
         if not args.rebuild:
@@ -631,17 +745,22 @@ def cmd_catchup(config, args) -> None:
                             config.events_dir, sanity=False)
             if r2.ok and r3.ok:
                 print(_ok(f"{d:%Y%m%d} already processed — skipping"))
+                usable_days.append(d)
                 continue
 
         if args.dry_run:
             print(f"  [dry-run] would fetch + run stages 2/3 for {d:%Y%m%d}")
+            usable_days.append(d)
             continue
 
-        conus = ensure_conus(d, config.conus_dir)
-        if conus is None:
-            last_available = d - datetime.timedelta(days=1)
-            print(_warn(f"stopping at last published day {last_available:%Y%m%d}"))
-            break
+        res = ensure_conus(d, config.conus_dir)
+        if res.status == "missing":
+            missing_days.append(d)
+            continue          # gap — keep going; may be trimmed as leading edge
+        if res.status == "corrupt":
+            print(_warn(f"{d:%Y%m%d} source corrupt ({res.detail}) — skipping"))
+            corrupt_days.append(d)
+            continue
 
         print(_stage(f"\n[{d:%Y%m%d}] stages 2/3"))
         s = _run_day_gated(config, runners, d, bounds, [2, 3], workers,
@@ -649,16 +768,47 @@ def cmd_catchup(config, args) -> None:
         print(_ok(f"shard: {s['shard_kb']:,} KB  analyze: {s['analyze_s']:.0f}s  "
                   f"events: {s['events']}"))
         _write_stage3_provenance(config, d, d, bounds, run_start)
+        usable_days.append(d)
+
+    # Distinguish the trailing leading-edge run (missing days AFTER the last usable
+    # day) from genuine mid-window gaps (missing days that have a usable day after).
+    last_usable = max(usable_days) if usable_days else None
+    leading_edge = [d for d in missing_days
+                    if last_usable is None or d > last_usable]
+    window_gaps = [d for d in missing_days if last_usable is not None
+                   and d < last_usable]
+
+    def _report_skips() -> None:
+        if window_gaps:
+            print(_warn(f"\n{len(window_gaps)} missing day(s) skipped WITHIN the "
+                        f"window (unpublished on GitHub): "
+                        f"{', '.join(f'{d:%Y%m%d}' for d in sorted(window_gaps))}"))
+        if corrupt_days:
+            print(_warn(f"{len(corrupt_days)} corrupt day(s) skipped: "
+                        f"{', '.join(f'{d:%Y%m%d}' for d in sorted(corrupt_days))}"))
+        if leading_edge:
+            print(_warn(f"{len(leading_edge)} unpublished day(s) at the leading "
+                        f"edge (not yet released): "
+                        f"{', '.join(f'{d:%Y%m%d}' for d in sorted(leading_edge))}"))
 
     if args.stages_only:
+        _report_skips()
         if args.dry_run:
             print(_ok("\nDry run complete (stages-only)."))
             return
         print(_ok("\nStages 2/3 done (stages-only — no aggregate/deploy/prune)."))
         return
 
-    # The window actually covered may be shorter than requested (leading edge).
-    window_end = min(end, last_available)
+    # The window actually covered ends at the last usable day (trailing unpublished
+    # days at the leading edge are dropped from the built/deployed window).
+    window_end = last_usable if last_usable is not None else end
+    # Prune keeps the FULL retention window back from the window end — never the
+    # chunk's --start-date. A backfill chunk (--start-date/--end-date over 10 days)
+    # means "process these days", not "keep only these days"; using `start` here
+    # would delete every day already backfilled before the chunk.
+    prune_start = min(start,
+                      window_end - datetime.timedelta(days=config.window_days - 1))
+
     start_tag, end_tag = start.strftime("%Y%m%d"), window_end.strftime("%Y%m%d")
     regional = config.regional_dir / f"{alias}_{start_tag}_{end_tag}.parquet"
     out_html = config.maps_dir / f"{alias}_{start_tag}_{end_tag}.html"
@@ -670,7 +820,8 @@ def cmd_catchup(config, args) -> None:
             print(f"  [dry-run] would deploy: deploy_v2 --publish-as {alias} "
                   f"--source-stem {out_html.stem}")
         if do_prune:
-            _prune_window(config, start, bounds, dry_run=True)
+            _prune_window(config, prune_start, bounds, dry_run=True)
+        _report_skips()
         print(_ok("\nDry run complete."))
         return
 
@@ -699,6 +850,19 @@ def cmd_catchup(config, args) -> None:
                        asset_stem=alias)
     print(_ok(f"map written: {out_html.name}"))
 
+    # A window far shorter than the retention target means the fetch found few
+    # usable days (mid-backfill, or the source releases lag). Deploying it would
+    # replace the live alias with a near-empty map, so make that loud.
+    covered = (window_end - start).days + 1
+    if do_deploy and covered < config.window_days / 2:
+        print(_warn(f"\n⚠ Window covers only {covered} day(s), well short of the "
+                    f"{config.window_days}-day target — deploying this would "
+                    f"publish a sparse map over '{alias}'."))
+        if not args.yes and sys.stdin.isatty():
+            if input("  Deploy it anyway? [y/N] ").strip().lower() not in ("y", "yes"):
+                print(_warn("Deploy skipped."))
+                do_deploy = False
+
     # --- Deploy under the stable alias ---
     if do_deploy:
         local_tiles = (traffic if (traffic and not traffic.startswith("http"))
@@ -715,9 +879,13 @@ def cmd_catchup(config, args) -> None:
 
     # --- Prune out-of-window data ---
     if do_prune:
-        print(_stage(f"\nPrune: dropping data before {start:%Y%m%d}"))
-        _prune_window(config, start, bounds, dry_run=False)
+        print(_stage(f"\nPrune: dropping data before {prune_start:%Y%m%d}"))
+        if _confirm_prune(config, prune_start, bounds, assume_yes=args.yes):
+            _prune_window(config, prune_start, bounds, dry_run=False)
+        else:
+            print(_warn("Prune skipped."))
 
+    _report_skips()
     print(_ok("\nDone."))
 
 
@@ -811,6 +979,8 @@ def build_parser(config) -> argparse.ArgumentParser:
                     help="Build the window but don't deploy_v2")
     pc.add_argument("--no-prune", action="store_true",
                     help="Don't delete out-of-window data")
+    pc.add_argument("--yes", "-y", action="store_true",
+                    help="Skip the prune confirmation prompt (for cron/automation)")
     pc.add_argument("--workers", type=int, help="Override config runtime.workers")
     pc.add_argument("--traffic-tiles", help="Traffic tile URL or local path prefix")
     pc.add_argument("--zoom", type=float, default=None)

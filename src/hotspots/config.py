@@ -176,6 +176,31 @@ class Config:
     def window_deploy_alias(self) -> str:
         return self.window.get("deploy_alias", "conus")
 
+    @property
+    def window_keep(self) -> list:
+        """Protected date ranges the sliding-window prune must never delete,
+        as [(start_tag, end_tag)] YYYYMMDD strings (inclusive).
+
+        The catch-up window is a rolling "last N days", but the archive also
+        holds research blocks (e.g. the 2025 summer study) that are older than
+        any sane N. Those are listed here so prune can't reclaim them.
+
+        Accepts "YYYYMMDD-YYYYMMDD" or a {start,end} mapping."""
+        out = []
+        for item in self.window.get("keep", []) or []:
+            if isinstance(item, dict):
+                start, end = str(item.get("start", "")), str(item.get("end", ""))
+            else:
+                text = str(item).strip()
+                start, _, end = text.partition("-")
+                start, end = start.strip(), (end.strip() or start.strip())
+            if len(start) == 8 and len(end) == 8 and start <= end:
+                out.append((start, end))
+            else:
+                raise ValueError(
+                    f"window.keep entry {item!r} is not a valid YYYYMMDD range")
+        return out
+
     # -- validation ---------------------------------------------------------
     def _validate(self) -> None:
         for section in ("paths", "regions", "profiles"):

@@ -194,7 +194,12 @@ def download_tar_parts(date_obj: datetime, data_dir: Path = None, force: bool = 
 
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    for ext in ['aa', 'ab']:
+    # The daily tar is split into 2 GB parts (aa, ab, ac, ...). Low-volume days
+    # have 2 parts; high-volume days have 3+. Iterate until a part 404s — that's
+    # the natural end-of-archive. (Fetching only aa/ab drops the tail of a 3-part
+    # day, yielding a truncated tar that fails extraction.)
+    for i in range(26):                       # aa..az; far more than ever needed
+        ext = "a" + chr(ord("a") + i)
         local_file = data_dir / f"{file_prefix}.tar.{ext}"
         if local_file.exists() and not force:
             print(f"✅ {local_file.name} exists. Skipping download.")
@@ -211,6 +216,14 @@ def download_tar_parts(date_obj: datetime, data_dir: Path = None, force: bool = 
             url = url.replace("prod-0", "prod-0tmp")
             print(f"Retrying download from {url}...")
             r = requests.get(url, stream=True)
+
+        if r.status_code == 404:
+            # No more parts. aa/ab are mandatory; a 404 there is a real failure,
+            # a 404 at ac+ just means the archive ended.
+            if ext in ("aa", "ab"):
+                print(f"⚠️ Required part {local_file.name} missing (404)")
+                return False
+            break
 
         if r.status_code == 200:
             total_size = int(r.headers.get('content-length', 0))
