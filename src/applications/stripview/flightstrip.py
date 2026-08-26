@@ -2,7 +2,6 @@
 colors, text, and mouse actions."""
 
 import threading
-import time
 import webbrowser
 import sys
 import logging
@@ -87,7 +86,9 @@ class FlightStrip:
             # one (see --db-logic).  None means generic default behavior.
             self.db_interface = DbInterface(self.flight, self.handle_db_update,
                 getattr(self.app, 'db_logic', None))
-            self.update_thread = threading.Thread(target=self.server_refresh_thread)
+            # daemon: don't let a sleeping refresh thread block interpreter exit.
+            self.update_thread = threading.Thread(target=self.server_refresh_thread,
+                                                  daemon=True)
             self.update_thread.start()
         logger.info(f"Created strip for {self.flight.flight_id}")
 
@@ -141,7 +142,9 @@ class FlightStrip:
 
         while not self.stop_event.is_set():
             self.db_interface.call_database()
-            time.sleep(SERVER_REFRESH_RATE)
+            # wait() rather than sleep() so shutdown is immediate, not up to
+            # SERVER_REFRESH_RATE seconds later.
+            self.stop_event.wait(SERVER_REFRESH_RATE)
 
         logger.debug("Exited refresh thread")
 

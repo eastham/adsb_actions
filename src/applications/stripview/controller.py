@@ -29,6 +29,10 @@ LOGGER = Logger()
 API_ENDPOINT = "https://api.airplanes.live/v2/point/"
 API_RATE_LIMIT = 1/2  # requests per second (max 0.5 Hz)
 
+# How long the window-close handler waits for the data thread before giving up
+# and letting the daemon thread die with the process.
+SHUTDOWN_JOIN_TIMEOUT = 2  # seconds
+
 os.environ['KIVY_LOG_MODE'] = 'PYTHON'  # inhibit Kivy's custom log format
 import kivy
 kivy.require('1.0.5')
@@ -242,18 +246,41 @@ def sigint_handler(signum, frame):
 
 def shutdown_adsb_actions(_, adsb_actions, data_thread, api_poller=None,
                           visualizer=None):
+    """Window-close handler.  Runs on the Kivy main thread, so it must never
+    block indefinitely -- doing so freezes the UI (spinning beachball) since
+    the Clock can no longer tick."""
     logger.warning("Shutting down adsb_actions")
+
+    # Signal the data loop first so it can wind down while we stop the rest.
+    adsb_actions.exit_loop_flag = True
 
     if visualizer:
         visualizer.stop()
     if api_poller:
         api_poller.stop()
-    adsb_actions.exit_loop_flag = True
-    if data_thread:
-        data_thread.join()
+
+    # Stop the per-strip DB refresh threads; otherwise they keep running and
+    # delay interpreter exit.
+    for strip in list(controllerapp.strips.values()):
+        strip.stop_server_loop()
+
+    if data_thread and data_thread.is_alive():
+        # Bounded wait: the read may be parked in a blocking socket call and
+        # won't notice exit_loop_flag until data arrives.  The thread is a
+        # daemon, so leaving it behind is safe.
+        data_thread.join(timeout=SHUTDOWN_JOIN_TIMEOUT)
+        if data_thread.is_alive():
+            logger.warning("data thread still running, exiting anyway")
 
     logger.warning("adsb_actions shutdown complete")
-    sys.exit(0)
+
+    # Ask Kivy to unwind its own event loop.  Calling sys.exit() here would
+    # raise SystemExit inside an event dispatch and leave the loop half
+    # torn down.
+    app = MDApp.get_running_app()
+    if app:
+        app.stop()
+    return False  # let the window close proceed
 
 
 def setup(focus_q, admin_q):
@@ -394,7 +421,8 @@ def setup(focus_q, admin_q):
     # Setup data thread (not used for API mode)
     if not args.api:
         read_thread = threading.Thread(target=adsb_actions.loop,
-            kwargs={'string_data': json_data, 'delay': float(args.delay)})
+            kwargs={'string_data': json_data, 'delay': float(args.delay)},
+            daemon=True)
 
     # Handling for orderly exit when the user closes the window manually.
     close_callback = lambda controller, actions=adsb_actions, thread=read_thread, poller=api_poller, viz=visualizer: \

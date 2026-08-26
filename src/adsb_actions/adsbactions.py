@@ -184,6 +184,13 @@ class AdsbActions:
         loop_ctr = 0
 
         while True:
+            # Checked here, before the read, so an exit request is honored even
+            # when no data is arriving -- the paths below can continue/break
+            # past the read without ever reaching a later check.
+            if self.exit_loop_flag:
+                logger.warning("Exiting AdsbActions loop")
+                break
+
             loop_ctr += 1
             last_read_return = self._flight_update_read()
             if last_read_return > 0:
@@ -228,10 +235,6 @@ class AdsbActions:
             if last_read_return == 0:
                 continue
             if last_read_return < 0:
-                break
-
-            if self.exit_loop_flag:
-                logger.warning("Exiting AdsbActions loop")
                 break
 
             if delay:
