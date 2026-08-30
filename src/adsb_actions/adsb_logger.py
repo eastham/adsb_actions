@@ -17,6 +17,7 @@
 
 import logging
 import logging.handlers
+import socket
 
 logger = logging.getLogger(__name__)
 
